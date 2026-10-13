@@ -4,7 +4,7 @@ import { mulberry32 } from '../boot/seed';
 import { Readout } from '../Readout';
 import type { GlassSize } from '../screens/Housing';
 import { color, type } from '../tokens';
-import { BLOCKS, BlockBar } from './BlockBar';
+import { BLOCKS, BlockBar, RATE_MAX_H } from './BlockBar';
 import {
   FAULT_LINE,
   type Phase,
@@ -26,8 +26,9 @@ const copy = {
 
 const SEG = 6;
 const CH_S = 8.5; // rdS advance: 0.4 em plus 0.5 tracking
-// Live row 44, RATE 24, rate bar 16, gaps and the bottom margin.
-const PINNED_H = 12 + 16 + 4 + 44 + 24;
+// Live row 44, RATE 24, rate ramp, gaps and the bottom margin.
+const RATE_BAR_BOTTOM = 12;
+const PINNED_BOTTOM = RATE_BAR_BOTTOM + RATE_MAX_H + 6;
 const FAULT_INDENT = 'E-07 '.length * CH_S;
 
 // Glass content of the scan theatre: graticule, sweep line with persistence
@@ -75,7 +76,8 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
           {`${String(pct).padStart(3, ' ')}%`}
         </Text>
       )}
-      <View style={[s.block, { left: gridLeft, bottom: PINNED_H + 8, width: gw }]} testID="scan-readout">
+      {/* Telemetry sits directly under the progress bar: no dead band between them. */}
+      <View style={[s.block, { left: gridLeft, top: gridBottom + 24 + 16 + 12, width: gw }]} testID="scan-readout">
         {[0, 1, 2].map((slot) => (
           <Text key={slot} style={s.log} numberOfLines={1}>
             {lines[slot - (3 - lines.length)] ?? ''}
@@ -92,28 +94,27 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
           </Text>
         )}
       </View>
-      <View style={[s.pinned, { left: gridLeft, width: gw }]}>
+      <View style={[s.pinned, { left: gridLeft, width: gw, bottom: PINNED_BOTTOM }]}>
         <View style={s.live} testID="scan-live">
           {live ? <Readout size="rdL" label={live.label} value={live.value} unit={live.unit} labelCh={4} valueCh={5} unitCh={5} /> : null}
         </View>
         <View style={s.rate} testID="scan-rate">
-          {live ? (
-            <Readout
-              size="rdS"
-              label="RATE"
-              value={String(rate)}
-              unit="c/s"
-              labelCh={5}
-              valueCh={3}
-              unitCh={3}
-              labelColor={frame.final ? color.p5 : color.p3}
-              valueColor={frame.final ? color.p5 : color.p4}
-              unitColor={frame.final ? color.p5 : color.p3}
-            />
-          ) : null}
+          {/* The label stays through the hold and the fault beat; only the value goes blank. */}
+          <Readout
+            size="rdS"
+            label="RATE"
+            value={live ? String(rate) : '--'}
+            unit="c/s"
+            labelCh={5}
+            valueCh={3}
+            unitCh={3}
+            labelColor={frame.final && live ? color.p5 : color.p3}
+            valueColor={live ? (frame.final ? color.p5 : color.p4) : color.p2}
+            unitColor={live ? (frame.final ? color.p5 : color.p3) : color.p2}
+          />
         </View>
       </View>
-      <BlockBar lit={rateLit} left={gridLeft} bottom={12} width={gw} litColor={frame.final ? color.p5 : color.p4} testID="scan-rate-bar" label="Event rate" />
+      <BlockBar variant="rate" lit={rateLit} left={gridLeft} bottom={RATE_BAR_BOTTOM} width={gw} litColor={frame.final ? color.p5 : color.p4} testID="scan-rate-bar" label="Event rate" />
     </>
   );
 }
@@ -141,6 +142,7 @@ function Trace({ seed, frame, left, cy, gw, gh, flat, dim }: { seed: number; fra
             style={[
               s.trace,
               {
+                height: dim ? 2 : 1.5,
                 left: left + (a.x + b.x) / 2 - len / 2,
                 top: (a.y + b.y) / 2 - 0.75,
                 width: len,
@@ -177,7 +179,7 @@ const s = StyleSheet.create({
   log: { ...type.rdS, color: color.p3, height: 24 },
   status: { ...type.rdS, height: 24 },
   holdBlock: { position: 'absolute', width: 10, height: 14, backgroundColor: color.p4 },
-  pinned: { position: 'absolute', bottom: 12 + 16 + 4 },
+  pinned: { position: 'absolute' },
   live: { height: 44 },
   rate: { height: 24 },
 });

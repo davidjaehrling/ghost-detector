@@ -40,3 +40,14 @@ test('boot to viewfinder, scan, result and history', async ({ page }, testInfo) 
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
+
+// One activity index per session: the boot's number is the viewfinder's, not a second read of the clock.
+test('boot and viewfinder show the same activity index', async ({ page }) => {
+  await page.goto('/?static=1&date=2026-10-13&time=22:48');
+  await expect(page.getByTestId('activity')).toContainText('ACT IDX 3/5');
+  await page.getByTestId('key-acknowledge').click();
+  await page.getByTestId('key-calib-unsure').click();
+  await expect(page.getByTestId('screen-viewfinder')).toBeVisible();
+  await expect(page.getByTestId('hud-top')).toContainText('IDX');
+  await expect(page.getByTestId('hud-top')).toContainText('3/5');
+});

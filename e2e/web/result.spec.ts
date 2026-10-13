@@ -57,10 +57,10 @@ for (const { demo, tier } of DEMOS) {
     const line = page.getByTestId('result-line');
     if (demo === 'strong') {
       await expect(line).toHaveText('Strong. Signature resolving.');
-      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT dT -\d+\.\d °C$/);
+      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT ΔT -\d+\.\d °C$/);
       const cold = await page.getByTestId('result-coldspot').innerText();
       const therm = await page.getByText(/^THERM/).first().innerText();
-      expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD SPOT dT ', ''));
+      expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD SPOT ΔT ', ''));
     } else {
       await expect(page.getByTestId('result-coldspot')).toHaveCount(0);
     }

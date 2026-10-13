@@ -5,14 +5,11 @@ import { Glass, type GlassProps } from '../../fx/glass';
 import { FIXED_SEED, type InstallIdentity, getInstallIdentity, readInstallSeed } from '../boot/install';
 import { Key, type KeySlot, KeyRow, LedLadder, Screw, Wear } from '../boot/parts';
 import { readHarness } from '../harness';
+import { plateSerial } from '../serial';
 import { color, font, radius, space, type } from '../tokens';
 import { useReduceMotion } from '../useReduceMotion';
 
 export const MAKER = 'VELDEN  FS-4/87-P';
-// Under this window width the nameplate carries the last 7 characters of the serial.
-export const SERIAL_SHORT_BELOW = 380;
-
-export const plateSerial = (serial: string, windowW: number) => (windowW < SERIAL_SHORT_BELOW ? serial.slice(-7) : serial);
 
 export type GlassSize = { w: number; h: number };
 
@@ -47,7 +44,6 @@ export function Housing({
   children: (size: GlassSize) => ReactNode;
 }) {
   const insets = useSafeAreaInsets();
-  const { width: windowW } = useWindowDimensions();
   const [size, setSize] = useState<GlassSize>({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
   const own = useMemo(
@@ -63,13 +59,7 @@ export function Housing({
     <View testID={testID} style={[s.housing, { paddingTop: insets.top + 12 }]}>
       <Wear side="left" top="44%" length={58} />
       <Wear side="right" top="62%" length={46} />
-      <View style={s.nameplate}>
-        <View style={[s.rivet, { left: 8 }]} />
-        <Text style={s.plateText}>{MAKER}</Text>
-        <View style={s.scuff} />
-        <Text style={s.plateText}>{plateSerial(identity.serial, windowW)}</Text>
-        <View style={[s.rivet, { right: 8 }]} />
-      </View>
+      <Nameplate serial={identity.serial} />
       <View style={s.windowRow}>
         <View style={s.windowWrap}>
           <View style={s.glassBox} onLayout={onLayout} accessibilityLabel={glassLabel} accessible={glassLabel !== undefined}>
@@ -98,6 +88,20 @@ export function Housing({
       <View style={s.keyBand}>
         <KeyRow slots={keys} />
       </View>
+    </View>
+  );
+}
+
+// The riveted aluminium strip: maker left, serial right (one rule for every screen, src/ui/serial.ts).
+export function Nameplate({ serial }: { serial: string }) {
+  const { width: windowW } = useWindowDimensions();
+  return (
+    <View style={s.nameplate}>
+      <View style={[s.rivet, { left: 8 }]} />
+      <Text style={s.plateText}>{MAKER}</Text>
+      <View style={s.scuff} />
+      <Text style={s.plateText}>{plateSerial(serial, windowW)}</Text>
+      <View style={[s.rivet, { right: 8 }]} />
     </View>
   );
 }

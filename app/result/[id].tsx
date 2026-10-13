@@ -32,7 +32,7 @@ const copy = {
     strong: 'Strong. Signature resolving.',
     critical: (hz: number) => `EVP fragment logged. CH2 ${hz} Hz.`,
   },
-  coldSpot: (dt: string) => `COLD SPOT dT ${dt} °C`,
+  coldSpot: (dt: string) => `COLD SPOT ΔT ${dt} °C`,
   flux: 'FLUX',
   thermal: 'THERM',
   acoustic: 'ACOUST',

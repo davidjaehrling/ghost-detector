@@ -2,8 +2,8 @@ import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-
 import { useRouter } from 'expo-router';
 import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Image, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { sessionActivity } from '../src/state/session';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
-import { activityIndex } from '../src/ui/boot/activity';
 import type { KeySlot } from '../src/ui/boot/parts';
 import { captureSeed } from '../src/ui/capture';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
@@ -96,7 +96,7 @@ function Viewfinder({
   const [reduceMotion, setReduceMotion] = useState(false);
   const [tag, setTag] = useState<LocationTag>(() => (harness.fixture ? FIXTURE_TAG[harness.fixture] : LOCATION_TAGS[0]));
   const busy = useRef(false);
-  const { index } = activityIndex(isStatic ? STATIC_NOW : new Date());
+  const { index } = sessionActivity(isStatic ? STATIC_NOW : new Date());
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion, () => {});

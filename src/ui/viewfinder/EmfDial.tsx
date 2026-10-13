@@ -55,7 +55,7 @@ export function EmfDial({
   });
   const geo0 = fluxAngle(GEO_LOW);
   const geo1 = fluxAngle(GEO_HIGH);
-  const geoSegs = Math.ceil((geo1 - geo0) / 3.5);
+  const geoSegs = Math.ceil((geo1 - geo0) / 2);
 
   return (
     <View style={s.dial} pointerEvents="none">
@@ -97,7 +97,7 @@ const s = StyleSheet.create({
   pivot: { position: 'absolute', width: 0, height: 0 },
   major: { position: 'absolute', left: -0.75, top: -R, width: 1.5, height: 9, backgroundColor: color.p3 },
   minor: { position: 'absolute', left: -0.5, top: -R, width: 1, height: 5, backgroundColor: color.p2 },
-  geoSeg: { position: 'absolute', left: -2, top: -(R - 12), width: 4, height: 2, backgroundColor: color.p1 },
+  geoSeg: { position: 'absolute', left: -2, top: -(R - 12), width: 4, height: 2, backgroundColor: color.p2 },
   label: { ...type.rdXS, position: 'absolute', height: 16, lineHeight: 16, textAlign: 'center', color: color.p3 },
   geo: { ...type.lbXS, position: 'absolute', textAlign: 'center', color: color.p3 },
   needle: { position: 'absolute', left: -0.75, top: -(R - 4), width: 1.5, height: R - 4, backgroundColor: color.p4 },

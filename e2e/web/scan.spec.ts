@@ -35,14 +35,19 @@ for (const [name, phase] of [
       // The hold blanks only the live row and the percentage; the last telemetry stays.
       await expect(page.getByTestId('scan-percent')).toHaveText('');
       await expect(page.getByTestId('scan-live')).toHaveText('');
-      await expect(page.getByTestId('scan-rate')).toHaveText('');
+      // The rate label stays through the hold; the value is a dash pair.
+      await expect(page.getByTestId('scan-rate')).toHaveText(/^RATE\s+--\s+c\/s$/);
       await expect(page.getByTestId('scan-status')).toHaveText('DECODE 2048 BLOCKS');
       await expect(page.getByTestId('scan-readout')).toContainText('ACOUSTIC');
     } else if (phase === 'fault') {
       await expect(page.getByTestId('scan-status')).toHaveText(/^E-07 SENSOR DRIFT\.\s*RECALIBRATING\.$/);
       await expect(page.getByTestId('scan-live')).toHaveText('');
+      await expect(page.getByTestId('scan-rate')).toHaveText(/^RATE\s+--\s+c\/s$/);
     } else {
-      await expect(page.getByTestId('scan-readout')).toContainText('THERMAL dT');
+      // The pinned live row is the only thermal value; the log line carries none.
+      await expect(page.getByTestId('scan-readout')).toContainText('THERMAL PROBE ZEROED');
+      await expect(page.getByTestId('scan-live')).toContainText('ΔT');
+      await expect(page.getByTestId('scan-readout')).not.toContainText(/THERMAL.*\d/);
       await expect(page.getByTestId('scan-rate')).toContainText('RATE');
     }
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/${name}.png` });

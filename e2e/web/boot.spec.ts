@@ -69,6 +69,8 @@ test('the nameplate serial shortens under 380 px and the activity digit lights a
   await page.locator('[data-testid="boot-screen"]').waitFor();
   const vw = page.viewportSize()!.width;
   await expect(page.getByText(vw < 380 ? /^00417-9$/ : /^FS4-8711-00417-9$/).first()).toBeVisible();
+  // One serial rule: the full number is printed exactly once, on the plate (wide) or the sticker (narrow).
+  await expect(page.getByText(/FS4-8711-00417-9/)).toHaveCount(1);
   await expect(page.getByTestId('activity')).toContainText('ACT IDX 3/5');
   const colour = await page.getByTestId('activity').locator('span').first().evaluate((e) => getComputedStyle(e).color);
   expect(colour).toBe('rgb(212, 255, 220)');

@@ -25,7 +25,7 @@ export const FIXTURE_TAG = { cellar: 'cellar', attic: 'attic', bright: 'hallway'
 // Under this window width the long legends switch to their short forms so the tag
 // row keeps 12 px between its 44 dp hit areas.
 export const TAG_SHORT_BELOW = 380;
-const TAG_SHORT: Partial<Record<LocationTag, string>> = { hallway: 'HALL', outdoors: 'OUTDR' };
+const TAG_SHORT: Partial<Record<LocationTag, string>> = { hallway: 'HALL', outdoors: 'OUTSIDE' };
 
 export function tagLegend(tag: LocationTag, windowW: number): string {
   return windowW < TAG_SHORT_BELOW ? (TAG_SHORT[tag] ?? TAG_LABEL[tag]) : TAG_LABEL[tag];

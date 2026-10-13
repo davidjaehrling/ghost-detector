@@ -79,10 +79,12 @@ describe('scan timeline', () => {
       expect(words).toBeGreaterThanOrEqual(3);
       expect(words).toBeLessThanOrEqual(6);
       // Upper case, apart from the SI units.
-      expect(l.replace(/mG|dBFS|dT|°C/g, '')).toBe(l.replace(/mG|dBFS|dT|°C/g, '').toUpperCase());
+      expect(l.replace(/mG|dBFS|ΔT|°C/g, '')).toBe(l.replace(/mG|dBFS|ΔT|°C/g, '').toUpperCase());
     }
     expect(phaseLine(417, 0)).toBe('SWEEP BAND 2');
     expect(phaseLine(417, 1)).toMatch(/^FLUX SAMPLE \d{3} mG$/);
+    // The pinned live row owns the thermal value; the log line carries none.
+    expect(phaseLine(417, 2)).not.toMatch(/\d/);
     expect(logBefore(417, 4)).toEqual([phaseLine(417, 1), phaseLine(417, 2), phaseLine(417, 3)]);
     expect(logBefore(417, 0)).toEqual([]);
   });
@@ -155,7 +157,7 @@ describe('scan round 2', () => {
 
   it('live readings carry label, value and unit', () => {
     expect(liveAt(417, 1, 10)).toMatchObject({ label: 'FLUX', unit: 'mG' });
-    expect(liveAt(417, 2, 10)).toMatchObject({ label: 'dT', unit: '°C' });
+    expect(liveAt(417, 2, 10)).toMatchObject({ label: 'ΔT', unit: '°C' });
     expect(readingAt(417, 3, 5)).toMatch(/^LVL -\d+ dBFS$/);
   });
 });

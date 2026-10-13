@@ -2,7 +2,8 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BELIEF_PROFILE, type Belief, getBelief, setBelief } from '../src/state/belief';
-import { activityIndex, daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
+import { sessionActivity } from '../src/state/session';
+import { daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
 import { FIXED_SEED, getInstallIdentity } from '../src/ui/boot/install';
 import { type BootParams, readBootParams } from '../src/ui/boot/params';
 import {
@@ -34,7 +35,6 @@ const copy = {
   actIdx: 'ACT IDX',
   moon: 'MOON',
   nextPeak: 'NEXT PEAK  FULL MOON',
-  window: 'WINDOW 22:00 TO 04:00',
   // 72 px caps cannot carry the full word; the accessibility label does.
   key: 'ACK',
   keyLabel: 'Acknowledge',
@@ -56,8 +56,11 @@ const TYPE_CPS = 40;
 const BOOT_NONCE = Date.now() % 100_000;
 const snap4 = (n: number) => Math.round(n / 4) * 4;
 const STICKER_H_GUESS = 132; // until the sticker has been measured
+// In calibration the sticker slides down until its first heading line (10 px padding, 18 px line)
+// shows whole (the -1.5 degree tilt lowers its left end by 4 px) with a few px of paper under it; the glass edge is the paper edge.
+const STICKER_PEEK = 10 + 18 + 8;
 const CONFIRM_MS = 1400;
-const CONFIRM_MS_STATIC = 250;
+const CONFIRM_MS_STATIC = 800; // the warp snapshot can hold the thread; the e2e must still see the note
 
 let cached: BootParams | null = null;
 const clientParams = () => (cached ??= readBootParams());
@@ -75,7 +78,7 @@ type Stage = 'sticker' | 'calib' | 'confirmed';
 
 function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams }) {
   const router = useRouter();
-  const { index, moonPct } = activityIndex(date);
+  const { index, moonPct } = sessionActivity(date);
   const peakDays = daysToFullMoon(date);
   const fixed = isStatic || dated;
   const identity = useMemo(() => (fixed ? getInstallIdentity(date, FIXED_SEED) : getInstallIdentity(date)), [fixed, date]);
@@ -165,13 +168,12 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
                 {countdown}
               </Text>
               {calibrating ? null : <Text style={s.peak}>{`${copy.nextPeak}  +${peakDays} D`}</Text>}
-              {calibrating ? null : <Text style={s.peak}>{copy.window}</Text>}
             </View>
 
             {/* The sticker keeps its full size. In calibration it slides down until
-                only its top third shows above the glass bottom edge (the glass clips the rest). */}
+                only its first heading line shows above the glass bottom edge (the glass clips the rest). */}
             <View
-              style={[s.stickerSlot, calibrating && { bottom: 0, transform: [{ translateY: Math.round((stickerH * 2) / 3) }] }]}
+              style={[s.stickerSlot, calibrating && { bottom: 0, transform: [{ translateY: Math.max(0, stickerH - STICKER_PEEK) }] }]}
               testID="sticker"
               pointerEvents="none"
             >
@@ -179,7 +181,7 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
             </View>
 
             {calibrating ? (
-              <View style={[s.calib, { bottom: Math.round(stickerH / 3) + 12 }]} testID="calibration">
+              <View style={[s.calib, { bottom: STICKER_PEEK + 12 }]} testID="calibration">
                 <Text style={s.cardHead}>{copy['onboarding.head']}</Text>
                 <View style={s.rule} />
                 <View accessible accessibilityLabel={copy['onboarding.question']} testID="calibration-question">
@@ -190,13 +192,6 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
                   </View>
                 </View>
                 <View style={s.answerRow}>
-                  <View>
-                    {[copy.yes, copy.unsure, copy.no].map((a) => (
-                      <Text key={a} style={s.answer}>
-                        {a}
-                      </Text>
-                    ))}
-                  </View>
                   <Pressable
                     testID="key-calib-skip"
                     accessibilityRole="button"
@@ -235,8 +230,7 @@ const s = StyleSheet.create({
   question: { ...type.rdS, color: color.p4 },
   cursorRow: { flexDirection: 'row', alignItems: 'center' },
   cursor: { width: 9, height: 14, marginLeft: 4, backgroundColor: color.p4 },
-  answerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8 },
-  answer: { ...type.rdXS, color: color.p3, height: 18 },
+  answerRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
   skip: { minWidth: 44, minHeight: 28, alignItems: 'flex-end', justifyContent: 'flex-end' },
   skipText: { ...type.lbS, color: color.p3 },
   note: { ...type.rdXS, color: color.p3, marginTop: 6, height: 36 },

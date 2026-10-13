@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
 import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
+import { stickerShowsSerial } from '../serial';
 import { mulberry32 } from './seed';
 
 // ---------- typed self-test ----------
@@ -90,9 +91,12 @@ export const GRID_COLS = 10;
 export const GRID_ROWS = 8;
 export const GRID_TOP = 24;
 
+// The grid keeps 4 px of tube on each side, so the corner text never meets the glass edge.
+export const GRID_SIDE = 4;
+
 export function gridDiv(glassW: number): number {
   if (glassW <= 0) return space.div;
-  return Math.min(space.div, Math.floor(glassW / GRID_COLS));
+  return Math.min(space.div, Math.floor((glassW - 2 * GRID_SIDE) / GRID_COLS));
 }
 
 export function Graticule({ w, h }: { w: number; h: number }) {
@@ -206,7 +210,6 @@ const copy = {
 };
 
 const FOLD = 16;
-const SERIAL_MIN_W = 380;
 
 // Bible section 11. `meta` data comes from the install identity. The lower
 // right corner is lifted: the corner is cut away over `bg`, the folded flap
@@ -226,10 +229,10 @@ export function Sticker({
   style?: object;
   onLayout?: (e: LayoutChangeEvent) => void;
 }) {
-  // One line; the segments wrap whole when the glass is too narrow for it. The
-  // serial is on the nameplate too, so it drops off the sticker under 380 px.
+  // One line; the segments wrap whole when the glass is too narrow for it. The serial rule
+  // (src/ui/serial.ts) prints the full serial here only when the nameplate carries the short form.
   const { width } = useWindowDimensions();
-  const parts = [copy.model, ...(width < SERIAL_MIN_W ? [] : [serial]), `CAL ${cal}`, `PRÜF ${pruef}`];
+  const parts = [copy.model, ...(stickerShowsSerial(width) ? [serial] : []), `CAL ${cal}`, `PRÜF ${pruef}`];
   const line = parts.join(' · ');
   const segments = parts.map((t, i) => (i < parts.length - 1 ? `${t} · ` : t));
   return (
