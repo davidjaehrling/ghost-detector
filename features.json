@@ -296,7 +296,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS after Compliance verdict lines added for options 3 and 4; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
