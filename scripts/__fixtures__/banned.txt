@@ -1,0 +1,1 @@
+This line is a pivotal fixture for the banned-copy linter.
