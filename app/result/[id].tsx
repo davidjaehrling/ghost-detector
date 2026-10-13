@@ -396,7 +396,7 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
     const crop = cropOnFigure(height, imgH, top0, placement);
     placement = { ...placement, y: placement.y + crop.dy };
     return { placement, meanLuma, p90: read.result?.p90Luma, top: crop.top };
-  }, [wantsFigure, read, W, imgH, height, seed, outcome.smudge]);
+  }, [wantsFigure, read, W, imgH, height, seed, outcome.smudge, outcome.tier]);
 
   const ready = read.done && loaded;
   const top = composite ? composite.top : panelTop(height, imgH, null);
