@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { useImage } from '@shopify/react-native-skia';
+import { Canvas, useImage } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
 import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
+import { PhosphorText } from '../../src/fx/glass';
 import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
 import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
 import { useSkiaReady } from '../../src/fx/useSkiaReady';
@@ -66,6 +67,13 @@ const copy = {
   photoLabel: 'Captured photo',
 };
 
+// The barrel warp snapshots the glass content. On web the snapshot comes out blank where a Skia
+// canvas sits (CanvasKit's WebGL canvases return an empty toDataURL), and the result's photo, thermal
+// view and digit are all Skia canvases; native `makeImageFromView` over a Skia canvas is untested.
+// Until src/fx/glass can snapshot Skia canvases the result stays on the flat glass.
+// `?static=1&warp=1` turns it on for the harness.
+const WARP_RESULT = false;
+
 const NOT_FITTED_MS = 1500;
 const FADE_MS = 1500;
 const PHOTO_MIN = 0.3; // least share of the glass the photo keeps on a short screen
@@ -95,12 +103,12 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
@@ -123,6 +131,10 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
 
   // Thermal view of the photo panel (THERM key). ?static=1&therm=1 opens it for the golden.
   const [therm, setTherm] = useState(harness.isStatic && params.therm === '1');
+  const warp = WARP_RESULT || (harness.isStatic && params.warp === '1');
+  // Reported by the panel and the reveal; they only feed the glass snapshot key.
+  const [photoLoaded, setPhotoLoaded] = useState(false);
+  const [stable, setStable] = useState(harness.isStatic);
 
   const toViewfinder = () => router.navigate('/viewfinder');
   const [notice, setNotice] = useState(false);
@@ -176,6 +188,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       fixedIdentity={harness.isStatic}
       glassLabel={copy.glass}
       keys={keySlots}
+      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}` }}
     >
       {(size) => (
         <ResultGlass
@@ -186,6 +199,8 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
           notice={notice}
           scare={scareMode}
           therm={therm}
+          onPhotoLoaded={setPhotoLoaded}
+          onStable={setStable}
         />
       )}
     </Housing>
@@ -212,9 +227,11 @@ type GlassProps = {
   notice: boolean;
   scare: ScareMode;
   therm: boolean;
+  onPhotoLoaded: (loaded: boolean) => void;
+  onStable: (stable: boolean) => void;
 };
 
-function ResultGlass({ size, record, isStatic, speed, notice, scare, therm }: GlassProps) {
+function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPhotoLoaded, onStable }: GlassProps) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -272,7 +289,22 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm }: Gl
     };
   }, [isStatic, speed, outcome.spi, value]);
 
+  const reduceMotion = useReduceMotion();
   const scareView = useScare(scare, landed);
+
+  // The warped glass shows a snapshot of this view, retaken when the glass key changes. The key
+  // moves to `stable` once the needle has settled, the figure has faded in and the scare is over,
+  // so the last snapshot is of the finished picture.
+  const [faded, setFaded] = useState(isStatic);
+  useEffect(() => {
+    if (isStatic || !settled) return;
+    const id = setTimeout(() => setFaded(true), FADE_MS + 150);
+    return () => clearTimeout(id);
+  }, [isStatic, settled]);
+  const stable = isStatic || (settled && faded && scareView.pop === null && scareView.flash === 0);
+  useEffect(() => {
+    onStable(stable);
+  }, [stable, onStable]);
 
   const mainLine =
     tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
@@ -298,6 +330,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm }: Gl
         pop={scareView.pop}
         therm={therm}
         thermalC={reading.thermalC}
+        onPhotoLoaded={onPhotoLoaded}
       />
       <View style={s.body}>
         <View style={s.revealRow}>
@@ -305,9 +338,23 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm }: Gl
             <Text style={[type.rdM, s.tier, { color: tint, opacity: landed ? 1 : 0 }]} testID="result-tier">
               {copy.tierWord[tier]}
             </Text>
-            <Text style={[type.rdXL, s.spi, { color: tint }]} testID="result-spi">
-              {landed ? String(outcome.spi) : '--'}
-            </Text>
+            <View style={s.spiBox}>
+              {/* The glyphs are drawn on the glass canvas; this node keeps the number for screen readers and tests. */}
+              <Text style={[type.rdXL, s.spi, { color: tint, opacity: 0 }]} testID="result-spi">
+                {landed ? String(outcome.spi) : '--'}
+              </Text>
+              <Canvas style={s.spiCanvas} pointerEvents="none">
+                <PhosphorText
+                  text={landed ? String(outcome.spi) : '--'}
+                  x={SPI_PAD}
+                  y={SPI_BASE}
+                  size={72}
+                  step={tier === 'critical' ? 5 : 4}
+                  static={isStatic}
+                  reduceMotion={reduceMotion}
+                />
+              </Canvas>
+            </View>
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
         </View>
@@ -385,6 +432,8 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm }: Gl
 }
 
 const LABEL_W = 88;
+const SPI_PAD = 12; // canvas margin around the digit so the bloom is not clipped
+const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
 function ProfileRow({ label, value, maskW }: { label: string; value?: string; maskW?: number }) {
   return (
@@ -442,6 +491,7 @@ function PhotoPanel({
   pop,
   therm,
   thermalC,
+  onPhotoLoaded,
 }: {
   size: GlassSize;
   height: number;
@@ -451,6 +501,7 @@ function PhotoPanel({
   pop: number | null;
   therm: boolean;
   thermalC: number;
+  onPhotoLoaded: (loaded: boolean) => void;
 }) {
   const { outcome, photoUri, seed, id } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
@@ -462,6 +513,10 @@ function PhotoPanel({
   const [loaded, setLoaded] = useState(false);
   const image = useImage(v1 ? photoUri : null);
   const photoReady = v1 ? image !== null : loaded;
+
+  useEffect(() => {
+    onPhotoLoaded(photoReady);
+  }, [photoReady, onPhotoLoaded]);
 
   useEffect(() => {
     if (!wantsFigure) return;
@@ -616,6 +671,8 @@ const s = StyleSheet.create({
   revealLeft: { flexShrink: 1 },
   tier: { letterSpacing: 1 },
   spi: { height: 64, minWidth: 88 },
+  spiBox: { height: 64, minWidth: 88 },
+  spiCanvas: { position: 'absolute', left: -SPI_PAD, top: -SPI_PAD, width: 124, height: 64 + 2 * SPI_PAD },
   lines: { marginTop: BODY.gap },
   resultLine: { ...type.rdXS, height: BODY.line, color: color.p4 },
   readings: { marginTop: BODY.gap, width: 17 * CHAR_XS + 2 },
