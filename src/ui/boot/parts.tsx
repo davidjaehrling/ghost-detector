@@ -99,21 +99,22 @@ export function gridDiv(glassW: number): number {
   return Math.min(space.div, Math.floor((glassW - 2 * GRID_SIDE) / GRID_COLS));
 }
 
-export function Graticule({ w, h }: { w: number; h: number }) {
+// `rows` is the Bible's 8 unless a screen with spare height asks for more (the scan theatre).
+export function Graticule({ w, h, rows: rowCount = GRID_ROWS }: { w: number; h: number; rows?: number }) {
   if (w <= 0 || h <= 0) return null;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
-  const gh = div * GRID_ROWS;
+  const gh = div * rowCount;
   const left = Math.round((w - gw) / 2);
   const cx = gw / 2;
   const cy = gh / 2;
   const cols = Array.from({ length: GRID_COLS + 1 }, (_, k) => k * div);
-  const rows = Array.from({ length: GRID_ROWS + 1 }, (_, k) => k * div);
+  const rows = Array.from({ length: rowCount + 1 }, (_, k) => k * div);
   const step = div / 5;
   const hTicks: number[] = [];
   const vTicks: number[] = [];
   for (let k = 0; k < GRID_COLS * 5; k++) if (k % 5 !== 0) hTicks.push(k * step);
-  for (let k = 0; k < GRID_ROWS * 5; k++) if (k % 5 !== 0) vTicks.push(k * step);
+  for (let k = 0; k < rowCount * 5; k++) if (k % 5 !== 0) vTicks.push(k * step);
   return (
     <View pointerEvents="none" style={[st.grid, { left, top: GRID_TOP, width: gw, height: gh }]}>
       {cols.map((x) => (
@@ -156,7 +157,7 @@ export function IdleTrace({ w, seed }: { w: number; seed: number }) {
 }
 
 // Text outside the grid: firmware line and trigger label above it, timebase below.
-export function GridLabels({ w, fw, trig, tb, sens }: { w: number; fw: string; trig: string; tb: string; sens?: string }) {
+export function GridLabels({ w, fw, trig, tb, sens, rows = GRID_ROWS }: { w: number; fw: string; trig: string; tb: string; sens?: string; rows?: number }) {
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
   const left = Math.round((w - gw) / 2);
@@ -164,8 +165,8 @@ export function GridLabels({ w, fw, trig, tb, sens }: { w: number; fw: string; t
     <>
       <Text style={[st.cornerText, { left, top: 3 }]}>{fw}</Text>
       <Text style={[st.cornerText, { right: left, top: 3 }]}>{trig}</Text>
-      <Text style={[st.cornerText, { left, top: GRID_TOP + div * GRID_ROWS + 3 }]}>{tb}</Text>
-      {sens ? <Text style={[st.cornerText, { right: left, top: GRID_TOP + div * GRID_ROWS + 3 }]}>{sens}</Text> : null}
+      <Text style={[st.cornerText, { left, top: GRID_TOP + div * rows + 3 }]}>{tb}</Text>
+      {sens ? <Text style={[st.cornerText, { right: left, top: GRID_TOP + div * rows + 3 }]}>{sens}</Text> : null}
     </>
   );
 }

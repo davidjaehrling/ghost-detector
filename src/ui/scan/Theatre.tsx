@@ -29,6 +29,12 @@ const CH_S = 8.5; // rdS advance: 0.4 em plus 0.5 tracking
 // Live row 44, RATE 24, rate ramp, gaps and the bottom margin.
 const RATE_BAR_BOTTOM = 12;
 const PINNED_BOTTOM = RATE_BAR_BOTTOM + RATE_MAX_H + 6;
+const LIVE_H = 44;
+const RATE_H = 24;
+const TELEMETRY_GAP = 12; // least gap between the telemetry and the pinned live row
+const GRID_ROWS_MAX = 12;
+// Progress bar 24 px under the grid, telemetry 52 px under it (three log rows, then the status row).
+const TELEMETRY_TOP = 52;
 const FAULT_INDENT = 'E-07 '.length * CH_S;
 
 // Glass content of the scan theatre: graticule, sweep line with persistence
@@ -41,7 +47,14 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   const { w, h } = size;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
-  const gh = div * GRID_ROWS;
+  const narrow = gw < 304;
+  // The graticule takes the height the telemetry and the pinned live row leave over, in whole
+  // divisions (8 at the least, the Bible's grid); what is left below that is the gap between the
+  // telemetry and the live row, 12 px or a little more. Every state shares this layout.
+  const telemetryH = 3 * 24 + (narrow ? 48 : 24);
+  const below = TELEMETRY_TOP + telemetryH + TELEMETRY_GAP + LIVE_H + RATE_H + PINNED_BOTTOM;
+  const rows = Math.max(GRID_ROWS, Math.min(GRID_ROWS_MAX, Math.floor((h - GRID_TOP - below) / div)));
+  const gh = div * rows;
   const gridLeft = Math.round((w - gw) / 2);
   const gridBottom = GRID_TOP + gh;
   const hold = frame.kind === 'hold' || frame.kind === 'done';
@@ -56,7 +69,6 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   const status = fault ? (faultVisible ? FAULT_LINE : '') : phaseLine(seed, phase);
   const statusColor = hold ? color.p3 : frame.final || fault ? color.p5 : color.p4;
   // The fault line hangs its second row under the text after `E-07 ` on a narrow glass.
-  const narrow = gw < 304;
   const rate = live ? rateAt(seed, frame.tick, frame.activeFrac, cap) : 0;
   const barLeft = gridLeft;
   const lit = barBlocks(frame.progress);
@@ -64,8 +76,8 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
 
   return (
     <>
-      <Graticule w={w} h={h} />
-      <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} sens={copy.sens} />
+      <Graticule w={w} h={h} rows={rows} />
+      <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} sens={copy.sens} rows={rows} />
       <Trace seed={seed} frame={frame} left={gridLeft} cy={GRID_TOP + gh / 2} gw={gw} gh={gh} flat={fault} dim={hold} />
       <Sweep turns={frame.sweep} left={gridLeft} gw={gw} gh={gh} dim={hold} />
       <BlockBar lit={lit} left={barLeft} top={gridBottom + 24} width={gw - 48} hideLast={fault && !faultVisible} testID="scan-bar" label={`Progress ${pct} percent`} />
@@ -77,7 +89,7 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
         </Text>
       )}
       {/* Telemetry sits directly under the progress bar: no dead band between them. */}
-      <View style={[s.block, { left: gridLeft, top: gridBottom + 24 + 16 + 12, width: gw }]} testID="scan-readout">
+      <View style={[s.block, { left: gridLeft, top: gridBottom + TELEMETRY_TOP, width: gw }]} testID="scan-readout">
         {[0, 1, 2].map((slot) => (
           <Text key={slot} style={s.log} numberOfLines={1}>
             {lines[slot - (3 - lines.length)] ?? ''}
