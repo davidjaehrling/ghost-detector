@@ -151,13 +151,25 @@ test('the reveal holds silent for 1.2 s, then lands the number', async ({ page }
     profile: { class: 'KEEPER', era: 'Era est. 1905 to 1973', name: 'RSD-9', traits: [], signatureDecodedPct: 61 },
   };
   await page.addInitScript((r) => localStorage.setItem('fs4.scans.v1', JSON.stringify([r])), rec);
+  // Time the number from the page itself: a slow headless frame must not make the 1.2 s hold look short.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __spi: { dash?: number; num?: number } };
+    w.__spi = {};
+    const look = () => {
+      const el = document.querySelector('[data-testid="result-spi"]');
+      const text = el?.textContent;
+      if (text === '--' && w.__spi.dash === undefined) w.__spi.dash = performance.now();
+      if (text === '62' && w.__spi.num === undefined) w.__spi.num = performance.now();
+    };
+    new MutationObserver(look).observe(document, { childList: true, subtree: true, characterData: true });
+  });
   await page.goto('/result/0001');
   await expect(page.getByTestId('result-photo')).toBeVisible();
   const spi = page.getByTestId('result-spi');
-  await expect(spi).toHaveText('--');
-  await page.waitForTimeout(800);
-  await expect(spi).toHaveText('--');
-  await expect(spi).toHaveText('62', { timeout: 5000 });
+  await expect(spi).toHaveText('62', { timeout: 8000 });
+  const { dash, num } = await page.evaluate(() => (window as unknown as { __spi: { dash?: number; num?: number } }).__spi);
+  expect(dash).toBeDefined();
+  expect(num! - dash!).toBeGreaterThanOrEqual(1100);
   check();
 });
 

@@ -19,7 +19,7 @@ import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
 import { formatFlux, formatGeo, jitteredAngle, liveLeds, liveThermal, liveTier } from '../src/ui/viewfinder/flux';
 import { useFlux } from '../src/ui/viewfinder/useFlux';
-import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend } from '../src/ui/viewfinder/lore';
+import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend, tagTracking } from '../src/ui/viewfinder/lore';
 
 // Copy keys follow docs/voice-guide.md section 3. The denied-permission strings are
 // placeholders in the same voice: Copy will add their keys to the voice guide.
@@ -225,7 +225,7 @@ function Viewfinder({
                     accessibilityState={{ selected: tg === tag }}
                     style={s.tagHit}
                   >
-                    <Text style={[s.tag, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
+                    <Text style={[s.tag, { letterSpacing: tagTracking(windowW) }, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
                       {tagLegend(tg, windowW)}
                     </Text>
                   </Pressable>

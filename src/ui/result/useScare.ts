@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { sound } from '../audio';
 import { PEAK_FRAME, REST, SEGMENTS, type ScareFrame, nextSegment } from './scare';
 
@@ -15,25 +15,36 @@ const view = (f: ScareFrame): ScareView => (f.done ? OFF : { flash: f.flash, pop
 
 export function useScare(mode: ScareMode, go: boolean): ScareView {
   const [frame, setFrame] = useState<ScareFrame>(REST);
+  // Renders committed for the picture now on screen. The clock moves on only after one, so a busy
+  // thread that batches two state changes cannot swallow a flash.
+  const committed = useRef(0);
+  useEffect(() => {
+    committed.current++;
+  });
 
   useEffect(() => {
     if (mode !== 'armed' || !go) return;
     // The burst's sound and tap start with the first frame.
     sound.scare();
-    const t0 = performance.now();
+    // The clock starts with the first frame, so a late first frame cannot eat into the pop.
+    let t0 = -1;
     let raf = 0;
-    let index = 0;
-    let painted = 0;
+    let index = -1;
+    let shown: ScareFrame = REST;
     const tick = () => {
-      const next = nextSegment(index, performance.now() - t0, painted);
+      const now = performance.now();
+      if (t0 < 0) t0 = now;
+      const next = index < 0 ? 0 : nextSegment(index, now - t0, committed.current);
       if (next !== index) {
         index = next;
-        painted = 0;
+        committed.current = 0;
+        const f = SEGMENTS[index]!.frame;
+        const same = f.flash === shown.flash && f.pop === shown.pop && f.done === shown.done;
+        shown = f;
+        if (same) committed.current = 1;
+        else setFrame(f);
       }
-      const f = SEGMENTS[index]!.frame;
-      setFrame((prev) => (prev.flash === f.flash && prev.pop === f.pop && prev.done === f.done ? prev : f));
-      painted++;
-      if (!f.done) raf = requestAnimationFrame(tick);
+      if (!shown.done) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

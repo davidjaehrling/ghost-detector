@@ -100,7 +100,7 @@ export function EmfDial({
         </Text>
       ))}
       <Text style={[s.geo, { left: GEO_LABEL.left, top: GEO_LABEL.top, width: GEO_LABEL.width }]}>GEO</Text>
-      <View style={s.canvas} pointerEvents="none" testID="emf-needle">
+      <View style={s.canvas} pointerEvents="none" testID="emf-needle" aria-valuetext={`${shown.toFixed(1)} deg`}>
       <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
         <Path path={geoPath} style="stroke" strokeWidth={2} color={color.p2} />
         <Line p1={vec(PX + 2, PY + 2)} p2={tip(shown, NEEDLE_LEN, 2, 2)} strokeWidth={3} color={color.p1} />

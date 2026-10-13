@@ -53,8 +53,14 @@ test('boot calibration card renders', async ({ page }, testInfo) => {
   const glass = await page.getByTestId('sticker').evaluate((e) => e.parentElement!.getBoundingClientRect().bottom);
   expect(sticker.height).toBeGreaterThan(100);
   const shown = glass - sticker.y;
-  expect(shown).toBeGreaterThan(sticker.height * 0.25);
-  expect(shown).toBeLessThan(sticker.height * 0.45);
+  expect(shown).toBeGreaterThan(32);
+  expect(shown).toBeLessThan(sticker.height * 0.55);
+  // Both heading lines show whole above the glass edge; the paper edge is the glass edge.
+  for (const line of ['SIMULATION UNIT ·', 'ENTERTAINMENT USE ONLY.']) {
+    const head = (await page.getByText(line).boundingBox())!;
+    expect(head.y + head.height).toBeLessThanOrEqual(glass);
+    expect(head.y).toBeGreaterThanOrEqual(sticker.y);
+  }
   await expect(page.getByTestId('countdown')).toHaveText('03:00 WINDOW IN 4 H 12 MIN');
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/boot-calib.png` });

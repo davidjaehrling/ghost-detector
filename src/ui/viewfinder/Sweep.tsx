@@ -51,7 +51,7 @@ export function Sweep({
   const trail = usePersistence(isStatic ? SWEEP_STATIC_DEG : Math.round(deg * 4) / 4, { tau: TAU.sweep, step: sweepStep(mg), static: isStatic, reduceMotion });
 
   return (
-    <View style={[s.fill, { width, height }]} pointerEvents="none" testID="hud-sweep">
+    <View style={[s.fill, { width, height }]} pointerEvents="none" testID="hud-sweep" aria-valuetext={`${Math.round(isStatic ? SWEEP_STATIC_DEG : deg)} deg`}>
       <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
         <Group opacity={0.6}>
           {/* Wedges between consecutive samples make the tail continuous; the live sample is the line. */}

@@ -31,7 +31,15 @@ export function tagLegend(tag: LocationTag, windowW: number): string {
   return windowW < TAG_SHORT_BELOW ? (TAG_SHORT[tag] ?? TAG_LABEL[tag]) : TAG_LABEL[tag];
 }
 
-export const TAG_CH = 7; // B612 Mono 10 px: 6 px advance plus 1 px tracking
+// B612 Mono 10 px advances 6.5 px; with 1 px tracking that is 7.5 px per character (measured). Under
+// TAG_TIGHT_BELOW the tracking drops to 0.4 px so five legends, OUTSIDE among them, keep 12 px gaps
+// (a 380 px window with full legends and wide tracking would leave 11.5).
+export const TAG_CH = 7.5;
+export const TAG_TRACK = 1.0;
+export const TAG_TRACK_NARROW = 0.4;
+export const TAG_TIGHT_BELOW = 385;
+export const tagTracking = (windowW: number) => (windowW < TAG_TIGHT_BELOW ? TAG_TRACK_NARROW : TAG_TRACK);
+export const tagChWidth = (windowW: number) => TAG_CH - TAG_TRACK + tagTracking(windowW);
 export const TAG_HIT = 44;
 export const TAG_ROW_PAD = 4;
 export const TAG_GAP_MIN = 12;
@@ -40,7 +48,7 @@ export const glassWidth = (windowW: number) => windowW - 72;
 
 // Smallest gap between neighbouring hit areas when the five tags are spread across the row.
 export function tagRowGap(tags: readonly LocationTag[], windowW: number): number {
-  const widths = tags.map((t) => Math.max(TAG_HIT, tagLegend(t, windowW).length * TAG_CH));
+  const widths = tags.map((t) => Math.max(TAG_HIT, tagLegend(t, windowW).length * tagChWidth(windowW)));
   const free = glassWidth(windowW) - TAG_ROW_PAD * 2 - widths.reduce((a, b) => a + b, 0);
   return free / (tags.length - 1);
 }

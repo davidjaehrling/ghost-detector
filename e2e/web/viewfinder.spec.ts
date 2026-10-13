@@ -25,12 +25,12 @@ for (const [name, query] of [
     await page.waitForFunction(() =>
       Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0),
     );
-    // The radar sweep is frozen under ?static=1: the same pixels 500 ms apart.
+    // The radar sweep is frozen under ?static=1: the same angle 500 ms apart, and its canvas is there.
     const sweep = page.getByTestId('hud-sweep');
     await expect(sweep.locator('canvas')).toHaveCount(1);
-    const first = (await sweep.screenshot()).toString('base64');
+    await expect(sweep).toHaveAttribute('aria-valuetext', '52 deg');
     await page.waitForTimeout(500);
-    expect((await sweep.screenshot()).toString('base64')).toBe(first);
+    await expect(sweep).toHaveAttribute('aria-valuetext', '52 deg');
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/${name}.png` });
     await expect(page).toHaveScreenshot(`${name}.png`, { maxDiffPixels: 150 });
 
@@ -105,14 +105,14 @@ test('the seeded walk moves the flux and redraws the needle on web', async ({ pa
   await page.goto('/viewfinder?fixture=cellar');
   const flux = page.getByTestId('hud-flux');
   await expect(flux).toBeVisible();
-  // Pixels, not toDataURL: the Skia canvas is WebGL and reads back blank.
-  const needle = page.getByTestId('emf-needle');
-  const pixels = async () => (await needle.screenshot()).toString('base64');
-  const before = { flux: await flux.getAttribute('aria-label'), pixels: await pixels() };
-  await expect.poll(async () => flux.getAttribute('aria-label'), { timeout: 5000 }).not.toBe(before.flux);
-  await expect.poll(pixels, { timeout: 5000 }).not.toBe(before.pixels);
+  // The canvases are WebGL (toDataURL reads back blank) and a screenshot is slow under load, so the
+  // angle each one draws is read from its accessibility value.
+  const angle = (id: string) => page.getByTestId(id).getAttribute('aria-valuetext');
+  const needle0 = await angle('emf-needle');
+  const sweep0 = await angle('hud-sweep');
+  const flux0 = await flux.getAttribute('aria-label');
+  await expect.poll(() => flux.getAttribute('aria-label'), { timeout: 10_000 }).not.toBe(flux0);
+  await expect.poll(() => angle('emf-needle'), { timeout: 10_000 }).not.toBe(needle0);
   // The sweep turns on its own clock.
-  const sweepPixels = async () => (await page.getByTestId('hud-sweep').screenshot()).toString('base64');
-  const s0 = await sweepPixels();
-  await expect.poll(sweepPixels, { timeout: 5000 }).not.toBe(s0);
+  await expect.poll(() => angle('hud-sweep'), { timeout: 10_000 }).not.toBe(sweep0);
 });

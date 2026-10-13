@@ -56,9 +56,9 @@ const TYPE_CPS = 40;
 const BOOT_NONCE = Date.now() % 100_000;
 const snap4 = (n: number) => Math.round(n / 4) * 4;
 const STICKER_H_GUESS = 132; // until the sticker has been measured
-// In calibration the sticker slides down until its first heading line (10 px padding, 18 px line)
-// shows whole (the -1.5 degree tilt lowers its left end by 4 px) with a few px of paper under it; the glass edge is the paper edge.
-const STICKER_PEEK = 10 + 18 + 8;
+// In calibration the sticker slides down until its two heading lines (10 px padding, 18 px each)
+// show whole (the -1.5 degree tilt lowers its left end by 4 px) with a few px of paper under it; the glass edge is the paper edge.
+const STICKER_PEEK = 10 + 18 * 2 + 8;
 const CONFIRM_MS = 1400;
 const CONFIRM_MS_STATIC = 800; // the warp snapshot can hold the thread; the e2e must still see the note
 
