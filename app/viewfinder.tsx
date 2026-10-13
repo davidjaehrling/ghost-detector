@@ -15,6 +15,7 @@ import { useReduceMotion } from '../src/ui/useReduceMotion';
 import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
+import { Sweep } from '../src/ui/viewfinder/Sweep';
 import { formatFlux, formatGeo, jitteredAngle, liveLeds, liveThermal } from '../src/ui/viewfinder/flux';
 import { useFlux } from '../src/ui/viewfinder/useFlux';
 import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend } from '../src/ui/viewfinder/lore';
@@ -45,6 +46,7 @@ const FIXTURE_SIZE = { w: 768, h: 1024 };
 const STATIC_NOW = new Date(2026, 9, 13, 12);
 const BAND = 0.3; // scrim band: lower 30% of the glass, never less than it needs
 const BAND_MIN = TAG_HIT + 36 + 96; // tag row, two lore rows, dial plate height
+const RETICLE_TOP = 68; // keep in step with s.reticle.top
 const SCRIM = 'rgba(10, 15, 11, 0.64)';
 
 let cached: Harness | null = null;
@@ -158,6 +160,16 @@ function Viewfinder({
               <Image source={fixtureSource(fixture)} style={[StyleSheet.absoluteFill, s.photo]} accessibilityLabel="" />
             ) : null}
             <View style={s.dim} pointerEvents="none" />
+            <Sweep
+              width={w}
+              height={h - bandH}
+              cx={w / 2}
+              cy={Math.round((RETICLE_TOP + h - bandH - 12) / 2)}
+              mg={sample.mg}
+              isStatic={isStatic}
+              running={active}
+              reduceMotion={reduceMotion}
+            />
             <Reticle bottom={bandH + 12} />
 
             <View style={s.topScrim} pointerEvents="none" />
@@ -268,7 +280,7 @@ const s = StyleSheet.create({
   dim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(10, 15, 11, 0.22)' },
   topScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: 56, backgroundColor: SCRIM },
   topLeft: { position: 'absolute', left: 12, top: 4 },
-  reticle: { position: 'absolute', left: 12, right: 12, top: 68 },
+  reticle: { position: 'absolute', left: 12, right: 12, top: RETICLE_TOP },
   crossHo: { position: 'absolute', left: '50%', top: '50%', width: 17, height: 3, marginLeft: -8, marginTop: -1, backgroundColor: color.n0 },
   crossVo: { position: 'absolute', left: '50%', top: '50%', width: 3, height: 17, marginLeft: -1, marginTop: -8, backgroundColor: color.n0 },
   crossH: { position: 'absolute', left: '50%', top: '50%', width: 15, height: 1, marginLeft: -7, backgroundColor: color.p4 },

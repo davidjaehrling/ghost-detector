@@ -25,6 +25,12 @@ for (const [name, query] of [
     await page.waitForFunction(() =>
       Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0),
     );
+    // The radar sweep is frozen under ?static=1: the same pixels 500 ms apart.
+    const sweep = page.getByTestId('hud-sweep');
+    await expect(sweep.locator('canvas')).toHaveCount(1);
+    const first = (await sweep.screenshot()).toString('base64');
+    await page.waitForTimeout(500);
+    expect((await sweep.screenshot()).toString('base64')).toBe(first);
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/${name}.png` });
     await expect(page).toHaveScreenshot(`${name}.png`, { maxDiffPixels: 150 });
 
@@ -95,6 +101,7 @@ test('one opaque band runs edge to edge to the glass bottom, FLUX and GEO share 
 
 // Web has no magnetometer: the seeded walk drives the flux and the needle, and moves without ?static=1.
 test('the seeded walk moves the flux and redraws the needle on web', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto('/viewfinder?fixture=cellar');
   const flux = page.getByTestId('hud-flux');
   await expect(flux).toBeVisible();
@@ -104,4 +111,8 @@ test('the seeded walk moves the flux and redraws the needle on web', async ({ pa
   const before = { flux: await flux.getAttribute('aria-label'), pixels: await pixels() };
   await expect.poll(async () => flux.getAttribute('aria-label'), { timeout: 5000 }).not.toBe(before.flux);
   await expect.poll(pixels, { timeout: 5000 }).not.toBe(before.pixels);
+  // The sweep turns on its own clock.
+  const sweepPixels = async () => (await page.getByTestId('hud-sweep').screenshot()).toString('base64');
+  const s0 = await sweepPixels();
+  await expect.poll(sweepPixels, { timeout: 5000 }).not.toBe(s0);
 });
