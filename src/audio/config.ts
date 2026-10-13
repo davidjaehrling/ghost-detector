@@ -119,6 +119,12 @@ export interface SoundConfig {
   accessibility: { reducedFlash: boolean; maxTicksPerSec: number; reducedMaxTicksPerSec: number; tickGeigerCutoff: number };
 }
 
+/**
+ * Android notification-type haptic durations, ms (palette section 7: about 60, 60, 80).
+ * ESTIMATES, not measurements: they need a phone measurement at Phone check 2.
+ */
+export const ANDROID_NOTIFICATION_MS = { success: 60, warning: 60, error: 80 } as const;
+
 /** Estimated transient length per haptic step, ms (palette section 7). */
 export const HAPTIC_STEP_MS = {
   light: 10,
@@ -127,9 +133,9 @@ export const HAPTIC_STEP_MS = {
   rigid: 12,
   soft: 10,
   selection: 8,
-  success: 60,
-  warning: 60,
-  error: 80,
+  success: ANDROID_NOTIFICATION_MS.success,
+  warning: ANDROID_NOTIFICATION_MS.warning,
+  error: ANDROID_NOTIFICATION_MS.error,
 } as const;
 
 export const MAX_HAPTIC_MS = 120;

@@ -15,11 +15,24 @@ import {
   wobble,
 } from '../scheduler';
 
+/** docs/sound-palette.md section 2, clicks per second (calm, standard, brave). Hard-coded on purpose. */
+const PALETTE_RATES = {
+  quiet: { calm: 0.5, standard: 0.8, brave: 1.0 },
+  trace: { calm: 1.5, standard: 2.5, brave: 3.5 },
+  active: { calm: 3, standard: 6, brave: 9 },
+  strong: { calm: 5, standard: 10, brave: 16 },
+  critical: { calm: 6, standard: 14, brave: 22 },
+} as const;
+
 describe('Poisson clicks', () => {
+  it('config rates equal the palette table', () => {
+    expect(cfg.geiger.ratePerSec).toEqual(PALETTE_RATES);
+  });
   it('expected count over 10 s within 15% for every tier and intensity (mean of 300 seeds)', () => {
     for (const t of TIER_ORDER) {
       for (const i of INTENSITIES) {
-        const rate = baseRate(cfg, t, i);
+        const rate = PALETTE_RATES[t][i];
+        expect(baseRate(cfg, t, i), `${t}/${i} baseRate`).toBe(rate);
         let total = 0;
         for (let s = 1; s <= 300; s++) total += simulateClicks(cfg, s, rate, 10).length;
         const mean = total / 300;
@@ -29,7 +42,7 @@ describe('Poisson clicks', () => {
   });
   it('a single 10 s run at each CRITICAL cap stays near the cap', () => {
     for (const [i, cap] of [['calm', 6], ['standard', 14], ['brave', 22]] as const) {
-      const n = simulateClicks(cfg, 7, baseRate(cfg, 'critical', i), 10).length;
+      const n = simulateClicks(cfg, 7, PALETTE_RATES.critical[i], 10).length;
       expect(n).toBeGreaterThan(cap * 10 * 0.75);
       expect(n).toBeLessThan(cap * 10 * 1.25);
     }
