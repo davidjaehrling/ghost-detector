@@ -301,3 +301,154 @@ so single runs vary.
   `transformOrigin` upscale of the grain canvas, and Plus blending of the burn-in over the
   camera. Phone check 2 measures these.
 - The Bible says grain re-seeds at 24 fps; P3-02 asked for 12 Hz. `grainHz` switches it.
+
+## Apparition and compositor v1
+P3-03 and P3-04. `ghostV0/` stays as the fallback and is unchanged.
+
+### API
+- `src/fx/apparition/`
+  - `buildSilhouette(variant, seed)`: pure TS geometry. Six variants (`VARIANT_NAMES`: lean, hunch,
+    hood, turned, behind, trail), each a union of skewed, wobbling ellipses and Catmull-Rom blobs
+    (cubic Beziers through anchors, flattened): head, uneven shoulders, a lean, a drape with a
+    ragged hem. Hunch has a raised shoulder, turned has one soft arm hint (weight 0.45), hood and
+    behind carry a seeded ragged occluder (`OCCLUDED_VARIANTS` = 2 and 4). No features.
+  - `renderApparition({ variant, seed, width, height }) -> SkImage | null`: draws the polygons into
+    an offscreen surface (native `Skia.Surface.MakeOffscreen`, snapshot made non-texture; web the
+    CanvasKit CPU surface, because `MakeOffscreen` there opens a WebGL context per call whose
+    textures the on-screen canvas cannot use). Pass 1: union minus the cut, `DisplacementMap` by
+    `FractalNoise`, Gaussian feather. Pass 2: SkSL noise alpha mask (edge erosion, interior density
+    floor 0.88 to 0.95, the lower body fading to 40%). White with the figure in alpha. Cached per
+    variant, seed and size (24 entries). Skia is only touched when called, never at module load.
+  - `metrics.ts`: the same steps on a 40 x 80 alpha grid in pure TS (value noise stands in for
+    FractalNoise at the same frequency and amplitude): `mirrorCorrelation`, `largestHoleFraction`,
+    `areaFraction`, `silhouetteMetrics(variant, seed)`.
+  - `FIT_W`, `FIT_H`, `imageRectFor(box)`: the silhouette fills the centre 80 x 88% of its image;
+    the compositor draws the image larger so the silhouette fills the placement box and the feather
+    spills past it. Width may stretch up to 1.25x the height scale (v0 mattes allowed 1.3x).
+- `src/fx/compositor/`
+  - `<Composite photo width height photoRect? region meanLuma p90Luma? p80Luma? grid? placement tier? seed static? fadeInMs? disabled? variant? />`.
+    `photo` is an `SkImage` or a URI; `placement` is the unchanged `placeGhost` output in panel
+    pixels; `photoRect` is where the photo sits in the panel (default centred cover); `grid` is
+    `RegionStats.grid`; `variant` is 0..5 or `'png'` (the v0 matte `placement.matte`), default
+    `seed % 6`. Web flags read inside it: `?static=1` (no fade), `?ghost=0` (photo and grain only).
+  - `wantsCompositorV1()`: true when the web URL has `v=1`.
+  - `regionFromImage(uri) -> RegionStats | null`: `{ region, meanLuma, p80Luma, p90Luma, grid }`.
+    Native: `Skia.Data.fromURI` + `MakeImageFromEncoded`, halved on CPU raster surfaces to at most
+    192 px, `makeNonTextureImage().readPixels` as RGBA, then the shared `statsFromRgba` (96 px grid,
+    `findDarkRegion`). Falls back to the v0 path (expo-image-manipulator + jpeg-js) with the same
+    stats when Skia cannot read the file. Web: the v0 2D-canvas read of the photo.
+  - Pure, tested helpers: `plusClamped`, `compositePixel`, `occlusion`, `grainOffset` (`blend.ts`,
+    the TS twin of the SkSL), `motionCopies`, `ghostBlurSigma` (`motion.ts`), `reference`,
+    `unionBox` (`reference.ts`), `statsFromRgba`, `lumaUnder`, `halvingSteps`, `estimateP80`.
+
+### What v1 does that v0 did not
+- One Skia canvas: the photo and the ghost go through one runtime shader, so the grain lands on
+  both. v0 stacked RN images over an RN image and had no grain.
+- Procedural figures (six seeded variants) instead of three baked PNG mattes; PNGs are the fallback.
+- Real Gaussian blur on the ghost layer (2.5% of the figure width, 2.4x for the TRACE and QUIET
+  smudge) on top of the 3 to 5 directional copies; the photo is not blurred. CRITICAL's 2 to 4
+  `placeGhost` copies are split to 3 without reaching further or adding alpha.
+- Plus blend at the layer alpha (the `placeGhost` opacity, 8 to 25%), light only. Screen was tried
+  first and lifted the bright fixture's figure box by 2.4 luma, because it adds `a * (1 - bg)`.
+- Per-pixel clamp in the shader: the lift is scaled to `min(lift, allowed * (1 - exp(-6 lift /
+  allowed)))` with `allowed = reference + 24 - bg luma`, so faint edges pass unchanged and the core
+  bends into the limit. Never negative, never more than the plain blend.
+- Partial occlusion by the scene: the ghost fades out over 10 luma above the 80th percentile of
+  the scene luma (9 taps, 3 px radius), so bright edges cut it (the beam on attic, the tree edge on
+  outdoors, the brick wall over the cellar figure's head).
+- Grain 4% after compositing, seeded FractalNoise, added equally with and without the ghost, so the
+  with/without difference never goes negative.
+
+### Deviation to rule on: the clamp reference
+The contract says region mean + 24. The dark region is a threshold component, so its mean sits
+under everything around it, and `placeGhost` (margins, off-centroid offset) puts part of the figure
+outside it: on attic the scene under the figure box is 18.7 luma against a region mean of 3.1, on
+outdoors 94.7 against 49.5. Clamping at region mean + 24 left the attic and outdoors figures at a
+mean lift of 4.5 to 4.7. With `grid` passed, `reference.ts` uses the scene under the figure's union
+box instead (mean for the clamp, its 80th percentile for the occlusion), never below the region's
+own values; without `grid` it uses the region statistics as specified. The "clamp ref" column
+below shows which value was used.
+
+### Measured (L2, `node scripts/measure-ghost.mjs`, Chromium 390 x 844 at 1x, probe panel 318 x 303)
+Screenshots of the panel with and without the ghost (`&ghost=0`), luma difference (Rec. 601).
+Figure box = the `placeGhost` box; union box = figure plus copies as a share of the panel; over
+clamp = pixels lifted past clamp ref + 24 (with the grain slack).
+
+| fixture | variant | opacity | region mean | clamp ref | box bg | mean lift in figure box | max lift | darkened px | over clamp px | lifted px (>= 2) | union box | centre (x, y) | target |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cellar | 0 | 0.214 | 6.4 | 8.9 | 10.2 | 9.9 | 33 | 0 | 0 | 6.5% | 13.5% | 0.26, 0.62 | PASS |
+| attic | 2 | 0.135 | 3.1 | 18.1 | 18.7 | 12.1 | 43 | 0 | 0 | 6.8% | 14.1% | 0.40, 0.62 | PASS |
+| bright | 3 | 0.154 | 220.6 | 220.6 | 198.9 | 12.7 | 50 | 0 | 0 | 4.2% | 8.4% | 0.76, 0.62 | PASS |
+| black | 0 | 0.188 | 1.4 | 1.5 | 3.4 | 9.8 | 26 | 0 | 0 | 5.2% | 10.3% | 0.76, 0.38 | PASS |
+| outdoors | 4 | 0.135 | 49.5 | 103.0 | 94.7 | 11.0 | 44 | 0 | 0 | 2.2% | 5.8% | 0.78, 0.62 | PASS |
+
+Max lift exceeds 24 where a pixel is darker than the reference (the limit is reference + 24, not
+bg + 24). Every variant forced on every fixture (`--variant N`), mean lift in the figure box:
+
+| variant | cellar | attic | bright | black | outdoors |
+|---|---|---|---|---|---|
+| 0 lean | 9.9 | 7.5 (fail) | 14.0 | 9.8 | 9.9 |
+| 1 hunch | 8.9 | 11.9 | 14.8 | 10.5 | 10.6 |
+| 2 hood | 9.9 | 12.1 | 15.1 | 9.4 | 9.8 |
+| 3 turned | 10.8 | 11.2 | 12.7 | 8.5 | 11.1 |
+| 4 behind | 7.9 (fail) | 12.4 | 10.6 | 8.3 | 11.0 |
+| 5 trail | 10.8 | 9.5 | 10.3 | 9.5 | 10.1 |
+| png (v0 matte) | 8.0 (fail, 7.98) | 7.1 (fail) | 11.8 | 7.1 (fail) | 8.5 |
+
+28 of 30 procedural combinations reach 8: lean on attic (7.5, the beam occludes it) and behind on
+cellar (7.9). Every default pick passes. The figure
+fill is the limit, not the opacity: the core already sits at the clamp, and the area rule (at most
+60% of the silhouette's box) caps how much of the box can be lit. Darkened is 0 everywhere.
+
+Silhouette metrics (Vitest, 6 variants x 20 seeds): mirror correlation at most 0.50, no enclosed
+hole, area 36 to 56% of the box. A wider hand check over 500 other seeds per variant (3000
+figures) found mirror at most 0.71, no hole over 1%, and one figure at area 0.602 (just over the
+60% rule). The occluders hide 7 to 21% (hood) and 3.5 to 24% (behind) of the body.
+
+Goldens: `e2e/screenshots/golden/android-390x844/composite-<fixture>.png` from
+`e2e/web/compositor.spec.ts` (390 only, `maxDiffPixels: 400`). Judged against plan section 6: light
+added, faint, off-centre, under 15%, no features, asymmetric, grain over the whole panel, occlusion
+visible on attic, outdoors and cellar. Weak spots for the judges: the lean variant's lower body
+sweeps back into an S that can read as a fish tail (cellar, black); on bright the figure reads as a
+pale highlight beside the lamp.
+
+### What Builder A changes in the result screen
+1. Import from `src/fx/compositor`: `Composite`, `regionFromImage` (it returns a superset of the v0
+   result, so `RegionResult` users keep working), `wantsCompositorV1`.
+2. Keep `placeGhost`, `panelTop`, `panelRegion`, `cropOnFigure` and the smudge scaling exactly as
+   they are; the placement contract is unchanged.
+3. In `PhotoPanel`, when `wantsCompositorV1()` (later: always), render instead of the `Image` plus
+   `GhostV0`:
+   ```tsx
+   <Composite
+     photo={photoUri}
+     width={W}
+     height={height}
+     photoRect={{ x: 0, y: composite.top, width: W, height: imgH }}
+     region={panelRegion(...)}   // the region given to placeGhost
+     meanLuma={composite.meanLuma}
+     p90Luma={read.result?.p90Luma}
+     p80Luma={read.result?.p80Luma}
+     grid={read.result?.grid}
+     placement={composite.placement}
+     tier={outcome.tier}
+     seed={seed}
+     static={isStatic}
+     fadeInMs={FADE_MS}
+   />
+   ```
+   It draws the photo itself, so drop the RN `Image` on that path. It renders nothing until the
+   photo is decoded and the ghost layer is built; `testID="composite"` appears when it is drawn.
+   For a QUIET result with no figure, either keep the RN `Image` or pass `disabled`.
+4. Mount it once and let `static` / `fadeInMs` handle the reveal (it fades the ghost, not the
+   photo). The needle-settle gating can stay outside, as now.
+5. `scripts/measure-ghost.mjs --route result` measures the result screen with `&v=1` once wired.
+
+### Unverified
+- Native: `regionFromImage` via Skia (decode, raster halving, `readPixels`), `MakeOffscreen` plus
+  `makeNonTextureImage` for the apparition and ghost layer, the reanimated-driven fade uniform, and
+  frame cost. All need a phone build. The probe and goldens are web (CanvasKit) only.
+- Cost of building the ghost layer: a CPU blur of a panel-sized layer once per result on web; not
+  profiled on a device.
+- The P3-04 contract measurement is on the probe route, which mirrors the result screen's layout at
+  390 (318 x 303 panel); the result screen itself is not measured until Builder A wires `v=1`.
