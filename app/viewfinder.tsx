@@ -1,7 +1,7 @@
 import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AccessibilityInfo, Image, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { type RefObject, useRef, useState, useSyncExternalStore } from 'react';
+import { Image, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sessionActivity } from '../src/state/session';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
 import type { KeySlot } from '../src/ui/boot/parts';
@@ -10,10 +10,13 @@ import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
 import { fixtureSource, fixtureUri } from '../src/ui/fixtures';
 import { type Harness, readHarness } from '../src/ui/harness';
 import { Readout } from '../src/ui/Readout';
+import { useActive } from '../src/ui/useActive';
+import { useReduceMotion } from '../src/ui/useReduceMotion';
 import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
-import { type FluxSample, createFluxWalk, fluxAngle, formatFlux, formatGeo, liveLeds, liveThermal } from '../src/ui/viewfinder/flux';
+import { formatFlux, formatGeo, jitteredAngle, liveLeds, liveThermal } from '../src/ui/viewfinder/flux';
+import { useFlux } from '../src/ui/viewfinder/useFlux';
 import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend } from '../src/ui/viewfinder/lore';
 
 // Copy keys follow docs/voice-guide.md section 3. The denied-permission strings are
@@ -37,8 +40,6 @@ const copy = {
 // Harness: a fixed capture time so the scan seed, and the result golden, repeat.
 const STATIC_CAPTURE_MS = Date.UTC(2026, 9, 13, 12);
 const STATIC_SEED = 417;
-const TICK_MS = 100;
-const NEEDLE_JITTER_DEG = 0.006 * 100;
 const FIXTURE_SIZE = { w: 768, h: 1024 };
 // Harness: tonight's activity index is read at a fixed time so the golden repeats.
 const STATIC_NOW = new Date(2026, 9, 13, 12);
@@ -91,23 +92,15 @@ function Viewfinder({
   const fixture = harness.fixture ?? DEFAULT_FIXTURE;
   const source = sourceFor(permission, Platform.OS === 'web');
 
-  const [walk] = useState(() => createFluxWalk(isStatic ? STATIC_SEED : Date.now() % 2 ** 31));
-  const [sample, setSample] = useState<FluxSample>(() => walk.next());
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const reduceMotion = useReduceMotion();
+  const active = useActive();
+  const [fluxSeed] = useState(() => (isStatic ? STATIC_SEED : Date.now() % 2 ** 31));
+  const { sample } = useFlux({ seed: fluxSeed, isStatic, active });
   const [tag, setTag] = useState<LocationTag>(() => (harness.fixture ? FIXTURE_TAG[harness.fixture] : LOCATION_TAGS[0]));
   const busy = useRef(false);
   const { index } = sessionActivity(isStatic ? STATIC_NOW : new Date());
 
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion, () => {});
-  }, []);
-  useEffect(() => {
-    if (isStatic) return;
-    const id = setInterval(() => setSample(walk.next()), TICK_MS);
-    return () => clearInterval(id);
-  }, [isStatic, walk]);
-
-  const angle = fluxAngle(sample.mg) + (reduceMotion ? 0 : sample.jitter * NEEDLE_JITTER_DEG);
+  const angle = jitteredAngle(sample.mg, sample.jitter, reduceMotion);
   const flux = formatFlux(sample.mg);
   const dT = liveThermal(sample.mg);
 

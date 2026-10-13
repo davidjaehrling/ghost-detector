@@ -19,6 +19,8 @@ for (const [name, query] of [
     await expect(page.getByTestId('hud-flux')).toBeVisible();
     await expect(page.getByTestId('key-capture')).toBeVisible();
     await expect(page.getByTestId('key-capture')).toBeEnabled();
+    // The needle and its trail are a Skia canvas on the dial plate.
+    await expect(page.getByTestId('emf-needle').locator('canvas')).toHaveCount(1);
     await page.evaluate(() => document.fonts.ready);
     await page.waitForFunction(() =>
       Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0),
@@ -89,4 +91,17 @@ test('one opaque band runs edge to edge to the glass bottom, FLUX and GEO share 
   await expect(page.getByTestId('hud-geo')).toHaveText(/^GEO [+-]\d+%$/);
   const flux = await page.getByTestId('hud-flux').getAttribute('aria-label');
   expect(flux).toMatch(/^FLUX +\d+ mG$/);
+});
+
+// Web has no magnetometer: the seeded walk drives the flux and the needle, and moves without ?static=1.
+test('the seeded walk moves the flux and redraws the needle on web', async ({ page }) => {
+  await page.goto('/viewfinder?fixture=cellar');
+  const flux = page.getByTestId('hud-flux');
+  await expect(flux).toBeVisible();
+  // Pixels, not toDataURL: the Skia canvas is WebGL and reads back blank.
+  const needle = page.getByTestId('emf-needle');
+  const pixels = async () => (await needle.screenshot()).toString('base64');
+  const before = { flux: await flux.getAttribute('aria-label'), pixels: await pixels() };
+  await expect.poll(async () => flux.getAttribute('aria-label'), { timeout: 5000 }).not.toBe(before.flux);
+  await expect.poll(pixels, { timeout: 5000 }).not.toBe(before.pixels);
 });
