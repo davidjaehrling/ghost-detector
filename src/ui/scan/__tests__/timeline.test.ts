@@ -11,6 +11,7 @@ import {
   faultFor,
   faultOn,
   frameAt,
+  heldThermal,
   liveAt,
   logBefore,
   rateAt,
@@ -186,6 +187,25 @@ describe('LED 4 in the hold (D-007 regression, D-009)', () => {
   it('lights it in the hold on the quieter tiers', () => {
     for (const tier of ['quiet', 'trace', 'active', undefined]) {
       expect(scanLeds(frameAt(T - HOLD_MS / 2, T), tier)).toBe(4);
+    }
+  });
+});
+
+describe('held thermal reading', () => {
+  it('is the last reading logged live in phase 2', () => {
+    for (const d of [6000, 7300, 8000, 10000]) {
+      const active = d - HOLD_MS;
+      let last = '';
+      for (let e = 0; e < active; e += 10) {
+        const f = frameAt(e, d);
+        if (f.kind === 'phase' && f.phase === 2) {
+          const l = liveAt(417, 2, f.tick);
+          last = `${l.label} ${l.value} ${l.unit}`;
+        }
+      }
+      const h = heldThermal(417, active);
+      expect(`${h.label} ${h.value} ${h.unit}`).toBe(last);
+      expect(h.label).toBe('ΔT');
     }
   });
 });

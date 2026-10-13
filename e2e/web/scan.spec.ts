@@ -34,7 +34,12 @@ for (const [name, phase] of [
     if (phase === 'hold') {
       // The hold blanks only the live row and the percentage; the last telemetry stays.
       await expect(page.getByTestId('scan-percent')).toHaveText('');
-      await expect(page.getByTestId('scan-live')).toHaveText('');
+      // The live row keeps the last ΔT of the thermal phase, dimmed to p2, with a block blinking after it.
+      await expect(page.getByTestId('scan-live')).toContainText(/^ΔT\s+-\d\.\d\s+°C$/);
+      await expect(page.getByTestId('scan-held-block')).toHaveCount(1);
+      const held = page.getByTestId('scan-held').locator('div[dir="auto"] > span').first();
+      expect(await held.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(47, 122, 69)');
+      expect(await page.getByTestId('scan-held-block').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(79, 180, 106)');
       // The rate label stays through the hold; the value is a dash pair.
       await expect(page.getByTestId('scan-rate')).toHaveText(/^RATE\s+--\s+c\/s$/);
       await expect(page.getByTestId('scan-status')).toHaveText('DECODE 2048 BLOCKS');
@@ -82,4 +87,20 @@ test('cancel returns to the viewfinder and saves nothing', async ({ page }) => {
   const saved = await page.evaluate(() => localStorage.getItem('fs4.scans.v1'));
   expect(saved).toBeNull();
   check();
+});
+
+// A live run (nothing frozen): in the 1.2 s hold the block after the held ΔT blinks at 1 Hz.
+test('the block after the held ΔT blinks', async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.goto(`/scan?seed=${STRONG_SEED}`);
+  const block = page.getByTestId('scan-held-block');
+  await expect(block).toHaveCount(1, { timeout: 25_000 });
+  const seen = new Set<string>();
+  const until = Date.now() + 1000;
+  while (Date.now() < until && seen.size < 2) {
+    seen.add(await block.evaluate((e) => getComputedStyle(e).opacity).catch(() => 'gone'));
+    await page.waitForTimeout(40);
+  }
+  seen.delete('gone');
+  expect([...seen].sort()).toEqual(['0', '1']);
 });

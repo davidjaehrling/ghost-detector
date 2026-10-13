@@ -11,6 +11,7 @@ import {
   type ScanFrame,
   barBlocks,
   faultOn,
+  heldThermal,
   liveAt,
   logBefore,
   phaseLine,
@@ -61,6 +62,8 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   const fault = frame.kind === 'fault';
   const phase: Phase = hold ? 4 : frame.phase;
   const live = hold || fault ? null : liveAt(seed, phase, frame.tick);
+  // The hold keeps the last thermal reading of phase 2, dimmed to p2, with a block blinking after it.
+  const held = hold ? heldThermal(seed, frame.t) : null;
   const pct = Math.floor(frame.progress * 100);
   const blink = useBlink(still);
 
@@ -109,6 +112,23 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
       <View style={[s.pinned, { left: gridLeft, width: gw, bottom: PINNED_BOTTOM }]}>
         <View style={s.live} testID="scan-live">
           {live ? <Readout size="rdL" label={live.label} value={live.value} unit={live.unit} labelCh={4} valueCh={5} unitCh={5} /> : null}
+          {held ? (
+            <View style={s.heldRow} testID="scan-held">
+              <Readout
+                size="rdL"
+                label={held.label}
+                value={held.value}
+                unit={held.unit}
+                labelCh={4}
+                valueCh={5}
+                unitCh={2}
+                labelColor={color.p2}
+                valueColor={color.p2}
+                unitColor={color.p2}
+              />
+              <View style={[s.heldBlock, { opacity: blink ? 1 : 0 }]} testID="scan-held-block" />
+            </View>
+          ) : null}
         </View>
         <View style={s.rate} testID="scan-rate">
           {/* The label stays through the hold and the fault beat; only the value goes blank. */}
@@ -190,6 +210,8 @@ const s = StyleSheet.create({
   block: { position: 'absolute' },
   log: { ...type.rdS, color: color.p3, height: 24 },
   status: { ...type.rdS, height: 24 },
+  heldRow: { flexDirection: 'row', alignItems: 'center' },
+  heldBlock: { width: 12, height: 26, marginLeft: 6, backgroundColor: color.p3 },
   holdBlock: { position: 'absolute', width: 10, height: 14, backgroundColor: color.p4 },
   pinned: { position: 'absolute' },
   live: { height: 44 },

@@ -143,6 +143,14 @@ export function liveAt(seed: number, phase: Phase, tick: number): Live {
   }
 }
 
+// The ΔT the hold keeps on the glass: the last reading of phase 2 (the thermal phase), from the
+// active time at which the hold starts. A pure function of (seed, activeMs), so the held frame
+// and the one logged live agree.
+export function heldThermal(seed: number, activeMs: number): Live {
+  const lastTick = Math.max(0, Math.ceil((activeMs * 3) / 5 / TICK_MS) - 1);
+  return liveAt(seed, 2, lastTick);
+}
+
 export const readingAt = (seed: number, phase: Phase, tick: number): string => {
   const { label, value, unit } = liveAt(seed, phase, tick);
   return `${label} ${value} ${unit}`;
