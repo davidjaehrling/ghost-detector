@@ -181,3 +181,123 @@ moved to a 1024-bin histogram (3.8 ms with a binary search per pixel).
 - Shareability of one-hue thermal (D-003 says the panel may revisit at P3).
 - The block look at 2.65 px per sensor pixel is subtle at 1x; it is visible zoomed in.
 - Goldens only at 390 (`thermal-cellar.png`, `thermal-bright.png`, critical tier).
+
+## Glass
+`src/fx/glass/` is the P3-02 glass stack (Bible §2, §4, §6, §7; numbers from `fx` and `motion`
+in `src/ui/tokens.ts`). Everything is Skia (SkSL runtime shaders and primitives) and renders on
+web through CanvasKit. Import from `src/fx/glass`.
+
+### Components
+- `<Glass>` is the one component for the four screens. It wraps the window content and adds the
+  burn-in, the glass layers (flat or warped) and optionally the warm-up. Props: `warp`,
+  `refreshKey`, `warmUp`, `warmUpKey`, `onWarmUpDone`, `burnIn` (default true), `burnInLabels`,
+  `seed`, `static`, `reduceMotion`, `intensity`, `grainHz`, `grainScale`, `radius` (default 18),
+  the layer flags below, `style`, `testID`. Size it with `style` like the window it replaces.
+- `<GlassOverlay>`: a pointer-transparent canvas that fills its parent and draws over the RN views
+  beneath it. Layers, each with a flag (all default true):
+  - `scanlines`: every second 1 px row of a 2 px pitch gets p0 at 6% (darkens lit content and
+    tints it toward the phosphor; measured on the golden: p4 digits 225.7 vs 214.2 G on even vs
+    odd rows, p1 72.8 vs 70.4).
+  - `vignette`: n0 rising with distance^2.5 to 18% in the corners.
+  - `grain`: seeded FractalNoise (freq 0.9, 2 octaves) mapped to signed grain at 4%: positive adds
+    p4 light, negative darkens. Re-seeded at `grainHz` (12) unless static.
+  - `dust`: 40 to 60 specks (1 to 3 px, 2 to 5%) and 2 to 4 hairline scratches (30 to 120 px,
+    4%) in n4, from `dustField(seed)` (Bible §6 ranges, unit-tested over 500 seeds). Positions are
+    fractions of the box, fixed per install seed.
+  - `shadow`: 2 px n1 inner shadow on the top and left edges.
+  Other props: `seed` (install seed), `static`, `intensity` (scales every alpha; 0 hides),
+  `grainHz`, `grainScale` (1 or 2, default 2), `radius` (clip). The static layers sit in one
+  canvas that draws once; grain has its own canvas so a grain tick redraws only the grain.
+- `<GlassLayers width height ...>`: the same layers as Skia nodes for a screen that already has
+  a canvas (put it last). Grain then redraws that whole canvas at 12 Hz; prefer `<GlassOverlay>`
+  unless the canvas is cheap.
+- `<GlassWarp>`: barrel curvature (k = 1.5%: the output pixel at normalised radius r samples
+  r(1 + k r^2), outside shows n0 with a 1 px soft edge). It snapshots its children once with
+  `makeImageFromView` (and again when `refreshKey` changes), draws the snapshot through the
+  barrel shader, then the glass layers, with grain in its own canvas. Children stay mounted
+  underneath for layout, touches (the canvas is pointer-transparent; the bend moves content by
+  up to about 6 px at the corners) and screen readers. Until the first snapshot it shows the
+  children under a flat overlay. **For static-ish screens only (boot, result)**: anything that
+  animates under it freezes until the next refresh. The viewfinder's live camera and the scan
+  theatre use `<GlassOverlay>` only.
+  - Native: `makeImageFromView` reads the view by tag (`collapsable={false}` is set).
+  - Web: Skia needs a caller-supplied rasteriser (`snapshotView.web.ts`): the DOM is cloned
+    into an SVG `foreignObject` with the page's CSS rules (react-native-web keeps them in CSSOM)
+    and the @font-face sources inlined as data URLs, drawn on a 2D canvas and handed to Skia as
+    RGBA. Child `<canvas>` elements are copied with `toDataURL` (RN Skia web canvases are 2D, so
+    they copy); cross-origin images and sheets are skipped.
+- Phosphor (`Phosphor.tsx`, `persistence.ts`):
+  - `usePersistence(value, { tau, step, static, reduceMotion })` returns the trail oldest first,
+    ending with the live sample: `{ value, step, color, opacity }[]`. A sample drops one phosphor
+    step per tau/3 (60 ms for traces at tau 180, 150 ms for the sweep at tau 450) down to p0,
+    then fades over tau; lifetime (step + 1) tau/3 + tau (480 ms trace, 1.2 s sweep from p4).
+    Reduced motion caps tau at 60 ms. `TAU.trace`, `TAU.sweep`. Static: the live sample only.
+  - `<Bloom radius strength>`: children drawn, then again blurred (decal) and added (Plus) at
+    `strength` (0.35).
+  - `<PhosphorText text x y size step align bloom lingerMs static>`: VT323 from the bundled
+    `@expo-google-fonts/vt323` TTF via `useFont`, with bloom; on a change the old text lingers
+    at p1 for 90 ms (Bible §6). Draws nothing until the font is loaded. `useVT323(size)` gives
+    the font for other Skia text.
+- `<WarmUp durationMs static reduceMotion runKey onDone>`: the 900 ms power-on: an n0 veil that
+  lifts with an ease-out cubic while a 2 px p5 band rolls down once, then nothing. Each frame
+  advances at most 50 ms, so a start-up stall slows it instead of skipping it. `static` and
+  `reduceMotion` render the finished state (nothing) and still call `onDone`.
+- `<BurnIn>` / `<BurnInLayer>`: the flux gauge (log arc 100 degrees, 10 to 1000 mG, ticks,
+  labels) and the wordmark, off-centre (gauge centre at 62%, 66% of the box), 1 px right, never
+  animated. Strength: p4 added (Plus) at `fx.burnIn` (3%), which lifts n0 by about 2 to 7 levels,
+  just under p0. A literal p0 at 3% alpha lifts n0 by under half a level and would never show;
+  this reading of the Bible's "p0, 3%" is a judgement call for the panel. Labels are a prop.
+
+### Which screen uses what (Builder A applies)
+| Screen | Use | Notes |
+|---|---|---|
+| Boot | `<Glass warp warmUp refreshKey={…}>` | Bump `refreshKey` after the typed text finishes (and on each line if it types inside the glass); during typing the flat overlay is shown. |
+| Viewfinder | `<Glass>` (flat) | Live camera: never `warp`. Readouts that move can use `usePersistence` and `<PhosphorText>`. |
+| Scan theatre | `<Glass>` (flat) | Traces, needle and sweep: `usePersistence` with `TAU.trace` / `TAU.sweep`, wrapped in `<Bloom>`. |
+| Result | `<Glass warp refreshKey={`${id}-${tier}-${photoLoaded}`}>` | Re-snapshot when the photo has loaded and when the reveal lands; before that it is flat. The big SPI digit: `<PhosphorText size={72} step={5}>` for CRITICAL (p5), 4 otherwise. |
+
+All four pass the install seed as `seed` (dust and scratches are fixed per install) and
+`reduceMotion` from `AccessibilityInfo.isReduceMotionEnabled`.
+
+### Determinism
+- `static` defaults to the harness flag (`?static=1`, read through `readHarness`). Under it no
+  timer or animation frame starts: grain uses `seed` (tick 0), trails return the live sample,
+  the warm-up and the digit linger are skipped. No layer has a time uniform.
+- Every shader is compiled in `useMemo`, never at module load (CanvasKit is not ready then).
+- Checked: three loads x two captures of each probe under `?static=1` are byte-identical
+  (overlay, warp, phosphor).
+- L2: `/probe?layer=overlay|warp|phosphor` (in `SkiaProbe.tsx`, the existing `/probe` route) draws a
+  sample RN view (a p1 block near the edges and p4 VT323 text) under `<Glass>`. `e2e/web/glass.spec.ts`
+  takes `glass-overlay.png` and `glass-warp.png` at 390 only (`maxDiffPixels: 400`), checks the
+  overlay does not take touches (`elementFromPoint` is not the canvas) and that there are no console
+  or page errors. On `glass-warp.png` the block's top edge sits at y = 11 at the centre and 13 at
+  both ends, its left edge at x = 12 near the top and 10 near the middle (the barrel bow); the
+  block's top-left corner averages G 56.0 against 71.4 at its centre (vignette).
+
+### Measured (L2, headless Chromium on SwiftShader, 390 x 844 at 1x, `/probe`, grain animating)
+rAF deltas over 3 s after a 1.5 s settle, 3 runs each; busy is main-thread non-idle time from
+the CPU profiler over 3 s, minus the static page's ~180 ms, per grain tick (36 ticks).
+
+| Build | median | p95 | max | long tasks | busy per grain tick |
+|---|---|---|---|---|---|
+| overlay, grain full resolution (`grainScale` 1) | 16.7 ms | 16.8 to 33.4 ms | 33.5 ms | 0 | ~33 ms |
+| overlay, grain half resolution (shipped default) | 16.7 ms | 16.7 ms | 16.8 ms | 0 | ~12 to 15 ms |
+| warp, half-resolution grain | 16.7 ms | 16.7 to 16.8 ms | 16.8 ms | 0 | ~12 ms |
+| same, CPU throttled 4x: overlay full res | 16.7 ms | 33.4 ms | 50 to 67 ms | 2 to 5 | |
+| same, CPU throttled 4x: overlay half res | 16.7 ms | 16.7 to 16.8 ms | 33.3 ms | 0 | |
+| same, CPU throttled 4x: warp | 16.7 ms | 16.8 ms | 33 to 50 ms | 0 | |
+
+The median sits on the 60 Hz vsync cap in every case, so the p95, long tasks and busy time
+are the useful signal. Full-resolution grain dropped a frame on many grain ticks (SwiftShader runs
+the noise shader on the CPU, so the cost scales with pixels); a half-size grain canvas stretched
+back up by a view transform runs it on a quarter of the pixels and holds 60 fps. The grain is
+slightly coarser and softer, which reads as film. The machine was shared with other test runs,
+so single runs vary.
+
+### Unverified on native
+- No device run yet: `makeImageFromView` timing and scale, the overlay over `CameraView` (Android
+  must back it with a TextureView, the default for a non-opaque canvas; a SurfaceView would sit
+  above or below the camera), the cost of grain at 12 Hz on a mid-range GPU, the
+  `transformOrigin` upscale of the grain canvas, and Plus blending of the burn-in over the
+  camera. Phone check 2 measures these.
+- The Bible says grain re-seeds at 24 fps; P3-02 asked for 12 Hz. `grainHz` switches it.
