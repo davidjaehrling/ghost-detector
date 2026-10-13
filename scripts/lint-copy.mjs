@@ -6,15 +6,17 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const BANNED = ['delve', 'tapestry', 'pivotal', 'crucial', 'intricate', 'testament', 'foster', 'landscape', 'underscore'];
-const wordRe = new RegExp(`\\b(${BANNED.join('|')})\\b`, 'i');
+const wordRe = /\b(delv\w*|tapestr\w*|pivotal\w*|crucial\w*|intricat\w*|testament\w*|foster\w*|landscape\w*|underscor\w*)\b/i;
+const framingRe = /\bnot\s+(?:just|only|merely)?\s*\w+(?:\s+\w+){0,3},?\s+but\s+(?:rather\s+)?\w+/i;
+const SKIP_DOT = new Set(['.git', '.expo', '.github', '.claude']);
 const EM_DASH = '—';
 
 function* walk(p) {
   const st = statSync(p);
   if (st.isDirectory()) {
     for (const name of readdirSync(p)) {
-      if (name === 'node_modules' || name === '__tests__' || name.startsWith('.')) continue;
+      if (name === 'node_modules' || name === '__fixtures__') continue;
+      if (SKIP_DOT.has(name)) continue;
       yield* walk(join(p, name));
     }
   } else {
@@ -33,6 +35,10 @@ for (const target of targets) {
       const m = line.match(wordRe);
       if (m) {
         console.error(`${file}:${i + 1}: banned word "${m[1]}"`);
+        hits++;
+      }
+      if (framingRe.test(line)) {
+        console.error(`${file}:${i + 1}: framing "not X, but Y"`);
         hits++;
       }
       if (line.includes(EM_DASH)) {

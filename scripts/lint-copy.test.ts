@@ -10,6 +10,13 @@ describe('lint-copy', () => {
     expect(r.stderr).toContain('banned.txt:1');
   });
 
+  it('reports stems and the not-X-but-Y framing', () => {
+    const r = run('scripts/__fixtures__/banned.txt');
+    expect(r.stderr).toContain('banned.txt:2: banned word "delving"');
+    expect(r.stderr).toContain('banned.txt:3: banned word "underscores"');
+    expect(r.stderr).toContain('banned.txt:4: framing "not X, but Y"');
+  });
+
   it('passes on app/', () => {
     expect(run('app').status).toBe(0);
   });
