@@ -14,3 +14,8 @@ Append-only log of panel decisions (plan §3). Format: date, topic, options, sco
 - Director rulings: (a) no AI model name in any commit trailer either; phase PRs are squash-merged so earlier trailers do not reach `main`; (b) `e2e/maestro/` belongs to the Release Manager, the rest of `e2e/` to QA.
 - Compliance: no review needed in P0 (no copy, ads, notifications or art exist). Refuter confirmed nothing violates §7 yet.
 - Panel vote: none required; no taste decision was made in P0.
+
+## 2026-10-13 · D-002 · P0 merged; screenshot determinism
+- PR #1 squash-merged as dc7fc4e after CI went green on c444f75. Two fixes landed after the Refuter sweep and were verified by CI rather than a second sweep: bundling VT323 via expo-font (system fonts differed between the container and the runner) and launching Chromium with `--font-render-hinting=none --disable-font-subpixel-positioning --disable-lcd-text` (host fontconfig differed). Goldens are now identical on both machines.
+- Fallback kept: `.github/workflows/update-goldens.yml` regenerates goldens on the runner and uploads them as an artifact. Note that artifact downloads are blocked from the container by the network policy (Azure blob host), so goldens are generated locally and verified by CI.
+- P1 Identity contract written to features.json (P1-01 to P1-08).
