@@ -7,9 +7,12 @@ import {
   EDGE_MARGIN_X,
   EDGE_MARGIN_Y,
   FALLBACK_LIFT,
+  ECHO_ALPHA,
+  ECHO_PX,
   MAX_AREA_FRACTION,
   OPACITY_MAX,
   OPACITY_MIN,
+  TIER_EXTENT,
   TIER_OPACITY_CAP,
   ghostTint,
   stackedAlpha,
@@ -26,8 +29,8 @@ const FRAMES = [
 ];
 
 function union(p: Placement) {
-  const dx = p.offsetCopies.map((c) => c.dx);
-  const dy = p.offsetCopies.map((c) => c.dy);
+  const dx = [...p.offsetCopies.map((c) => c.dx), p.echo?.dx ?? 0];
+  const dy = [...p.offsetCopies.map((c) => c.dy), p.echo?.dy ?? 0];
   const x0 = p.x + Math.min(0, ...dx);
   const x1 = p.x + p.w + Math.max(0, ...dx);
   const y0 = p.y + Math.min(0, ...dy);
@@ -275,8 +278,42 @@ describe('tier caps (D-009)', () => {
       const base = placeGhost(null, FRAMES[0]!, seed);
       const crit = placeGhost(null, FRAMES[0]!, seed, { tier: 'critical' });
       expect(crit.offsetCopies.length).toBe(base.offsetCopies.length - 1);
-      expect(crit.offsetCopies.reduce((a, c) => a + c.alpha, 0)).toBeCloseTo(COPY_ALPHA_SUM, 9);
+      // The echo takes its share of the same budget.
+      expect(crit.offsetCopies.reduce((a, c) => a + c.alpha, 0) + crit.echo!.alpha).toBeCloseTo(COPY_ALPHA_SUM, 9);
+      expect(stackedAlpha(crit)).toBeLessThanOrEqual(crit.opacity * (1 + COPY_ALPHA_SUM) + 1e-12);
       expect(placeGhost(null, FRAMES[0]!, seed, { tier: 'active' }).offsetCopies.length).toBe(base.offsetCopies.length);
+    }
+  });
+});
+
+describe('tier extent and the CRITICAL echo (D-017)', () => {
+  it('escalates the covered share ACTIVE < STRONG < CRITICAL, at the tier targets and never over 15%', () => {
+    for (const { frame, region, seed } of CASES.slice(0, 600)) {
+      const share = (tier: 'active' | 'strong' | 'critical') => union(placeGhost(region, frame, seed, { tier })).area / (frame.w * frame.h);
+      const a = share('active');
+      const st = share('strong');
+      const c = share('critical');
+      expect(a).toBeLessThan(st);
+      expect(st).toBeLessThan(c);
+      expect(c).toBeLessThanOrEqual(MAX_AREA_FRACTION);
+      // At the target unless the frame is too narrow for it (width cap of 75%).
+      if (frame.w >= frame.h * 0.6) {
+        expect(a).toBeCloseTo(TIER_EXTENT.active!, 2);
+        expect(st).toBeCloseTo(TIER_EXTENT.strong!, 2);
+        expect(c).toBeCloseTo(TIER_EXTENT.critical!, 2);
+      }
+    }
+  });
+
+  it('adds one faint echo 6 to 10 px off the figure on CRITICAL only', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      const crit = placeGhost(null, FRAMES[2]!, seed, { tier: 'critical' });
+      const d = Math.hypot(crit.echo!.dx, crit.echo!.dy);
+      expect(d).toBeGreaterThanOrEqual(ECHO_PX[0] - 1e-9);
+      expect(d).toBeLessThanOrEqual(ECHO_PX[1] + 1e-9);
+      expect(crit.echo!.alpha).toBe(ECHO_ALPHA);
+      for (const tier of ['quiet', 'trace', 'active', 'strong'] as const) expect(placeGhost(null, FRAMES[2]!, seed, { tier }).echo).toBeUndefined();
+      expect(placeGhost(null, FRAMES[2]!, seed).echo).toBeUndefined();
     }
   });
 });

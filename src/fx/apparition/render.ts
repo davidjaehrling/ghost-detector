@@ -18,28 +18,50 @@ import {
 } from '@shopify/react-native-skia';
 import { Platform } from 'react-native';
 
-import { HEM_FADE, HEM_FADE_FROM, NOISE_CYCLES } from './metrics';
+import { DENSITY_CYCLES, DENSITY_CYCLES_X, DENSITY_EDGES, DENSITY_FLOOR, INTERIOR, LATERAL_EDGES, NOISE_CYCLES } from './metrics';
 import { buildSilhouette, type Pt, type Silhouette } from './shape';
 
-/** Noise alpha mask, the SkSL twin of `maskAlpha` in `metrics.ts`. Output is premultiplied white. */
+/**
+ * Noise alpha mask, the SkSL twin of `maskAlpha` in `metrics.ts` (whose alpha is this pass's alpha
+ * times its grey). Output is premultiplied: alpha the figure, grey/alpha its interior density.
+ */
 const MASK_SKSL = `
 uniform shader shape;
 uniform shader nEdge;
 uniform shader nDen;
+uniform shader nLow;
 uniform float erode;
 uniform float floorD;
 uniform float hemFade;
 uniform float hemFrom;
+uniform float hemTo;
 uniform float boxH;
+uniform float lowFloor;
+uniform float lowE0;
+uniform float lowE1;
+uniform float boxW;
+uniform float lateral;
+uniform float lateralSide;
+uniform float latE0;
+uniform float latE1;
+uniform float in0;
+uniform float in1;
 float unp(half4 n) { return n.a > 0.0 ? n.r / n.a : 0.5; }
 half4 main(float2 xy) {
   float a = shape.eval(xy).a;
   float t = erode * unp(nEdge.eval(xy));
   float e = clamp((a - t) / max(1.0 - t, 0.001), 0.0, 1.0);
   float d = floorD + (1.0 - floorD) * unp(nDen.eval(xy));
-  float fade = 1.0 - (1.0 - hemFade) * smoothstep(hemFrom, 1.0, xy.y / boxH);
+  float low = lowFloor + (1.0 - lowFloor) * smoothstep(lowE0, lowE1, unp(nLow.eval(xy)));
+  float fade = 1.0 - (1.0 - hemFade) * smoothstep(hemFrom, hemTo, xy.y / boxH);
+  float u = xy.x / boxW;
+  float lat = 1.0 - lateral * smoothstep(latE0, latE1, lateralSide > 0.0 ? u : 1.0 - u);
+  float inner = smoothstep(in0, in1, a) * (1.0 - smoothstep(hemFrom, (hemFrom + hemTo) * 0.5, xy.y / boxH));
+  float mod = 1.0 - inner + inner * max(lowFloor, low * lat);
+  // Alpha carries the outline and the fine density; the coarse interior density rides in the
+  // colour (premultiplied grey), which the compositor applies after its brightness clamp.
   float o = e * d * fade;
-  return half4(o, o, o, o);
+  return half4(o * mod, o * mod, o * mod, o);
 }`;
 
 let maskEffect: SkRuntimeEffect | null = null;
@@ -133,9 +155,28 @@ export function drawSilhouette(sil: Silhouette, width: number, height: number): 
   canvas.clear(clear);
   const nEdge = Skia.Shader.MakeFractalNoise(NOISE_CYCLES / W, NOISE_CYCLES / W, 2, sil.seed * 13 + 5, 0, 0);
   const nDen = Skia.Shader.MakeFractalNoise((NOISE_CYCLES * 0.7) / W, (NOISE_CYCLES * 0.7) / W, 2, sil.seed * 13 + 8, 0, 0);
+  // Low-frequency density patches (D-017): 1.6 cycles per width down the body, 3.2 across it.
+  const nLow = Skia.Shader.MakeFractalNoise(DENSITY_CYCLES_X / W, DENSITY_CYCLES / W, 2, sil.seed * 17 + 3, 0, 0);
   const shader = mask().makeShaderWithChildren(
-    [sil.erode, sil.densityFloor, HEM_FADE, HEM_FADE_FROM, H],
-    [shape.makeShaderOptions(TileMode.Decal, TileMode.Decal, FilterMode.Linear, MipmapMode.None), nEdge, nDen],
+    [
+      sil.erode,
+      sil.densityFloor,
+      sil.fade.floor,
+      sil.fade.from,
+      sil.fade.to,
+      H,
+      DENSITY_FLOOR,
+      DENSITY_EDGES[0],
+      DENSITY_EDGES[1],
+      W,
+      sil.lateral,
+      sil.lateralSide,
+      LATERAL_EDGES[0],
+      LATERAL_EDGES[1],
+      INTERIOR[0],
+      INTERIOR[1],
+    ],
+    [shape.makeShaderOptions(TileMode.Decal, TileMode.Decal, FilterMode.Linear, MipmapMode.None), nEdge, nDen, nLow],
   );
   const fill = Skia.Paint();
   fill.setShader(shader);
@@ -144,7 +185,7 @@ export function drawSilhouette(sil: Silhouette, width: number, height: number): 
 }
 
 /**
- * The apparition for a variant and seed as an `SkImage` (white, alpha carries the figure), drawn
+ * The apparition for a variant and seed as an `SkImage` (alpha carries the figure, grey/alpha its interior density), drawn
  * through an offscreen surface and cached per variant, seed and size.
  */
 export function renderApparition({ variant, seed, width, height }: ApparitionRequest): SkImage | null {

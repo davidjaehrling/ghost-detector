@@ -5,7 +5,7 @@
  * The noise here is a seeded value noise standing in for Skia's FractalNoise (same frequency and
  * amplitude, different pattern), so the metrics hold for the geometry, not for one noise draw.
  */
-import { APPARITION_ASPECT, buildSilhouette, coverageAt, type Silhouette } from './shape';
+import { APPARITION_ASPECT, buildSilhouette, coverageAt, HEM, type Fade, type Silhouette } from './shape';
 
 /** Noise frequency in cycles per box width, shared with the Skia path (`render.ts`). */
 export const NOISE_CYCLES = 4.5;
@@ -14,25 +14,63 @@ export const SILHOUETTE_ALPHA = 0.25;
 /** Grid width in cells; the height is twice that (the box is 1:2). */
 export const GRID_W = 40;
 
-/** How much of its density the figure keeps at the very bottom: the drape fades out (no feet). */
-export const HEM_FADE = 0.4;
-/** The fade starts this far down the box (0..1). */
-export const HEM_FADE_FROM = 0.62;
+/**
+ * Interior density (D-017): a low-frequency noise field (DENSITY_CYCLES per box width down the
+ * body, DENSITY_CYCLES_X across it) maps to
+ * DENSITY_FLOOR..1 through a smoothstep over DENSITY_EDGES of the noise, so the body reads as
+ * thicker and thinner patches of light, never an even wash.
+ */
+export const DENSITY_CYCLES = 1.6;
+/** Across the body the patches are finer, so a patch never spans the body as a mirrored band. */
+export const DENSITY_CYCLES_X = 1.6;
+export const DENSITY_FLOOR = 0.4;
+export const DENSITY_EDGES: readonly [number, number] = [0.15, 0.45];
+/** Feathered coverage over which the interior modulation fades in (the edge keeps full density). */
+export const INTERIOR: readonly [number, number] = [0.45, 0.8];
+/** The lateral density ramp runs across this part of the box width. */
+export const LATERAL_EDGES: readonly [number, number] = [0.3, 0.8];
 
 const smoothstep = (e0: number, e1: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
   return t * t * (3 - 2 * t);
 };
 
+/** Density 0..1 for a low-frequency noise sample (about 0.5 +- 0.25). */
+export function densityAt(n: number, floor = DENSITY_FLOOR): number {
+  return floor + (1 - floor) * smoothstep(DENSITY_EDGES[0], DENSITY_EDGES[1], n);
+}
+
 /**
- * Noise alpha mask: erode the soft edge by `erode * n`, keep the core, vary density down to
- * `floor`, and fade the lower body toward `HEM_FADE` (v is 0..1 down the box).
+ * Noise alpha mask: erode the soft edge by `erode * n`, keep the core, vary density (the fine
+ * `nDensity` term down to `floor`, the coarse `nLow` term down to DENSITY_FLOOR), and fade the
+ * lower body (v is 0..1 down the box).
  */
-export function maskAlpha(a: number, nEdge: number, nDensity: number, erode: number, floor: number, v = 0): number {
+export function maskAlpha(
+  a: number,
+  nEdge: number,
+  nDensity: number,
+  erode: number,
+  floor: number,
+  v = 0,
+  nLow = 1,
+  fade: Fade = HEM,
+  lat: { u: number; amount: number; side: 1 | -1 } = { u: 0.5, amount: 0, side: 1 },
+): number {
   const t = erode * nEdge;
   const e = Math.min(1, Math.max(0, (a - t) / (1 - t)));
-  const fade = 1 - (1 - HEM_FADE) * smoothstep(HEM_FADE_FROM, 1, v);
-  return e * (floor + (1 - floor) * nDensity) * fade;
+  const f = 1 - (1 - fade.floor) * smoothstep(fade.from, fade.to, v);
+  // The coarse patches and the lateral ramp work on the interior only: where the feathered
+  // coverage is high. Thin parts and the edge keep their density, so the outline (and its
+  // asymmetry) survives.
+  // It also eases out through the hem fade, so the thinning drape never encloses a dark patch.
+  const inner = smoothstep(INTERIOR[0], INTERIOR[1], a) * (1 - smoothstep(fade.from, (fade.from + fade.to) / 2, v));
+  const mod = Math.max(DENSITY_FLOOR, densityAt(nLow) * lateralAt(lat.u, lat.amount, lat.side));
+  return e * (floor + (1 - floor) * nDensity) * (1 - inner + inner * mod) * f;
+}
+
+/** Density factor across the box: 1 on one side, 1 - amount toward `side` (u 0..1 across). */
+export function lateralAt(u: number, amount: number, side: 1 | -1): number {
+  return 1 - amount * smoothstep(LATERAL_EDGES[0], LATERAL_EDGES[1], side > 0 ? u : 1 - u);
 }
 
 function hash(ix: number, iy: number, seed: number): number {
@@ -123,7 +161,8 @@ export function alphaGrid(sil: Silhouette, gw = GRID_W): AlphaGrid {
       const v = (gy + 0.5) / gh;
       const nEdge = fbm(u * NOISE_CYCLES, v * NOISE_CYCLES * 2, mSeed);
       const nDen = fbm(u * NOISE_CYCLES * 0.7 + 9.1, v * NOISE_CYCLES * 1.4 + 2.7, mSeed + 3);
-      alpha[gy * gw + gx] = maskAlpha(blurred[gy * gw + gx]!, nEdge, nDen, sil.erode, sil.densityFloor, v);
+      const nLow = fbm(u * DENSITY_CYCLES_X + 4.3, v * DENSITY_CYCLES * 2 + 1.9, mSeed + 7);
+      alpha[gy * gw + gx] = maskAlpha(blurred[gy * gw + gx]!, nEdge, nDen, sil.erode, sil.densityFloor, v, nLow, sil.fade, { u, amount: sil.lateral, side: sil.lateralSide });
     }
   return { w: gw, h: gh, alpha };
 }

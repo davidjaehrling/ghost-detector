@@ -28,3 +28,29 @@ export function ghostBlurSigma(figureW: number, tier?: Tier): number {
   const smudge = tier === 'trace' || tier === 'quiet';
   return Math.max(1.2, figureW * GHOST_BLUR) * (smudge ? SMUDGE_BLUR : 1);
 }
+
+/** One-sided vertical motion smear (D-017): length in layout px and samples along it. */
+export const SMEAR_PX: readonly [number, number] = [6, 10];
+export const SMEAR_STEPS = 6;
+
+/**
+ * Smear for a seed: `length` px (6 to 10) and `dir` (+1 down, -1 up). The figure is drawn at
+ * SMEAR_STEPS offsets from 0 to `dir * length`, added (Plus) with these weights, which fall off
+ * exponentially and sum to 1: a true one-sided motion blur that never adds alpha.
+ */
+export function smearFor(seed: number): { length: number; dir: 1 | -1; offsets: number[]; weights: number[] } {
+  let h = Math.imul((seed >>> 0) ^ 0x5bd1e995, 0x27d4eb2d);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  const u = ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+  const length = SMEAR_PX[0] + (SMEAR_PX[1] - SMEAR_PX[0]) * u;
+  // Most trails run down (the figure drifting up); one in four runs up.
+  const dir: 1 | -1 = ((h >>> 7) & 3) === 0 ? -1 : 1;
+  const raw = Array.from({ length: SMEAR_STEPS }, (_, k) => Math.exp((-2 * k) / (SMEAR_STEPS - 1)));
+  const sum = raw.reduce((a, b) => a + b, 0);
+  return {
+    length,
+    dir,
+    offsets: raw.map((_, k) => (dir * length * k) / (SMEAR_STEPS - 1)),
+    weights: raw.map((w) => w / sum),
+  };
+}

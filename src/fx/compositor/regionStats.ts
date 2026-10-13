@@ -107,3 +107,40 @@ export function estimateP80(meanLuma: number, p90Luma?: number): number {
   const p90 = p90Luma ?? meanLuma + 30;
   return meanLuma + 0.7 * Math.max(0, p90 - meanLuma);
 }
+
+const blurred = new WeakMap<LumaGrid, LumaGrid>();
+
+/**
+ * The grid the occlusion reads: box-blurred (`radius` cells, two passes, edges clamped) so the
+ * scene cuts the figure in coherent patches that follow its shapes, never in single noisy cells.
+ * Cached per grid. The shader samples the same values (bilinear), and `reference.ts` sets the
+ * threshold from them, so the measured cut matches the drawn one.
+ */
+export function occlusionGrid(grid: LumaGrid, radius = 1): LumaGrid {
+  const hit = blurred.get(grid);
+  if (hit) return hit;
+  const { width: w, height: h } = grid;
+  let a = Float32Array.from(grid.luma);
+  let b = new Float32Array(w * h);
+  const n = 2 * radius + 1;
+  const cl = (v: number, hi: number) => Math.min(hi, Math.max(0, v));
+  for (let p = 0; p < 2; p++) {
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let k = -radius; k <= radius; k++) s += a[y * w + cl(x + k, w - 1)]!;
+        b[y * w + x] = s / n;
+      }
+    [a, b] = [b, a];
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let k = -radius; k <= radius; k++) s += a[cl(y + k, h - 1) * w + x]!;
+        b[y * w + x] = s / n;
+      }
+    [a, b] = [b, a];
+  }
+  const out = { luma: Uint8Array.from(a, (v) => Math.round(v)), width: w, height: h };
+  blurred.set(grid, out);
+  return out;
+}

@@ -6,15 +6,15 @@ import { DEFAULT_FIXTURE, type FixtureName } from '../../ui/fixtureNames';
 import { fixtureUri } from '../../ui/fixtures';
 import { cropOnFigure, panelRegion, panelTop } from '../../ui/result/panel';
 import { color } from '../../ui/tokens';
-import { placeGhost, type Placement, type RegionInput } from '../ghostV0/placement';
+import { placeGhost, type RegionInput } from '../ghostV0/placement';
 import { Composite } from './Composite';
-import { reference } from './reference';
 import { regionFromImage, type RegionStats } from './regionFromImage';
 
 // L2 harness for compositor v1 (/composite-probe?static=1&fixture=<name>&demo=<tier>), until the
 // result screen switches over. It lays the photo out the way the result screen does at 390 px
 // (318 x 303 panel, 3:4 photo cropped on the figure) and places the ghost with the same
-// `placeGhost` call. Extra flags: `ghost=0` (photo and grain only), `variant=0..5|png`.
+// `placeGhost` call. Extra flags: `ghost=0` (photo and grain only), `variant=0..5|png`, `pop=1`
+// (the jump-scare pop frame).
 
 /** Result-screen photo panel at 390 x 844 (ACTIVE layout). */
 export const PROBE_PANEL = { w: 318, h: 303 } as const;
@@ -29,24 +29,7 @@ export function probeSeed(fixture: string, demo: string): number {
   return h >>> 0;
 }
 
-export interface ProbeInfo {
-  placement: Placement;
-  panel: { w: number; h: number };
-  meanLuma: number;
-  p80Luma: number;
-  /** Clamp reference and occlusion threshold the compositor used (`reference.ts`). */
-  clampRef: number;
-  occ: number;
-  variant: number | 'png';
-  seed: number;
-}
-
-declare global {
-  // Read by scripts/measure-ghost.mjs.
-  var __composite: ProbeInfo | undefined;
-}
-
-export function CompositeProbe({ fixture, demo, variant }: { fixture: FixtureName | null; demo?: string; variant?: string }) {
+export function CompositeProbe({ fixture, demo, variant, pop }: { fixture: FixtureName | null; demo?: string; variant?: string; pop?: string }) {
   const name = fixture ?? DEFAULT_FIXTURE;
   const tier = DEMO_TIERS[demo ?? 'active'] ?? 'active';
   const seed = probeSeed(name, tier);
@@ -77,28 +60,7 @@ export function CompositeProbe({ fixture, demo, variant }: { fixture: FixtureNam
   }, [stats, H, W, imgH, seed, tier]);
 
   const meanLuma = stats.r?.meanLuma ?? DEFAULT_MEAN;
-  useEffect(() => {
-    if (!layout) return;
-    const ref = reference({
-      meanLuma,
-      p80Luma: stats.r?.p80Luma,
-      p90Luma: stats.r?.p90Luma,
-      region: layout.region,
-      grid: stats.r?.grid,
-      placement: layout.placement,
-      photoRect: { x: 0, y: layout.top, width: W, height: imgH },
-    });
-    globalThis.__composite = {
-      placement: layout.placement,
-      clampRef: ref.mean,
-      occ: ref.occ,
-      panel: { w: W, h: H },
-      meanLuma,
-      p80Luma: stats.r?.p80Luma ?? meanLuma,
-      variant: v ?? seed % 6,
-      seed,
-    };
-  }, [layout, W, H, imgH, meanLuma, stats, v, seed]);
+  // The placement and clamp reference are published on window.__composite by <Composite> itself.
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: color.n3 }}>
@@ -118,6 +80,7 @@ export function CompositeProbe({ fixture, demo, variant }: { fixture: FixtureNam
             tier={tier}
             seed={seed}
             variant={v}
+            pop={pop === '1' ? 1 : 0}
           />
         ) : null}
       </View>

@@ -6,9 +6,11 @@
 //
 // --route probe  (default) /composite-probe?static=1&fixture=<f>&demo=<d>, compositor v1. The probe
 //                publishes the placement on window.__composite, so the figure box is exact.
-// --route result /result/demo?static=1&demo=<d>&fixture=<f>&v=1, the result screen. `v=1` asks it
-//                for compositor v1 once Builder A wires the flag (until then it shows v0). The
-//                figure box is the bounding box of pixels lifted by 2 or more.
+// --route result /result/demo?static=1&demo=<d>&fixture=<f>&v=1, the result screen. Its <Composite>
+//                publishes the placement and clamp reference on window.__composite under
+//                ?static=1 too, so the box and the clamp are checked the same way. Without it (v0
+//                fallback) the figure box is the bounding box of pixels lifted by 2 or more and the
+//                clamp is not checked.
 // The "without" shot adds `&ghost=0`. Both shots carry the same grain, so the difference is the
 // ghost alone. Differences are computed in the browser from the two screenshots (never by reading
 // pixels back from the Skia canvas).
@@ -108,9 +110,9 @@ async function diff(withB64, withoutB64, info) {
       const lift = new Float32Array(W * H);
       let darkened = 0;
       let overLimit = 0;
-      // Clamp check: the ghost may lift a pixel to clampRef + 24 at most. Grain (up to 0.04 * 255)
+      // Clamp check: the ghost may lift a pixel to clampRef + clampLift (published, 30) at most. Grain (up to 0.04 * 255)
       // sits on both shots, so the bound carries that slack plus 1 for rounding.
-      const limit = info ? info.clampRef + 24 : Infinity;
+      const limit = info ? info.clampRef + (info.clampLift ?? 24) : Infinity;
       let maxLift = 0;
       let lifted = 0;
       let bx0 = W;
@@ -138,8 +140,8 @@ async function diff(withB64, withoutB64, info) {
       if (info) {
         const pl = info.placement;
         box = { x: pl.x, y: pl.y, w: pl.w, h: pl.h };
-        const xs = [0, ...pl.offsetCopies.map((c) => c.dx)];
-        const ys = [0, ...pl.offsetCopies.map((c) => c.dy)];
+        const xs = [0, ...pl.offsetCopies.map((c) => c.dx), pl.echo?.dx ?? 0];
+        const ys = [0, ...pl.offsetCopies.map((c) => c.dy), pl.echo?.dy ?? 0];
         const ux0 = Math.max(0, pl.x + Math.min(...xs));
         const uy0 = Math.max(0, pl.y + Math.min(...ys));
         const ux1 = Math.min(W, pl.x + pl.w + Math.max(...xs));
@@ -189,12 +191,12 @@ try {
     const [testId, ready] = route === 'result' ? ['result-photo', 'result-photo'] : ['composite-probe', 'composite'];
     const a = await shot(url, testId, ready);
     const b = await shot(`${url}&ghost=0`, testId, ready);
-    const info = route === 'result' ? null : a.info;
+    const info = a.info;
     const m = await diff(a.png, b.png, info);
     const sideIn = Math.min(m.cx, 1 - m.cx);
     const ok =
       m.meanLift >= 8 && m.meanLift <= 20 && m.darkened === 0 && m.overLimit === 0 && m.union <= 0.15 && sideIn >= 0.15 - 1e-3 && sideIn <= 0.4 + 1e-3 && m.cy >= 0.1 && m.cy <= 0.9;
-    rows.push({ fixture: fx, variant: info?.variant ?? '-', opacity: info?.placement.opacity, meanLuma: info?.meanLuma, clampRef: info?.clampRef, ...m, ok });
+    rows.push({ fixture: fx, variant: info?.variant ?? '-', opacity: info?.placement.opacity, meanLuma: info?.meanLuma, clampRef: info?.clampRef, clampChecked: !!info, ...m, ok: ok && !!info });
   }
 } finally {
   await browser.close();
@@ -208,9 +210,10 @@ if (flag('json')) {
   console.log(`\nroute=${route} demo=${demo} viewport 390x844 @1x\n`);
   console.log('| fixture | variant | opacity | region mean | clamp ref | box bg | mean lift in figure box | max lift | darkened px | over clamp px | lifted px (>= 2) | union box | centre (x, y) | target |');
   console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+  // `over clamp px` reads "n/a" (and the row fails) when the page published no placement.
   for (const r of rows)
     console.log(
-      `| ${r.fixture} | ${r.variant} | ${f(r.opacity, 3)} | ${f(r.meanLuma)} | ${f(r.clampRef)} | ${f(r.boxBg)} | ${f(r.meanLift)} | ${f(r.maxLift, 0)} | ${r.darkened} | ${r.overLimit} | ${f(r.liftedShare * 100)}% | ${f(r.union * 100)}% | ${f(r.cx, 2)}, ${f(r.cy, 2)} | ${r.ok ? 'PASS' : 'FAIL'} |`,
+      `| ${r.fixture} | ${r.variant} | ${f(r.opacity, 3)} | ${f(r.meanLuma)} | ${f(r.clampRef)} | ${f(r.boxBg)} | ${f(r.meanLift)} | ${f(r.maxLift, 0)} | ${r.darkened} | ${r.clampChecked ? r.overLimit : 'n/a'} | ${f(r.liftedShare * 100)}% | ${f(r.union * 100)}% | ${f(r.cx, 2)}, ${f(r.cy, 2)} | ${r.ok ? 'PASS' : 'FAIL'} |`,
     );
 }
 process.exitCode = rows.every((r) => r.ok) ? 0 : 1;

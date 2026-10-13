@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { placeGhost } from '../../ghostV0/placement';
 import { regionFromRgba } from '../../ghostV0/regionFromPixels';
-import { motionCopies, ghostBlurSigma, MAX_COPIES, MIN_COPIES } from '../motion';
-import { reference, unionBox } from '../reference';
-import { estimateP80, halvingSteps, lumaUnder, REGION_GRID, statsFromRgba } from '../regionStats';
+import { mulberry32 } from '../../../engine';
+import { OCC_GRID_BLUR, OCC_RAMP } from '../blend';
+import { motionCopies, ghostBlurSigma, MAX_COPIES, MIN_COPIES, SMEAR_PX, smearFor } from '../motion';
+import { cellsUnderFigure, cutShare, OCC_CUT_MIN, OCC_RAMP_MIN, reference, unionBox } from '../reference';
+import { estimateP80, halvingSteps, lumaUnder, occlusionGrid, REGION_GRID, statsFromRgba } from '../regionStats';
 
 const W = 192;
 const H = 256;
@@ -85,12 +87,35 @@ describe('reference', () => {
     const u = unionBox(placement);
     const local = lumaUnder(stats.grid, { x: u.x / 318, y: u.y / 424, w: u.w / 318, h: u.h / 424 })!;
     expect(r.mean).toBeCloseTo(Math.max(stats.meanLuma, local.mean), 9);
-    expect(r.occ).toBeGreaterThanOrEqual(stats.p80Luma);
+    // Never above the area's own 80th percentile; lowered only as far as the cut rule needs.
+    expect(r.occ).toBeLessThanOrEqual(Math.max(stats.p80Luma, local.p80) + 1e-9);
+    expect(cutShare(cellsUnderFigure(occlusionGrid(stats.grid, OCC_GRID_BLUR), placement, photoRect), r.occ, r.ramp)).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+  });
+
+  it('cuts at least 10% of the figure on a dark, nearly flat scene (D-017)', () => {
+    const rnd = mulberry32(5);
+    for (const base of [2, 8, 20]) {
+      const width = 72;
+      const height = 96;
+      const luma = new Uint8Array(width * height);
+      for (let i = 0; i < luma.length; i++) luma[i] = base + Math.floor(rnd() * 5);
+      const grid = { luma, width, height };
+      for (let seed = 1; seed < 40; seed++) {
+        const p = placeGhost(null, { w: 318, h: 424 }, seed, { tier: 'active' });
+        const r = reference({ meanLuma: base + 2, p80Luma: base + 4, region: null, grid, placement: p, photoRect });
+        const cells = cellsUnderFigure(occlusionGrid(grid, OCC_GRID_BLUR), p, photoRect);
+        const cut = cutShare(cells, r.occ, r.ramp);
+        expect(cut, `base ${base} seed ${seed}`).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+        // A patchy cut, not an even dimming: some cells stay fully visible.
+        expect(cells.some((v) => v <= r.occ)).toBe(true);
+        expect(r.ramp).toBeGreaterThanOrEqual(OCC_RAMP_MIN);
+      }
+    }
   });
 
   it('falls back to the region statistics without a grid', () => {
     const r = reference({ meanLuma: 12, p80Luma: 20, p90Luma: 30, region: null, placement, photoRect });
-    expect(r).toEqual({ mean: 12, occ: 30, source: 'region' });
+    expect(r).toEqual({ mean: 12, occ: 30, ramp: OCC_RAMP, source: 'region' });
     expect(reference({ meanLuma: 12, p80Luma: 20, placement, photoRect }).occ).toBe(20);
   });
 
@@ -118,6 +143,19 @@ describe('motion copies and blur', () => {
         const reach = (cs: { dx: number; dy: number }[]) => Math.max(...cs.map((c) => Math.hypot(c.dx, c.dy)));
         expect(reach(m)).toBeCloseTo(reach(p.offsetCopies), 9);
       }
+    }
+  });
+
+  it('smears one way, 6 to 10 px vertically, with weights that sum to 1', () => {
+    for (let seed = 0; seed < 500; seed++) {
+      const m = smearFor(seed);
+      expect(m.length).toBeGreaterThanOrEqual(SMEAR_PX[0]);
+      expect(m.length).toBeLessThanOrEqual(SMEAR_PX[1]);
+      expect(Math.abs(m.offsets[0]!)).toBe(0);
+      expect(Math.abs(m.offsets[m.offsets.length - 1]!)).toBeCloseTo(m.length, 9);
+      expect(m.offsets.every((o) => o * m.dir >= 0)).toBe(true);
+      expect(m.weights.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
+      for (let k = 1; k < m.weights.length; k++) expect(m.weights[k]!).toBeLessThan(m.weights[k - 1]!);
     }
   });
 

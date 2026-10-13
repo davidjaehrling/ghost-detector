@@ -45,6 +45,11 @@ export interface Placement {
   flipX: boolean;
   /** 3 to 5 copies (2 to 4 on CRITICAL) along one direction: the v0 stand-in for motion blur. */
   offsetCopies: OffsetCopy[];
+  /**
+   * CRITICAL only (D-017): a second faint copy of the whole figure 6 to 10 px off it, a double
+   * exposure. Its alpha comes out of the same `COPY_ALPHA_SUM` budget as the motion copies.
+   */
+  echo?: OffsetCopy;
 }
 
 export interface PlaceOptions {
@@ -59,6 +64,17 @@ export interface PlaceOptions {
   /** Per-tier opacity ceiling, merged over `TIER_OPACITY_CAP`. Only read when `tier` is given. */
   tierCap?: Partial<Record<Tier, number>>;
 }
+
+/**
+ * Extent by tier (D-017): the share of the frame the figure and its copies (and the CRITICAL echo)
+ * cover, so the tiers escalate in size. The panel asked for about 11, 14 and 17%; plan section 6
+ * caps the ghost at 15% of the frame, so STRONG and CRITICAL sit at 13 and 14.5% (logged for a
+ * ruling). QUIET and TRACE keep the region-based size (the result screen shrinks them to a smudge).
+ */
+export const TIER_EXTENT: Readonly<Partial<Record<Tier, number>>> = { active: 0.11, strong: 0.13, critical: 0.145 };
+/** CRITICAL echo: offset in px and its share of the copy budget. */
+export const ECHO_PX: readonly [number, number] = [6, 10];
+export const ECHO_ALPHA = 0.15;
 
 /** Default opacity ceilings by tier (D-009). QUIET only ever shows a smudge, so it shares TRACE's. */
 export const TIER_OPACITY_CAP: Readonly<Record<Tier, number>> = {
@@ -75,8 +91,10 @@ export const OPACITY_MAX = 0.25;
  * Band used when the caller passes no `opacityRange` (no belief answer yet). Its floor sits above
  * OPACITY_MIN so the figure still reads at 1x: on the cellar fixture a matte at 0.09 lifts the
  * figure box by about 7 luma, under the 8 to 30 target (D-007). Belief bands go lower on purpose.
+ * Raised from 0.13 to 0.17 in round 2: the interior density patches (D-017) take part of the
+ * light back, and the result screen's ACTIVE ladder sits in the lower half of this band.
  */
-export const DEFAULT_OPACITY_RANGE: readonly [number, number] = [0.13, 0.25];
+export const DEFAULT_OPACITY_RANGE: readonly [number, number] = [0.17, 0.25];
 /** Hard cap from plan section 6, measured on the union of the figure and its copies. */
 export const MAX_AREA_FRACTION = 0.15;
 /**
@@ -158,13 +176,38 @@ export function placeGhost(
   let h = region ? region.h * H * lerp(0.75, 1.05, rnd()) : H * lerp(0.3, 0.4, rnd());
   h = Math.max(h, H * 0.12);
 
-  // Shrink until the union box (figure plus copies) fits the area cap with a little margin.
+  // CRITICAL echo: its own random stream, so the other tiers draw exactly as before.
+  const er = mulberry32((seed ^ 0x3c6ef372) >>> 0);
+  const echoBase =
+    opts.tier === 'critical'
+      ? (() => {
+          const d = lerp(ECHO_PX[0], ECHO_PX[1], er());
+          // Mostly sideways, never along the drift (that is what the copies already do).
+          const a = (er() * 2 - 1) * (25 * Math.PI) / 180 + (er() < 0.5 ? Math.PI : 0);
+          return { dx: Math.cos(a) * d, dy: Math.sin(a) * d };
+        })()
+      : null;
+
+  // Union box of the figure, its copies and the echo for a figure height.
   const unionOf = (fh: number) => {
     const step = fh * stepFrac;
-    const ex = Math.abs(Math.cos(angle)) * step * nCopies;
-    const ey = Math.abs(Math.sin(angle)) * step * nCopies;
-    return { uw: fh * MATTE_ASPECT + ex, uh: fh + ey };
+    const cx = Math.cos(angle) * step * nCopies;
+    const cy = Math.sin(angle) * step * nCopies;
+    const xs = [0, cx, echoBase?.dx ?? 0];
+    const ys = [0, cy, echoBase?.dy ?? 0];
+    return { uw: fh * MATTE_ASPECT + Math.max(...xs) - Math.min(...xs), uh: fh + Math.max(...ys) - Math.min(...ys) };
   };
+  // Tier extent: size the union to the tier's share of the frame (the cap below still applies).
+  const extent = opts.tier ? TIER_EXTENT[opts.tier] : undefined;
+  if (extent) {
+    h = Math.sqrt((extent * W * H) / MATTE_ASPECT);
+    for (let i = 0; i < 8; i++) {
+      const { uw, uh } = unionOf(h);
+      h *= Math.sqrt((extent * W * H) / (uw * uh));
+    }
+  }
+
+  // Shrink until the union box fits the area cap with a little margin.
   const areaCap = MAX_AREA_FRACTION * 0.97 * W * H;
   // Width also kept under 75% of the frame so a centre in the margin band always fits.
   for (let i = 0; i < 60; i++) {
@@ -177,18 +220,20 @@ export function placeGhost(
   const step = h * stepFrac;
   const offsetCopies: OffsetCopy[] = [];
   let weightSum = 0;
+  const copyBudget = COPY_ALPHA_SUM - (echoBase ? ECHO_ALPHA : 0);
   for (let i = 0; i < nCopies; i++) weightSum += Math.pow(COPY_FALLOFF, i);
   for (let i = 1; i <= nCopies; i++) {
     offsetCopies.push({
       dx: Math.cos(angle) * step * i,
       dy: Math.sin(angle) * step * i,
-      alpha: (COPY_ALPHA_SUM * Math.pow(COPY_FALLOFF, i - 1)) / weightSum,
+      alpha: (copyBudget * Math.pow(COPY_FALLOFF, i - 1)) / weightSum,
     });
   }
+  const echo: OffsetCopy | undefined = echoBase ? { ...echoBase, alpha: ECHO_ALPHA } : undefined;
 
-  // Union box extents of the copies relative to the main figure.
-  const dxs = offsetCopies.map((c) => c.dx);
-  const dys = offsetCopies.map((c) => c.dy);
+  // Union box extents of the copies (and the echo) relative to the main figure.
+  const dxs = [...offsetCopies.map((c) => c.dx), echo?.dx ?? 0];
+  const dys = [...offsetCopies.map((c) => c.dy), echo?.dy ?? 0];
   const minDx = Math.min(0, ...dxs);
   const maxDx = Math.max(0, ...dxs);
   const minDy = Math.min(0, ...dys);
@@ -257,16 +302,17 @@ export function placeGhost(
   const x = cx - w / 2;
   const y = cy - h / 2;
 
-  return { x, y, w, h, matte, opacity, flipX, offsetCopies };
+  return echo ? { x, y, w, h, matte, opacity, flipX, offsetCopies, echo } : { x, y, w, h, matte, opacity, flipX, offsetCopies };
 }
 
 /**
- * Layer alpha where the figure and all its copies overlap: 1 - (1 - o) * prod(1 - o * a_i).
+ * Layer alpha where the figure, all its copies and the echo overlap: 1 - (1 - o) * prod(1 - o * a_i).
  * Bounded by `opacity * (1 + COPY_ALPHA_SUM)`; see `COPY_ALPHA_SUM`.
  */
-export function stackedAlpha(placement: Pick<Placement, 'opacity' | 'offsetCopies'>): number {
+export function stackedAlpha(placement: Pick<Placement, 'opacity' | 'offsetCopies' | 'echo'>): number {
   let keep = 1 - placement.opacity;
   for (const c of placement.offsetCopies) keep *= 1 - placement.opacity * c.alpha;
+  if (placement.echo) keep *= 1 - placement.opacity * placement.echo.alpha;
   return 1 - keep;
 }
 

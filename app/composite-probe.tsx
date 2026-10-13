@@ -11,7 +11,7 @@ const subscribeNever = () => () => {};
 // Nothing links here. Client only: harness params do not exist in the static render.
 export default function CompositeProbeRoute() {
   const mounted = useSyncExternalStore(subscribeNever, () => true, () => false);
-  const params = useLocalSearchParams<{ demo?: string; variant?: string }>();
+  const params = useLocalSearchParams<{ demo?: string; variant?: string; pop?: string }>();
   if (!mounted) return <View style={{ flex: 1, backgroundColor: color.n3 }} />;
-  return <CompositeProbe fixture={readHarness().fixture} demo={params.demo} variant={params.variant} />;
+  return <CompositeProbe fixture={readHarness().fixture} demo={params.demo} variant={params.variant} pop={params.pop} />;
 }

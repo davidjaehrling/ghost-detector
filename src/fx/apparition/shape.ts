@@ -21,6 +21,24 @@ export interface Part {
   bounds: readonly [number, number, number, number];
 }
 
+/** The lower-body fade: full density above `from`, easing to `floor` at `to` (v down the box). */
+export interface Fade {
+  from: number;
+  to: number;
+  floor: number;
+}
+
+/** Default: the drape keeps 40% of its density at the very bottom (no feet). */
+export const HEM: Fade = { from: 0.62, to: 1, floor: 0.4 };
+/** The trail variant's drape thins out further down, so its trailing hem never reads as a tail. */
+export const TRAIL_HEM: Fade = { from: 0.6, to: 1, floor: 0.2 };
+/**
+ * The lean variant's legs dissolve (D-017): a feathered fade to nothing between 55 and 65% of
+ * the body's height (seeded inside the band), so the drape never sweeps back into a tail.
+ */
+export const LEAN_DISSOLVE: readonly [number, number] = [0.55, 0.65];
+const LEAN_FEATHER = 0.16;
+
 export interface Silhouette {
   variant: number;
   seed: number;
@@ -35,6 +53,14 @@ export interface Silhouette {
   erode: number;
   /** Lowest density the noise mask leaves inside the body. */
   densityFloor: number;
+  /** Lower-body fade in box coordinates. */
+  fade: Fade;
+  /**
+   * One side of the body thinner than the other: density falls by up to `lateral` toward the side
+   * `lateralSide` (+1 right, -1 left), so the figure never reads as an even, mirrored wash.
+   */
+  lateral: number;
+  lateralSide: 1 | -1;
 }
 
 /** Width / height of the apparition box (same as the v0 mattes, so `placeGhost` boxes fit). */
@@ -48,7 +74,7 @@ export const VARIANT_COUNT = 6;
 export const FIT_W = 0.8;
 export const FIT_H = 0.88;
 /** Most the width may be stretched relative to the height when fitting the box. */
-export const MAX_STRETCH = 1.25;
+export const MAX_STRETCH = 1.45;
 export const VARIANT_NAMES = ['lean', 'hunch', 'hood', 'turned', 'behind', 'trail'] as const;
 /** Variants that carry a seeded ragged occluder. */
 export const OCCLUDED_VARIANTS: readonly number[] = [2, 4];
@@ -115,8 +141,11 @@ function wind(poly: P[]): P[] {
 }
 
 interface Body {
+  side: 1 | -1;
   parts: { poly: P[]; weight: number }[];
   cut: P[] | null;
+  /** Lean only: the body dissolves between these heights (body y, before the fit). */
+  dissolve?: [number, number];
 }
 
 /** Torso and drape: one blob from the neck to a ragged hem. */
@@ -180,28 +209,34 @@ function buildBody(variant: number, rnd: () => number): Body {
   let cut: P[] | null = null;
   let lean = lerp(0.13, 0.17, rnd()) * side;
   let bend = 0;
+  let dissolve: [number, number] | undefined;
 
   switch (variant) {
     case 0: {
       // lean: strong lean, uneven shoulders, drape flaring to one side.
-      lean = lerp(0.15, 0.19, rnd()) * side;
-      parts.push({ poly: torso(rnd, base), weight: 1 });
-      parts.push({ poly: head((rnd() - 0.5) * 0.03, 0.11), weight: 1 });
+      lean = lerp(0.2, 0.25, rnd()) * side;
+      parts.push({ poly: torso(rnd, { ...base, narrow: lerp(0.8, 0.88, rnd()), flareL: side < 0 ? base.flareL + 0.03 : 0, flareR: side > 0 ? base.flareR + 0.03 : 0 }), weight: 1 });
+      parts.push({ poly: head(side * lerp(0.01, 0.03, rnd()), 0.11), weight: 1 });
+      // Head top about 0.04, hem at hemY: the fade centre sits 55 to 65% of the way down.
+      const top = 0.04;
+      const mid = top + (base.hemY - top) * lerp(LEAN_DISSOLVE[0], LEAN_DISSOLVE[1], rnd());
+      const half = ((base.hemY - top) * LEAN_FEATHER) / 2;
+      dissolve = [mid - half, mid + half];
       break;
     }
     case 1: {
       // hunch: head low and forward, one shoulder raised into a hump.
-      const hx = side * lerp(0.035, 0.055, rnd());
+      const hx = side * lerp(0.05, 0.07, rnd());
       parts.push({ poly: torso(rnd, { ...base, neckY: 0.22, shoulderY: 0.29, hemY: base.hemY - 0.02 }), weight: 1 });
       parts.push({ poly: head(hx, 0.19, 0.95), weight: 1 });
-      parts.push({ poly: ellipse(cx + side * 0.06, 0.28, 0.055, 0.04, side * 0.5, 0.12, rnd), weight: 1 });
-      lean = lerp(0.14, 0.18, rnd()) * side;
+      parts.push({ poly: ellipse(cx + side * 0.075, 0.28, 0.055, 0.04, side * 0.5, 0.12, rnd), weight: 1 });
+      lean = lerp(0.18, 0.22, rnd()) * side;
       break;
     }
     case 2: {
       // hood: head merged into a hood that runs into the shoulders; ragged cut across the lower body.
       const hx = (rnd() - 0.5) * 0.04;
-      parts.push({ poly: torso(rnd, { ...base, narrow: 0.9, flareL: base.flareL + 0.03, flareR: base.flareR + 0.02 }), weight: 1 });
+      parts.push({ poly: torso(rnd, { ...base, narrow: 0.9, flareL: base.flareL * 0.5, flareR: base.flareR * 0.5 }), weight: 1 });
       parts.push({
         poly: blob([
           [cx + hx - 0.02, 0.04],
@@ -262,9 +297,11 @@ function buildBody(variant: number, rnd: () => number): Body {
   // Lean (the top moves sideways, the hem stays) plus a soft bend through the middle.
   const warp = ([x, y]: P): P => [x + lean * (0.95 - y) + bend * Math.sin(Math.PI * Math.min(1, Math.max(0, y))), y];
   return {
+    side: side < 0 ? -1 : 1,
     parts: parts.map((p) => ({ poly: p.poly.map(warp), weight: p.weight })),
     // The hood's diagonal cut moves with the lean so it always lands on the drape.
     cut: cut && variant === 2 ? cut.map(warp) : cut,
+    dissolve,
   };
 }
 
@@ -281,9 +318,12 @@ export function buildSilhouette(variant: number, seed: number): Silhouette {
   let y1 = -Infinity;
   // Extents of what stays visible: points under the cut do not count, so an occluded figure
   // still fills its box.
+  // A dissolving body counts only down to the end of its fade, so what stays visible fills the box.
+  const yMax = body.dissolve ? body.dissolve[1] : Infinity;
   for (const p of body.parts)
     for (const [x, y] of p.poly) {
       if (body.cut && insidePoly(body.cut, x, y)) continue;
+      if (y > yMax) continue;
       x0 = Math.min(x0, x);
       x1 = Math.max(x1, x);
       y0 = Math.min(y0, y);
@@ -310,6 +350,10 @@ export function buildSilhouette(variant: number, seed: number): Silhouette {
     displace: lerp(0.09, 0.12, rnd()),
     erode: lerp(0.25, 0.35, rnd()),
     densityFloor: lerp(0.88, 0.95, rnd()),
+    fade: body.dissolve ? { from: body.dissolve[0] * sy + oy, to: body.dissolve[1] * sy + oy, floor: 0 } : v === 5 ? TRAIL_HEM : HEM,
+    lateral: lerp(0.2, 0.35, rnd()),
+    // Thinner on the side the head leans away from.
+    lateralSide: body.side < 0 ? 1 : -1,
   };
 }
 
