@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { captureSeed, photoHash } from '../../capture';
 import { parsePhase, resolveHarness } from '../../harness';
-import { createFluxWalk, fluxAngle, formatFlux, liveLeds, liveThermal } from '../flux';
+import { createFluxWalk, fluxAngle, formatFlux, formatGeo, geoDeviation, liveLeds, liveThermal } from '../flux';
 
 describe('flux walk', () => {
   it('is deterministic per seed and bounded', () => {
@@ -41,6 +41,20 @@ describe('flux walk', () => {
     expect(liveLeds(700)).toBe(4);
     expect(liveLeds(2000)).toBe(4);
     for (let mg = 10; mg <= 2000; mg += 10) expect(liveLeds(mg)).toBeLessThanOrEqual(4);
+  });
+
+  it('the GEO line and the ladder move together', () => {
+    expect(formatGeo(444)).toBe('GEO +11%');
+    expect(formatGeo(400)).toBe('GEO +0%');
+    expect(formatGeo(240)).toBe('GEO -40%');
+    for (let mg = 10; mg <= 2000; mg += 5) {
+      const d = Math.abs(geoDeviation(mg));
+      const expected = 1 + [15, 40, 75].filter((t) => d >= t).length;
+      expect(liveLeds(mg)).toBe(expected);
+    }
+    // The ladder steps exactly where the shown percentage crosses 15, 40 and 75.
+    expect(liveLeds(459)).toBe(1);
+    expect(liveLeds(460)).toBe(2);
   });
 
   it('thermal stays in range and dips with the field', () => {

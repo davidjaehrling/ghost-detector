@@ -49,9 +49,21 @@ export function formatFlux(mg: number): string {
 export const GEO_CENTRE = 400;
 export const LED_STEPS = [0.15, 0.4, 0.75] as const;
 
+// Deviation from the GEO centre in whole percent, as the HUD shows it. The ladder reads the
+// same rounded number, so the line and the LEDs always agree.
+export function geoDeviation(mg: number): number {
+  // Truncated, so a step shows only once the whole percentage has been reached.
+  return Math.trunc(Math.round(((mg - GEO_CENTRE) / GEO_CENTRE) * 1e6) / 1e4);
+}
+
+export function formatGeo(mg: number): string {
+  const d = geoDeviation(mg);
+  return `GEO ${d < 0 ? '-' : '+'}${Math.abs(d)}%`;
+}
+
 export function liveLeds(mg: number): number {
-  const dev = Math.abs(mg - GEO_CENTRE) / GEO_CENTRE;
-  return 1 + LED_STEPS.filter((s) => dev >= s).length;
+  const dev = Math.abs(geoDeviation(mg)) / 100;
+  return 1 + LED_STEPS.filter((s) => dev >= s - 1e-9).length;
 }
 
 // Cold-spot style gradient shown next to the flux: it dips as the field leaves

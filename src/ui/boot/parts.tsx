@@ -314,6 +314,8 @@ export type KeySlot = {
   inert?: boolean;
   /** The one offered action: p5 backlit legend and a 1 px p3 keyline. */
   primary?: boolean;
+  /** Backlit legend: p5 text, no keyline. */
+  backlit?: boolean;
 };
 
 export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
@@ -346,7 +348,7 @@ export function DummyCap() {
 
 // Rubber key: darker n2 face, 1 px n4 top highlight. Legend is lbM (Bible
 // section 5 sets key legends at 13 px). Long legends wrap on the space.
-export function Key({ testID, label, legend, onPress, inert = false, primary = false }: KeySlot) {
+export function Key({ testID, label, legend, onPress, inert = false, primary = false, backlit = false }: KeySlot) {
   return (
     <Pressable
       testID={testID}
@@ -356,7 +358,7 @@ export function Key({ testID, label, legend, onPress, inert = false, primary = f
       onPress={inert ? undefined : onPress}
       style={({ pressed }) => [st.key, primary && st.keyPrimary, pressed && !inert && st.keyDown]}
     >
-      <Text style={[st.keyLegend, inert && st.keyLegendInert, primary && st.keyLegendPrimary]} numberOfLines={2}>
+      <Text style={[st.keyLegend, inert && st.keyLegendInert, (primary || backlit) && st.keyLegendPrimary]} numberOfLines={2}>
         {legend}
       </Text>
     </Pressable>

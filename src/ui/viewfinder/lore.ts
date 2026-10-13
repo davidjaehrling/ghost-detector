@@ -21,3 +21,26 @@ export const TAG_LABEL: Record<LocationTag, string> = {
 
 // Harness photos map to the tag they were shot for.
 export const FIXTURE_TAG = { cellar: 'cellar', attic: 'attic', bright: 'hallway', black: 'cellar', outdoors: 'outdoors' } as const satisfies Record<string, LocationTag>;
+
+// Under this window width the long legends switch to their short forms so the tag
+// row keeps 12 px between its 44 dp hit areas.
+export const TAG_SHORT_BELOW = 380;
+const TAG_SHORT: Partial<Record<LocationTag, string>> = { hallway: 'HALL', outdoors: 'OUTDR' };
+
+export function tagLegend(tag: LocationTag, windowW: number): string {
+  return windowW < TAG_SHORT_BELOW ? (TAG_SHORT[tag] ?? TAG_LABEL[tag]) : TAG_LABEL[tag];
+}
+
+export const TAG_CH = 7; // B612 Mono 10 px: 6 px advance plus 1 px tracking
+export const TAG_HIT = 44;
+export const TAG_ROW_PAD = 4;
+export const TAG_GAP_MIN = 12;
+// The glass is the window minus the housing gutters (2 x 14), the LED plate (28), its margin (14) and the glass border.
+export const glassWidth = (windowW: number) => windowW - 72;
+
+// Smallest gap between neighbouring hit areas when the five tags are spread across the row.
+export function tagRowGap(tags: readonly LocationTag[], windowW: number): number {
+  const widths = tags.map((t) => Math.max(TAG_HIT, tagLegend(t, windowW).length * TAG_CH));
+  const free = glassWidth(windowW) - TAG_ROW_PAD * 2 - widths.reduce((a, b) => a + b, 0);
+  return free / (tags.length - 1);
+}

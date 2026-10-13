@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { color, needle, type } from '../tokens';
+import { DIAL_H, DIAL_R, DIAL_W, GEO_LABEL, PIVOT, labelBoxes } from './dialLabels';
 import { ARC_DEG, GEO_HIGH, GEO_LOW, fluxAngle } from './flux';
 
 // Small EMF dial for the viewfinder HUD (Bible section 3): 100 degree log arc,
@@ -8,21 +9,13 @@ import { ARC_DEG, GEO_HIGH, GEO_LOW, fluxAngle } from './flux';
 // GEO band on the inner edge, thin needle on the Bible's live spring.
 // `frozen` (harness) sets the angle without animating.
 
-export const DIAL_W = 150;
-export const DIAL_H = 96;
-const R = 60;
-const PX = DIAL_W / 2;
-const PY = 88;
+export { DIAL_H, DIAL_W };
+const R = DIAL_R;
+const PX = PIVOT.x;
+const PY = PIVOT.y;
 
 const MAJORS = [10, 20, 50, 100, 200, 500, 1000, 2000];
-// Labels sit outside the arc; the two top decades are nudged apart and 2000
-// is inset so it stays inside the plate.
-const LABELS: { mg: number; dx: number; dy: number }[] = [
-  { mg: 10, dx: 0, dy: 0 },
-  { mg: 100, dx: 0, dy: 0 },
-  { mg: 1000, dx: -6, dy: -1 },
-  { mg: 2000, dx: 0, dy: 9 },
-];
+const LABEL_BOXES = labelBoxes();
 const TICKS: number[] = [];
 for (const dec of [10, 100]) for (let k = 1; k <= 9; k++) TICKS.push(dec * k);
 TICKS.push(1000, 2000);
@@ -66,7 +59,6 @@ export function EmfDial({
   const geo0 = fluxAngle(GEO_LOW);
   const geo1 = fluxAngle(GEO_HIGH);
   const geoSegs = Math.ceil((geo1 - geo0) / 3.5);
-  const geoMid = at((geo0 + geo1) / 2, R - 24);
 
   return (
     <View style={s.dial} pointerEvents="none">
@@ -86,15 +78,12 @@ export function EmfDial({
           </View>
         );
       })}
-      {LABELS.map(({ mg, dx, dy }) => {
-        const p = at(fluxAngle(mg), R + 11);
-        return (
-          <Text key={mg} style={[s.label, { left: p.x - 20 + dx, top: p.y - 9 + dy }]}>
-            {mg}
-          </Text>
-        );
-      })}
-      <Text style={[s.geo, { left: geoMid.x - 20, top: geoMid.y - 6 }]}>GEO</Text>
+      {LABEL_BOXES.map((b) => (
+        <Text key={b.mg} style={[s.label, { left: b.left, top: b.top, width: b.width }]}>
+          {b.text}
+        </Text>
+      ))}
+      <Text style={[s.geo, { left: GEO_LABEL.left, top: GEO_LABEL.top, width: GEO_LABEL.width }]}>GEO</Text>
       <Animated.View style={[s.pivot, { left: PX + 2, top: PY + 2, transform: [{ rotate }] }]}>
         <View style={s.needleShadow} />
       </Animated.View>
@@ -112,8 +101,8 @@ const s = StyleSheet.create({
   major: { position: 'absolute', left: -0.75, top: -R, width: 1.5, height: 9, backgroundColor: color.p3 },
   minor: { position: 'absolute', left: -0.5, top: -R, width: 1, height: 5, backgroundColor: color.p2 },
   geoSeg: { position: 'absolute', left: -2, top: -(R - 12), width: 4, height: 2, backgroundColor: color.p1 },
-  label: { ...type.rdXS, position: 'absolute', width: 40, textAlign: 'center', color: color.p3 },
-  geo: { ...type.lbXS, position: 'absolute', width: 40, textAlign: 'center', color: color.p3 },
+  label: { ...type.rdXS, position: 'absolute', height: 16, lineHeight: 16, textAlign: 'center', color: color.p3 },
+  geo: { ...type.lbXS, position: 'absolute', textAlign: 'center', color: color.p3 },
   needle: { position: 'absolute', left: -0.75, top: -(R - 4), width: 1.5, height: R - 4, backgroundColor: color.p4 },
   needleShadow: { position: 'absolute', left: -1.5, top: -(R - 4), width: 3, height: R - 4, backgroundColor: color.p1 },
   hub: { position: 'absolute', left: PX - 4, top: PY - 4, width: 8, height: 8, borderRadius: 4, backgroundColor: color.n4 },

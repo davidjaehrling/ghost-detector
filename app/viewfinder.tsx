@@ -1,7 +1,7 @@
 import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AccessibilityInfo, Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Image, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
 import { activityIndex } from '../src/ui/boot/activity';
 import type { KeySlot } from '../src/ui/boot/parts';
@@ -11,10 +11,10 @@ import { fixtureSource, fixtureUri } from '../src/ui/fixtures';
 import { type Harness, readHarness } from '../src/ui/harness';
 import { Readout } from '../src/ui/Readout';
 import { Housing } from '../src/ui/screens/Housing';
-import { color, type } from '../src/ui/tokens';
+import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
-import { type FluxSample, createFluxWalk, fluxAngle, formatFlux, liveLeds, liveThermal } from '../src/ui/viewfinder/flux';
-import { FIXTURE_TAG, LORE, TAG_LABEL } from '../src/ui/viewfinder/lore';
+import { type FluxSample, createFluxWalk, fluxAngle, formatFlux, formatGeo, liveLeds, liveThermal } from '../src/ui/viewfinder/flux';
+import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend } from '../src/ui/viewfinder/lore';
 
 // Copy keys follow docs/voice-guide.md section 3. The denied-permission strings are
 // placeholders in the same voice: Copy will add their keys to the voice guide.
@@ -42,7 +42,8 @@ const NEEDLE_JITTER_DEG = 0.006 * 100;
 const FIXTURE_SIZE = { w: 768, h: 1024 };
 // Harness: tonight's activity index is read at a fixed time so the golden repeats.
 const STATIC_NOW = new Date(2026, 9, 13, 12);
-const BAND = 0.3; // scrim band: lower 30% of the glass
+const BAND = 0.3; // scrim band: lower 30% of the glass, never less than it needs
+const BAND_MIN = TAG_HIT + 36 + 96; // tag row, two lore rows, dial plate height
 const SCRIM = 'rgba(10, 15, 11, 0.64)';
 
 let cached: Harness | null = null;
@@ -85,6 +86,7 @@ function Viewfinder({
   camera?: RefObject<CameraView | null>;
 }) {
   const router = useRouter();
+  const { width: windowW } = useWindowDimensions();
   const { isStatic } = harness;
   const fixture = harness.fixture ?? DEFAULT_FIXTURE;
   const source = sourceFor(permission, Platform.OS === 'web');
@@ -135,15 +137,14 @@ function Viewfinder({
 
   const canCapture = source === 'camera' || source === 'fixture' || source === 'denied';
   const showAllow = source === 'ask' || source === 'denied';
-  const stepTag = () => setTag((cur) => LOCATION_TAGS[(LOCATION_TAGS.indexOf(cur) + 1) % LOCATION_TAGS.length]!);
   const state = source === 'denied' ? copy['hud.stored'] : source === 'ask' || source === 'loading' ? copy['hud.wait'] : copy['hud.live'];
   const lore = hasSeenTag(tag) ? null : LORE[tag];
 
   const keySlots: (KeySlot | null)[] = [
-    { testID: 'key-tag', label: copy['hud.tagLabel'], legend: TAG_LABEL[tag], onPress: stepTag },
+    null,
     null,
     showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
-    canCapture ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => void capture() } : null,
+    canCapture ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => void capture(), backlit: true } : null,
   ];
 
   return (
@@ -155,7 +156,7 @@ function Viewfinder({
       keys={keySlots}
     >
       {({ w, h }) => {
-        const bandH = Math.round(h * BAND);
+        const bandH = Math.max(Math.round(h * BAND), BAND_MIN);
         return (
           <>
             {source === 'camera' ? (
@@ -188,8 +189,18 @@ function Viewfinder({
             <View style={[s.band, { height: bandH }]} testID="hud-band">
               <View style={s.tagRow} accessibilityRole="tablist">
                 {LOCATION_TAGS.map((tg) => (
-                  <Pressable key={tg} testID={`tag-${tg}`} onPress={() => setTag(tg)} hitSlop={6} accessibilityRole="tab" accessibilityState={{ selected: tg === tag }}>
-                    <Text style={[s.tag, tg === tag && s.tagOn]}>{TAG_LABEL[tg]}</Text>
+                  <Pressable
+                    key={tg}
+                    testID={`tag-${tg}`}
+                    onPress={() => setTag(tg)}
+                    accessibilityRole="tab"
+                    accessibilityLabel={TAG_LABEL[tg]}
+                    accessibilityState={{ selected: tg === tag }}
+                    style={s.tagHit}
+                  >
+                    <Text style={[s.tag, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
+                      {tagLegend(tg, windowW)}
+                    </Text>
                   </Pressable>
                 ))}
               </View>
@@ -200,9 +211,14 @@ function Viewfinder({
                 </View>
               ) : null}
               <View style={s.fluxBlock}>
-                <View testID="hud-flux" accessibilityLabel={flux}>
-                  <Readout label="FLUX" value={String(sample.mg)} unit="mG" size={w - DIAL_W >= 160 ? 'rdM' : 'rdS'} labelCh={5} valueCh={4} unitCh={2} {...HUD_BAND} />
+                <View style={s.fluxRow} testID="hud-flux" accessibilityLabel={flux}>
+                  <Text style={s.fluxLabel}>FLUX</Text>
+                  <Text style={s.fluxValue}>{String(sample.mg).padStart(4, ' ')}</Text>
+                  <Text style={s.fluxUnit}>mG</Text>
                 </View>
+                <Text style={s.geo} testID="hud-geo">
+                  {formatGeo(sample.mg)}
+                </Text>
                 <Text style={s.state} testID="hud-state">
                   {state}
                 </Text>
@@ -246,6 +262,8 @@ function Reticle({ bottom }: { bottom: number }) {
       <Bracket x="right" y="top" />
       <Bracket x="left" y="bottom" />
       <Bracket x="right" y="bottom" />
+      <View style={s.crossHo} />
+      <View style={s.crossVo} />
       <View style={s.crossH} />
       <View style={s.crossV} />
     </View>
@@ -259,17 +277,25 @@ const s = StyleSheet.create({
   topScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: 56, backgroundColor: SCRIM },
   topLeft: { position: 'absolute', left: 12, top: 4 },
   reticle: { position: 'absolute', left: 12, right: 12, top: 68 },
+  crossHo: { position: 'absolute', left: '50%', top: '50%', width: 17, height: 3, marginLeft: -8, marginTop: -1, backgroundColor: color.n0 },
+  crossVo: { position: 'absolute', left: '50%', top: '50%', width: 3, height: 17, marginLeft: -1, marginTop: -8, backgroundColor: color.n0 },
   crossH: { position: 'absolute', left: '50%', top: '50%', width: 15, height: 1, marginLeft: -7, backgroundColor: color.p4 },
   crossV: { position: 'absolute', left: '50%', top: '50%', width: 1, height: 15, marginTop: -7, backgroundColor: color.p4 },
-  // Hard-edged n0 scrim over the lower 30%: HUD text sits on this, not on plates.
-  band: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: SCRIM },
-  tagRow: { position: 'absolute', left: 12, right: 12, top: 8, flexDirection: 'row', justifyContent: 'space-between' },
+  // One opaque n0 band, edge to edge, from the tag row to the glass bottom: HUD text sits on this.
+  band: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: color.n0 },
+  tagRow: { position: 'absolute', left: TAG_ROW_PAD, right: TAG_ROW_PAD, top: 0, flexDirection: 'row', justifyContent: 'space-between' },
+  tagHit: { minWidth: TAG_HIT, height: TAG_HIT, alignItems: 'center', justifyContent: 'center' },
   tag: { ...type.lbXS, color: color.n5 },
   tagOn: { color: color.p5, textDecorationLine: 'underline' },
-  lore: { position: 'absolute', left: 12, right: 12, top: 28 },
+  lore: { position: 'absolute', left: 12, right: 12, top: TAG_HIT },
   loreText: { ...type.rdXS, color: color.p4, height: 18 },
-  fluxBlock: { position: 'absolute', left: 12, bottom: 10 },
-  state: { ...type.lbS, color: color.p3, marginTop: 4 },
+  fluxBlock: { position: 'absolute', left: 12, bottom: 8 },
+  fluxRow: { flexDirection: 'row', alignItems: 'flex-end', height: 44 },
+  fluxLabel: { ...type.rdXS, color: color.p3, marginBottom: 2, marginRight: 4 },
+  fluxValue: { ...type.rdL, color: color.p4, width: 4 * 19.2, textAlign: 'right' },
+  fluxUnit: { ...type.rdXS, color: color.p3, marginBottom: 2, marginLeft: 4 },
+  geo: { ...type.rdXS, color: color.p3, height: 18 },
+  state: { ...type.lbS, color: color.p3 },
   dialPlate: {
     position: 'absolute',
     right: 0,
@@ -280,6 +306,8 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderLeftWidth: 1,
     borderColor: color.n4,
+    borderBottomRightRadius: radius.window - 2,
+    overflow: 'hidden',
   },
   plateDot: { position: 'absolute', top: 5, width: 4, height: 4, borderRadius: 2, backgroundColor: color.n4 },
   notice: {
