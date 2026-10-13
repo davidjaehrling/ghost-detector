@@ -7,7 +7,7 @@ export const GRID_TOP = 24;
 // theatre does the same). Seven rows is the floor, used only on a short glass (360 px wide).
 
 export const BOOT_ROWS_MIN = 7;
-export const BOOT_ROWS_MAX = 12;
+export const BOOT_ROWS_MAX = 14;
 /** Readout block starts this far under the grid (timebase label sits in between). */
 export const READOUT_GAP = 28;
 /** Least gap between the readout block and what is pinned below it. */

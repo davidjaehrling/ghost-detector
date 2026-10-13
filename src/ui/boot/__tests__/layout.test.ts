@@ -8,7 +8,7 @@ describe('boot graticule rows', () => {
     expect(bootRows({ h: 675, div: 34, calibrating: true, pinnedH: 167 })).toBeGreaterThan(bootRows({ h: 675, div: 34, calibrating: false, pinnedH: 120 }));
   });
 
-  it('stays within 7 and 12 rows', () => {
+  it('stays within 7 and 14 rows', () => {
     expect(bootRows({ h: 300, div: 34, calibrating: false, pinnedH: 200 })).toBe(BOOT_ROWS_MIN);
     expect(bootRows({ h: 2000, div: 34, calibrating: true, pinnedH: 100 })).toBe(BOOT_ROWS_MAX);
   });

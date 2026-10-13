@@ -98,7 +98,8 @@ test('the block after the held ΔT blinks', async ({ page }) => {
   const seen = new Set<string>();
   const until = Date.now() + 1000;
   while (Date.now() < until && seen.size < 2) {
-    seen.add(await block.evaluate((e) => getComputedStyle(e).opacity).catch(() => 'gone'));
+    // Read the DOM directly: the block goes with the hold, and a locator would wait for it to return.
+    seen.add(await page.evaluate(() => { const e = document.querySelector('[data-testid="scan-held-block"]'); return e ? getComputedStyle(e).opacity : 'gone'; }));
     await page.waitForTimeout(40);
   }
   seen.delete('gone');
