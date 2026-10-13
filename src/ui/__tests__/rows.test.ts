@@ -1,18 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
+import { KEY_EDGE_MIN, KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
 import { composeFields } from '../readoutFields';
 
 describe('key row geometry', () => {
-  it.each([360, 390, 428])('fits four 72 px keys with the margin on the 4 px grid at %i', (screenW) => {
-    const plateW = screenW - 28;
+  // Margins are measured the way the screen shows them: the housing gutter plus the
+  // plate margin on the left, and what is left of the plate after the four caps and
+  // three gaps on the right. A wider cap or a wider gap pushes the right margin down.
+  it.each([360, 390, 428])('keeps 12 px from each screen edge to the outer caps at %i', (screenW) => {
+    const plateW = screenW - KEY_GUTTER * 2;
     const { gap, left } = keyLayout(plateW);
     expect(gap % 4).toBe(0);
     expect(left % 4).toBe(0);
     const content = KEY_SLOTS * KEY_W + (KEY_SLOTS - 1) * gap;
-    expect(left + content).toBeLessThanOrEqual(plateW);
-    // 12 px from the screen edge at the least (housing gutter 14 plus the plate margin).
-    expect(14 + left).toBeGreaterThanOrEqual(12);
-    expect(14 + (plateW - left - content)).toBeGreaterThanOrEqual(12);
+    const leftMargin = KEY_GUTTER + left;
+    const rightMargin = screenW - (KEY_GUTTER + left + content);
+    expect(leftMargin).toBeGreaterThanOrEqual(KEY_EDGE_MIN);
+    expect(rightMargin).toBeGreaterThanOrEqual(KEY_EDGE_MIN);
+    expect(Math.abs(leftMargin - rightMargin)).toBeLessThanOrEqual(8);
+  });
+
+  it('fails when a cap or a gap is too wide for 360', () => {
+    const plateW = 360 - KEY_GUTTER * 2;
+    const widerCap = 80;
+    const { gap, left } = keyLayout(plateW);
+    const content = KEY_SLOTS * widerCap + (KEY_SLOTS - 1) * gap;
+    expect(360 - (KEY_GUTTER + left + content)).toBeLessThan(KEY_EDGE_MIN);
   });
 });
 

@@ -24,7 +24,7 @@ export type ScanStore = {
   listScans(): ScanRecord[];
   getHistory(nowMs?: number): OutcomeHistory;
   getRecentNames(): string[];
-  /** Trait lines of the most recent profiles, newest last (no-repeat input for the profile generator). */
+  /** Trait lines of the last 20 records, newest last (no-repeat input for the profile generator). */
   getRecentLines(): string[];
   getIntensity(): Intensity;
   setIntensity(i: Intensity): void;
@@ -86,7 +86,7 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
     getScan: (id) => load().find((r) => r.id === id),
     listScans: () => [...load()],
     getRecentNames: () => load().map((r) => r.profile.name).slice(-20),
-    getRecentLines: () => load().flatMap((r) => r.profile.traits ?? []).slice(-40),
+    getRecentLines: () => load().slice(-20).flatMap((r) => r.profile.traits ?? []),
     getHistory(nowMs = Date.now()) {
       const all = load();
       let scansSinceCritical: number | null = null;

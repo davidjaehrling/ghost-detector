@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
-import { KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
+import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
 import { mulberry32 } from './seed';
 
 // ---------- typed self-test ----------
@@ -304,7 +304,6 @@ export function MiniSticker(props: { serial: string; cal: string; pruef: string 
 // One fixed four-slot key row (D-007 item 1). Every screen uses the same four
 // 72 x 44 caps at the same x positions; a slot with no function is an engraved
 // dummy cap. Slot 3 (far right) is the primary action.
-const KEY_GUTTER = 14; // housing side padding, see Housing
 
 export type KeySlot = {
   testID: string;

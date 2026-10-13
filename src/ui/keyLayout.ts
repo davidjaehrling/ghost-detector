@@ -3,6 +3,10 @@
 export const KEY_W = 72;
 export const KEY_SLOTS = 4;
 export const KEY_PLATE_PAD = 8;
+/** Housing side padding; the key plate is the screen width minus twice this. */
+export const KEY_GUTTER = 14;
+/** Least distance from a cap to the screen edge. */
+export const KEY_EDGE_MIN = 12;
 
 // Gap and left margin snapped down to the 4 px grid for a given plate width.
 export function keyLayout(plateW: number): { gap: number; left: number } {

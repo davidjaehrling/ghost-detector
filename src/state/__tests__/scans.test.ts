@@ -66,6 +66,19 @@ describe('scan store', () => {
     expect(new Set(s.getRecentNames()).size).toBe(6);
   });
 
+  it('returns the trait lines of the last 20 records', () => {
+    const s = createScanStore({ storage: null });
+    for (let i = 1; i <= 25; i++) {
+      const r = rec('quiet', i);
+      s.saveScan({ ...r, profile: { ...r.profile, traits: [1, 2, 3, 4, 5].map((n) => `r${i}-l${n}`) } });
+    }
+    const lines = s.getRecentLines();
+    expect(lines).toHaveLength(100);
+    expect(lines[0]).toBe('r6-l1');
+    expect(lines.at(-1)).toBe('r25-l5');
+    expect(lines.some((l) => l.startsWith('r5-'))).toBe(false);
+  });
+
   it('persists to the provided storage and reloads', () => {
     const storage = mem();
     const a = createScanStore({ storage });
