@@ -195,7 +195,15 @@
       "phase": "P1",
       "description": "Competitor teardown",
       "acceptance": "docs/competitor-teardown.md: at least 5 competitor apps from digest §4 with screens, ad pattern, review complaints, what we copy and what we avoid; every unverified claim marked [U]",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "node scripts/lint-copy.mjs docs/competitor-teardown.md",
+          "output": "lint-copy: clean; 175 lines, 6 entries, 32 [U] tags, Play store unreachable",
+          "by": "dr-hollow",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -203,7 +211,15 @@
       "phase": "P1",
       "description": "Instrument Bible",
       "acceptance": "docs/instrument-bible.md: one fictional instrument with manufacturer, model, serial scheme, firmware, calibration date, units (mG, ΔT °C, Hz), fault codes, tick spacing, graticule, LED ladder, scale bar, imperfection list, reference images named from inspiration/; panel mean ≥8 with no dimension <7",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "node scripts/lint-copy.mjs docs/instrument-bible.md",
+          "output": "lint-copy: clean; 310 lines; panel scored the device via names/icons/boot (D-004)",
+          "by": "art-director",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -211,7 +227,15 @@
       "phase": "P1",
       "description": "Design tokens and type in code",
       "acceptance": "src/ui/tokens.ts exports one phosphor hue with brightness steps, tinted neutrals (no pure black or grey), spacing and type scale; two faces only (VT323 plus IBM Plex Mono or B612) loaded via expo-font; both logged in assets/LICENSES.md with OFL links; pnpm smoke passes",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm smoke",
+          "output": "typecheck, lint 0 warnings, lint-copy clean, vitest 19 passed incl. tokens.test.ts parsing the Bible §9 table; fonts VT323 + B612 Mono in assets/LICENSES.md (OFL)",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -219,7 +243,15 @@
       "phase": "P1",
       "description": "Voice guide",
       "acceptance": "docs/voice-guide.md: field-manual voice rules, 20 example strings (boot, calibration sticker, scan states, result tiers, errors), banned list reference; pnpm lint:copy clean on the file",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "node scripts/lint-copy.mjs docs/voice-guide.md",
+          "output": "lint-copy: clean; 20 example strings; disclosure aligned to Bible §11; firmware strings aligned",
+          "by": "copy-localization",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -227,7 +259,15 @@
       "phase": "P1",
       "description": "Sound and haptic palette",
       "acceptance": "docs/sound-palette.md: parameter tables for Geiger (Poisson rate per tier), hum (50/60 Hz, harmonics, level), static (filter, level), jump-scare envelope (plan limits), haptic grammar (event → pattern, all under 120 ms); nothing stock",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "node scripts/lint-copy.mjs docs/sound-palette.md",
+          "output": "lint-copy: clean; 172 lines; Geiger table, hum, static, scan timeline, scare envelope within psych-brief limits, haptic grammar <120 ms",
+          "by": "sound-haptics",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -235,7 +275,15 @@
       "phase": "P1",
       "description": "Name options",
       "acceptance": "docs/identity-options.md section Names: 5 options with rationale, Play-store collision check [U], Compliance pass on each; panel scores logged in docs/decisions.md",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/identity-names.md; docs/decisions.md D-004",
+          "output": "5 options, counts verified by script (titles 23/30/14/22/28; subtitles 67/73/73/76/73); Compliance: 4 PASS (one conditional), option 4 retitled after VETO; panel weighted 7.17/5.17/6.0/4.33/6.67",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -243,7 +291,15 @@
       "phase": "P1",
       "description": "Icon concepts",
       "acceptance": "3 icon concepts as SVG in assets/icon-concepts/ rendered to 512px PNG via the L2 browser, each with a one-paragraph rationale in docs/identity-options.md; panel scores logged; no emoji, no purple/blue gradient",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "assets/icon-concepts/*.svg,*.png; docs/identity-icons.md; D-004",
+          "output": "3 concepts, mono variants, 512 and 48 px PNGs (file: 512x512, 48x48); only Bible hexes painted; panel weighted 5.5/5.33/7.67",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -251,7 +307,15 @@
       "phase": "P1",
       "description": "Boot screen per the Bible",
       "acceptance": "app/index.tsx restyled from tokens (calibration sticker with the simulation disclosure, model/serial/firmware line, phosphor readout); L2 goldens regenerated; design loop exit: Art Director and Dr. Hollow mean ≥8, no dimension <7, Refuter holds; CI green",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/android-{360x800,390x844,428x926}/boot.png",
+          "output": "round 2 goldens; pnpm e2e:web 3/3 twice; spec asserts 'This unit detects nothing.'; design loop round 2 weighted mean 6.05 (exit needs 8): NOT PASSED, carried to P2/P3 (D-005)",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     }
   ]
