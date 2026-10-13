@@ -528,7 +528,15 @@
       "phase": "P3",
       "description": "Skia installed and rendering in L2",
       "acceptance": "@shopify/react-native-skia 2.14 with react-native-reanimated 4 and worklets per the Expo SDK 57 bundled versions; web CanvasKit loads in the static export; a Skia canvas renders in a committed golden; CI green; bundle size delta reported",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (skia.spec.ts); pnpm web:export size",
+          "output": "skia 2.14.0, reanimated 4.5.1, worklets 0.10.1; CanvasKit 0.41 loaded on web via lazy import and copied wasm; probe golden shows graticule, trace and grain; 75 e2e passed; dist +9.5 MB (wasm 8.08 MB, entry 2.62 MB vs 1.30 MB)",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -600,7 +608,15 @@
       "phase": "P4",
       "description": "Audio config and scheduler",
       "acceptance": "src/audio/config.ts typed config from docs/sound-palette.md §9 with clamps; src/audio/scheduler.ts pure Poisson click scheduling, rate ramps and phase cues; tests: click counts over 10 s per tier and intensity within ±15%, refractory 12 ms, CRITICAL caps 6/14/22 c/s, determinism",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/audio scheduler, 300 seeds x 10 s)",
+          "output": "click counts within 1% of the palette table for all tiers and intensities; 12 ms refractory holds at 60 c/s; deterministic per seed; clamps tested",
+          "by": "sound-haptics",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -608,7 +624,15 @@
       "phase": "P4",
       "description": "Audio engine",
       "acceptance": "src/audio/engine.ts on react-native-audio-api: limiter at -6 dBFS, Geiger, hum 50/60 Hz with harmonics, filtered static, scene and scare buses, duck gain for the hold; engine.web.ts no-op with a call log for L2; native unverified until Phone check 2",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/audio engine on a recording fake context)",
+          "output": "react-native-audio-api 0.13.6; limiter is a WaveShaper soft clip (no DynamicsCompressorNode in 0.13.6); scene/scare buses, duck gain, reveal and fault cues; engine.web.ts logs calls; native unverified",
+          "by": "sound-haptics",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -616,7 +640,15 @@
       "phase": "P4",
       "description": "Haptic grammar",
       "acceptance": "src/audio/haptics.ts on expo-haptics: event → pattern per palette §7, every pattern ≤120 ms (tested), off switch, web no-op",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/audio haptics)",
+          "output": "expo-haptics ~57.0.3; every pattern ≤120 ms asserted; needle ticks capped 8/s (4 reduced); off switch; web no-op with log",
+          "by": "sound-haptics",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {

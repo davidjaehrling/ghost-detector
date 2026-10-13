@@ -99,3 +99,8 @@ Weighted means (Hollow x2, Art): boot 7.19 (min 5.33 shareability), viewfinder 7
 - Defect fixed before merge: ten goldens at 360 were stale after the short-serial rule, hidden by the per-pixel threshold; all goldens regenerated from the current build (c98ba22).
 - Noted for later: duplicated gutter constant in Housing and Placeholder (P3 cleanup); the offer line "Short video plays." must be true or removed before any public build (P5); the `/ad/i` test-ID pattern is brittle (P8); the faint dial arc behind the boot graticule is the intended burn-in ghost.
 - P2 passes: 01 to 07. Open: 08 and 09 (loop re-entered in P3 with Skia), 10 (EAS, owner), 11 (Gate 1, owner). Merge on CI green, Refuter holds, no Compliance veto (no ads, no store copy in P2).
+
+## 2026-10-13 · D-013 · P3-01 Skia and P4 audio engine landed
+- Skia 2.14.0 chosen over the SDK 57 bundled 2.6.2 per plan §9; reanimated 4.5.1 and worklets 0.10.1 from the bundled list; CanvasKit loaded lazily on web with the wasm copied into `public/` at export time (gitignored). Entry bundle doubles to 2.6 MB; the wasm is web-only. Revisit bundle size at P8.
+- Audio engine deviations accepted: the -6 dBFS ceiling is a WaveShaper soft clip because react-native-audio-api 0.13.6 has no compressor node; audio focus and background silence are left to the screen integration (P4-04); scheduler timing is driven from a 25 ms JS tick. All device-level claims wait for Phone check 2.
+- Director sequencing: Builder A applies the glass stack, the D-011 leftovers, the magnetometer needle (P4-05) and the sweep (P4-06) in one pass after the glass stack lands, to avoid two agents in the same screens.
