@@ -34,6 +34,10 @@ export interface DarkRegionOptions {
   edgePenalty?: number;
   /** Frames with a median luma at or below this are treated as pitch black. Default 24. */
   blackMedian?: number;
+  /** Components whose bounding box is thinner than this fraction of the frame's short side are rejected. Default 0.06. */
+  minThickness?: number;
+  /** Components whose bounding box is longer than this multiple of its thickness are rejected. Default 4. */
+  maxAspect?: number;
 }
 
 /** Variance (of luma in 0..1) is scaled by this before 1 / (1 + v). */
@@ -137,6 +141,8 @@ export function findDarkRegion(
     minAreaFraction = 0.015,
     edgePenalty = 0.6,
     blackMedian = 24,
+    minThickness = 0.06,
+    maxAspect = 4,
   } = opts;
   const n = width * height;
   if (n === 0 || luma.length < n) return null;
@@ -178,6 +184,12 @@ export function findDarkRegion(
     }
     const areaFraction = area / n;
     if (areaFraction < minAreaFraction) continue;
+
+    // Edge slivers and thin lines are not rooms. Skipped; if nothing else qualifies we fall through.
+    const bw = maxX - minX + 1;
+    const bh = maxY - minY + 1;
+    const thick = Math.min(bw, bh);
+    if (thick < minThickness * Math.min(width, height) || Math.max(bw, bh) / thick > maxAspect) continue;
 
     const mean = sum / area;
     const variance = Math.max(0, sumSq / area - mean * mean) / (255 * 255);

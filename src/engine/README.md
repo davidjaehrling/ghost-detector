@@ -6,10 +6,14 @@ Pure TypeScript. No React, no native imports. Import from `src/engine` (index).
 - `downsampleLuma(rgba, w, h, 64..96)` -> `{ luma, width, height }` (Rec.709 weights, box average).
 - `findDarkRegion(luma, width, height, opts?)` -> `DarkRegion | null`. Normalised 0..1 box, centroid,
   `score`, `meanLuma`, `areaFraction`, `fallback`. `null` = frame too bright for a region.
+  Components thinner than 6% of the short side, or longer than 4:1, are ignored (edge slivers); if nothing else qualifies the result is `null`, or the fallback window for a pitch-black frame.
   `fallback: true` = pitch-black frame, darkest 30% window inside a 10% margin. Run once per photo.
 - `seedFrom(photoHash, timestampMs)` -> uint32. Different photo or time, different seed.
 - `drawOutcome(seed, intensity, history)` -> `{ tier, spi, figureShown, smudge, jumpScare, scanDurationMs }`.
-- `generateProfile(seed, tier, recentNames)` -> `{ class, era, name, traits, signatureDecodedPct }`.
+- `generateProfile(seed, tier, recent: { names: string[]; lines: string[] })` -> `{ class, era, name, traits, signatureDecodedPct }`.
+  `recent` is the last 20 results, oldest first: their `name`s and all their `traits` lines flattened.
+  No name or trait line repeats inside that window (least-recently-used line if a bank runs out).
+  Deprecated: a bare `string[]` is still accepted and means names only (no line avoidance).
 - `TIER_BOUNDS`, `tierBand`, `tierOf` mirror `src/ui/tokens.ts` (tested).
 
 ## Seeds

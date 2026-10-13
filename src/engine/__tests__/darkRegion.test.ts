@@ -74,7 +74,7 @@ describe('findDarkRegion', () => {
   });
 
   it('outdoors: without the penalty the tree line wins', () => {
-    const r = findDarkRegion(outdoors(), W, H, { edgePenalty: 1 })!;
+    const r = findDarkRegion(outdoors(), W, H, { edgePenalty: 1, maxAspect: Infinity })!;
     expect(r.y).toBe(0);
   });
 
@@ -82,6 +82,34 @@ describe('findDarkRegion', () => {
     const r = findDarkRegion(attic(), W, H)!;
     expect(r.cx).toBeLessThan(0.4);
     expect(r.cy).toBeLessThan(0.5);
+  });
+
+  it('outdoors: the 64x7 tree line is rejected as too elongated by default', () => {
+    const r = findDarkRegion(outdoors(), W, H, { edgePenalty: 1 })!;
+    expect(r.y).toBeGreaterThan(0.3);
+  });
+
+  it('rejects a 1 px dark column along the left edge (luma 128 frame)', () => {
+    const a = new Uint8Array(W * H).fill(128);
+    fill(a, 0, 0, 1, H, 0);
+    const r = findDarkRegion(a, W, H);
+    expect(r === null || !(r.x === 0 && r.w < 0.05)).toBe(true);
+    expect(r).toBeNull();
+  });
+
+  it('rejects a 2 px dark row along the bottom edge', () => {
+    const a = new Uint8Array(W * H).fill(128);
+    fill(a, 0, H - 2, W, H, 0);
+    expect(findDarkRegion(a, W, H)).toBeNull();
+  });
+
+  it('a thin edge line loses to a real patch even when the line scores higher', () => {
+    const a = new Uint8Array(W * H).fill(128);
+    fill(a, 0, 0, 2, H, 0);
+    fill(a, 30, 20, 40, 30, 60);
+    const r = findDarkRegion(a, W, H, { edgePenalty: 1 })!;
+    expect(r.x).toBeGreaterThan(0.4);
+    expect(r.cy).toBeGreaterThan(0.4);
   });
 
   it('is deterministic', () => {

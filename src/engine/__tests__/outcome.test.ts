@@ -30,7 +30,18 @@ describe('seedFrom', () => {
   });
 });
 
+/** psych-brief section 3, hard-coded on purpose: the test must not read its targets from the code under test. */
+const BRIEF_TARGETS: Record<Intensity, number[]> = {
+  calm: [30, 40, 22, 7, 1],
+  standard: [20, 35, 28, 13, 4],
+  brave: [12, 28, 32, 20, 8],
+};
+
 describe('tier distribution over 10,000 seeds', () => {
+  it('TIER_TABLE equals the psych-brief section 3 targets', () => {
+    for (const intensity of INTENSITIES) expect([...TIER_TABLE[intensity]]).toEqual(BRIEF_TARGETS[intensity]);
+  });
+
   for (const intensity of INTENSITIES) {
     it(intensity, () => {
       const N = 10_000;
@@ -43,7 +54,7 @@ describe('tier distribution over 10,000 seeds', () => {
       }
       const pct = counts.map((c) => (c / N) * 100);
       console.log(`${intensity} measured`, pct.map((p) => p.toFixed(2)).join('/'), 'figure', ((figures / N) * 100).toFixed(1));
-      TIER_TABLE[intensity].forEach((target, k) => expect(Math.abs(pct[k]! - target)).toBeLessThanOrEqual(1.5));
+      BRIEF_TARGETS[intensity].forEach((target, k) => expect(Math.abs(pct[k]! - target)).toBeLessThanOrEqual(1.5));
     });
   }
 });

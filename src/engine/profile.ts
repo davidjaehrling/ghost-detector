@@ -32,18 +32,49 @@ function decodedPct(r: () => number, tier: Tier): number {
   }
 }
 
-function detailLine(r: () => number): string {
-  return pick(r, DETAIL)
-    .replace('{n4}', String(int(r, 1, 9999)).padStart(4, '0'))
-    .replace('{n}', String(int(r, 112, 4890)))
-    .replace('{dt}', `-${int(r, 2, 8)}.${int(r, 0, 9)}`);
+function detailLine(r: () => number, used: ReadonlySet<string>): string {
+  let line = '';
+  for (let a = 0; a < NAME_ATTEMPTS; a++) {
+    line = pick(r, DETAIL)
+      .replace('{n4}', String(int(r, 1, 9999)).padStart(4, '0'))
+      .replace('{n}', String(int(r, 112, 4890)))
+      .replace('{dt}', `-${int(r, 2, 8)}.${int(r, 0, 9)}`);
+    if (!used.has(line)) break;
+  }
+  return line;
 }
 
-export function generateProfile(seed: number, tier: Tier, recent: string[]): EntityProfile {
+/** What the caller has shown recently (oldest first). The engine reads the last 20 results' worth. */
+export interface RecentProfiles {
+  names: string[];
+  /** Trait lines of recent results, oldest first. Pass them all; the window is the caller's last 20 results. */
+  lines: string[];
+}
+
+/** Pick a bank line not in `used`; if the bank is exhausted, reuse the least recently used one. */
+function pickFresh(r: () => number, bank: readonly string[], used: ReadonlySet<string>, order: readonly string[]): string {
+  const fresh = bank.filter((l) => !used.has(l));
+  if (fresh.length > 0) return pick(r, fresh);
+  let best = bank[0]!;
+  let bestAt = Infinity;
+  for (const l of bank) {
+    const at = order.lastIndexOf(l);
+    if (at < bestAt) { bestAt = at; best = l; }
+  }
+  return best;
+}
+
+export function generateProfile(seed: number, tier: Tier, recent: RecentProfiles): EntityProfile;
+/** @deprecated Pass `{ names, lines }`. A bare array is treated as names only. */
+export function generateProfile(seed: number, tier: Tier, recentNames: string[]): EntityProfile;
+// TODO remove the string[] overload once all callers pass { names, lines }
+export function generateProfile(seed: number, tier: Tier, recentArg: RecentProfiles | string[]): EntityProfile {
+  const recent: RecentProfiles = Array.isArray(recentArg) ? { names: recentArg, lines: [] } : recentArg;
   const r = mulberry32(seed);
   const ci = Math.floor(r() * CLASSES.length);
 
-  const used = new Set(recent.slice(-20));
+  const used = new Set(recent.names.slice(-20));
+  const usedLines = new Set(recent.lines);
   let name = '';
   for (let a = 0; a < NAME_ATTEMPTS; a++) {
     const n = String(int(r, 1, 9999)).padStart(4, '0');
@@ -60,11 +91,11 @@ export function generateProfile(seed: number, tier: Tier, recent: string[]): Ent
 
   // One line per slot, in a seeded order; the detail line is one of the slots.
   const slots: (() => string)[] = [
-    () => pick(r, TEMPERAMENT),
-    () => pick(r, ATTACHMENT),
-    () => pick(r, BEHAVIOUR),
-    () => pick(r, TIMING),
-    () => detailLine(r),
+    () => pickFresh(r, TEMPERAMENT, usedLines, recent.lines),
+    () => pickFresh(r, ATTACHMENT, usedLines, recent.lines),
+    () => pickFresh(r, BEHAVIOUR, usedLines, recent.lines),
+    () => pickFresh(r, TIMING, usedLines, recent.lines),
+    () => detailLine(r, usedLines),
   ];
   for (let i = slots.length - 1; i > 0; i--) {
     const j = Math.floor(r() * (i + 1));
