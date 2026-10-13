@@ -51,7 +51,7 @@ The app speaks like a 1980s field manual and a calibration sticker. It states a 
 
 ## 2. Register per surface
 
-- Boot: firmware line, then the sticker. Pure instrument. Uppercase codes, no prose. `FW 2.31 CAL 2026-03-14 OK`.
+- Boot: firmware line, then the sticker. Pure instrument. Uppercase codes, no prose. `FW 3.1.7 · ROM C2-8811 · SELFTEST OK`.
 - Calibration sticker: the mandatory disclosure. Flat, label-like, under 25 words, no jokes and no "prank". It reads as a legal sticker and it is one.
 - Viewfinder HUD: labels of 1 to 3 words plus a live value. `FIELD`, `ΔT`, `IDX 3/5`. No sentences. Lore notes below are two-line manual entries.
 - Scan theatre: telemetry lines of 3 to 6 words, present tense, fully mechanical. `Sweeping band 2.` `Rate rising.` Silence is part of the voice: the 1.2 s hold carries no text.
@@ -75,7 +75,7 @@ Key form is `surface.key`. All are EN.
 | Key | String |
 |---|---|
 | `sticker.disclosure` | SIMULATION UNIT · ENTERTAINMENT USE ONLY. All readings are generated in software. This unit detects nothing. |
-| `boot.firmware` | FW 2.31 / CAL 2026-03-14 / SELF-TEST OK |
+| `boot.firmware` | FW 3.1.7 · ROM C2-8811 · SELFTEST OK |
 | `onboarding.question` | Have you ever experienced something you couldn't explain? |
 | `onboarding.intensitySet` | Intensity set to STANDARD. Change any time in Settings. |
 | `hud.field` | FIELD 412 mG |
@@ -100,7 +100,7 @@ Key form is `surface.key`. All are EN.
 Locales: DE, ES, PT. Each is written for its culture and checked by a separate review pass. Key parity across all four is enforced by the parity lint.
 
 Carries over unchanged:
-- Codes and serials: `E-07`, `CASE 0041`, `FW 2.31`, model and serial text.
+- Codes and serials: `E-07`, `CASE 0041`, `FW 3.1.7`, model and serial text.
 - Units and symbols: mG, ΔT °C, Hz, dBFS, `%`. Decimal marks follow the locale (`61,5%` in DE, ES, PT) while code strings keep the original.
 - Tier names QUIET, TRACE, ACTIVE, STRONG and CRITICAL stay in English as instrument labels, with a short local gloss only where a screen has room.
 - Timestamps stay 24 h and ISO dates.
