@@ -1,0 +1,9 @@
+node_modules/
+.expo/
+dist/
+coverage/
+*.log
+.DS_Store
+e2e/screenshots/current/
+expo-env.d.ts
+play-service-account.json
