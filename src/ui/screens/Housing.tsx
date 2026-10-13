@@ -3,7 +3,7 @@ import { type LayoutChangeEvent, StyleSheet, Text, View, useWindowDimensions } f
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Glass, type GlassProps } from '../../fx/glass';
 import { FIXED_SEED, type InstallIdentity, getInstallIdentity, readInstallSeed } from '../boot/install';
-import { Key, type KeySlot, KeyRow, LedLadder, Screw, Wear } from '../boot/parts';
+import { Key, type KeySlot, KeyRow, LedLadder, MiniSticker, Screw, Wear } from '../boot/parts';
 import { readHarness } from '../harness';
 import { plateSerial } from '../serial';
 import { color, font, radius, space, type } from '../tokens';
@@ -28,6 +28,7 @@ export function Housing({
   keys,
   identity: given,
   glass = {},
+  sticker = true,
   children,
 }: {
   testID: string;
@@ -41,6 +42,8 @@ export function Housing({
   /** Four slots, left to right; null is an engraved dummy cap. Slot 3 is the primary action. */
   keys: readonly (KeySlot | null)[];
   glass?: HousingGlass;
+  /** The calibration sticker stuck on the housing, bottom-left. Boot leaves it off until ACK. */
+  sticker?: boolean;
   children: (size: GlassSize) => ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -86,6 +89,7 @@ export function Housing({
         </View>
       </View>
       <View style={s.keyBand}>
+        {sticker ? <MiniSticker cal={identity.cal} pruef={identity.pruef} style={s.sticker} /> : null}
         <KeyRow slots={keys} />
       </View>
     </View>
@@ -152,4 +156,6 @@ const s = StyleSheet.create({
   },
   ledWrap: { width: 28, marginLeft: 14, alignSelf: 'flex-start' },
   keyBand: { height: 88, justifyContent: 'flex-end' },
+  // Under the window's lower edge and clear of its corner screw, above the key plate.
+  sticker: { position: 'absolute', left: 10, top: -15 },
 });

@@ -3,6 +3,7 @@ import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDim
 import { color, font, radius, size, space, type } from '../tokens';
 import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
 import { stickerShowsSerial } from '../serial';
+import { GRID_TOP } from './layout';
 import { mulberry32 } from './seed';
 
 // ---------- typed self-test ----------
@@ -89,7 +90,7 @@ export function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${nu
 // more than 600 views). Centre axes are solid with 4 px minor ticks.
 export const GRID_COLS = 10;
 export const GRID_ROWS = 8;
-export const GRID_TOP = 24;
+export { GRID_TOP };
 
 // The grid keeps 4 px of tube on each side, so the corner text never meets the glass edge.
 export const GRID_SIDE = 4;
@@ -134,12 +135,12 @@ export function Graticule({ w, h, rows: rowCount = GRID_ROWS }: { w: number; h: 
 }
 
 // Flat idle trace on the horizontal centre axis, p4, with seeded 1 to 2 px jitter.
-export function IdleTrace({ w, seed }: { w: number; seed: number }) {
+export function IdleTrace({ w, seed, rows = GRID_ROWS }: { w: number; seed: number; rows?: number }) {
   if (w <= 0) return null;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
   const left = Math.round((w - gw) / 2);
-  const cy = GRID_TOP + (div * GRID_ROWS) / 2;
+  const cy = GRID_TOP + (div * rows) / 2;
   const r = mulberry32(seed);
   const seg = 6;
   const n = Math.ceil(gw / seg);
@@ -255,6 +256,31 @@ export function Sticker({
   );
 }
 
+// The same sticker, smaller, stuck on the housing for the life of the install (Bible sections 2
+// and 11): bottom-left under the window, tilted -1.5 degrees, lower right corner lifted. It prints
+// the two disclosure heading lines and the calibration line, each on its own row and never cut:
+// the paper is as wide as its longest line.
+export const MINI_STICKER_H = 41;
+
+export function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string; pruef: string; bg?: string; style?: object }) {
+  const meta = `CAL ${cal} · PRÜF ${pruef}`;
+  return (
+    <View style={[st.mini, style]} pointerEvents="none" testID="sticker-mini" accessibilityLabel={`${copy.head1} ${copy.head2} ${meta}`}>
+      <Text style={st.miniHead} numberOfLines={1}>
+        {copy.head1}
+      </Text>
+      <Text style={st.miniHead} numberOfLines={1}>
+        {copy.head2}
+      </Text>
+      <Text style={st.miniMeta} numberOfLines={1}>
+        {meta}
+      </Text>
+      <View style={[st.miniCut, { borderBottomColor: bg }]} />
+      <View style={st.miniFlap} />
+    </View>
+  );
+}
+
 // ---------- key row ----------
 
 // One fixed four-slot key row (D-007 item 1). Every screen uses the same four
@@ -289,15 +315,14 @@ export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
   );
 }
 
-// Engraved dummy cap: same footprint as a live key, three engraved dots, no legend.
+// Engraved dummy cap: same footprint as a live key and a blank seat, no legend. The engraving is
+// one shallow ring (a dark groove with a light lower edge), which reads as a pressed-in mark and
+// never as a dash or a dotted label.
 export function DummyCap() {
   return (
-    <View style={st.dummy} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={st.dots}>
-        <View style={st.dot} />
-        <View style={st.dot} />
-        <View style={st.dot} />
-      </View>
+    <View testID="key-dummy" style={st.dummy} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={st.ringLip} />
+      <View style={st.ring} />
     </View>
   );
 }
@@ -429,6 +454,19 @@ const st = StyleSheet.create({
     transform: [{ rotate: '-45deg' }],
   },
 
+  mini: {
+    alignSelf: 'flex-start',
+    backgroundColor: color.paper,
+    paddingHorizontal: 7,
+    paddingTop: 4,
+    paddingBottom: 4,
+    transform: [{ rotate: '-1.5deg' }],
+  },
+  miniHead: { ...type.lbXS, fontFamily: font.labelBold, lineHeight: 11, letterSpacing: 0.3, color: color.ink },
+  miniMeta: { ...type.lbXS, lineHeight: 11, letterSpacing: 0.3, color: color.ink },
+  miniCut: { position: 'absolute', right: 0, bottom: 0, width: 0, height: 0, borderLeftWidth: 7, borderBottomWidth: 7, borderLeftColor: 'transparent' },
+  miniFlap: { position: 'absolute', right: 0, bottom: 0, width: 0, height: 0, borderTopWidth: 7, borderRightWidth: 7, borderRightColor: 'transparent', borderTopColor: color.n6 },
+
   keyPlate: {
     height: size.keyH + 12,
     justifyContent: 'center',
@@ -470,6 +508,6 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dots: { flexDirection: 'row', gap: 4 },
-  dot: { width: 2, height: 2, borderRadius: 1, backgroundColor: color.n1 },
+  ring: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n1 },
+  ringLip: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n4, opacity: 0.55, transform: [{ translateY: 1 }] },
 });
