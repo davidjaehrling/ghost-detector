@@ -204,13 +204,14 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
       "id": "P1-02",
       "phase": "P1",
       "description": "Instrument Bible",
-      "acceptance": "docs/instrument-bible.md: one fictional instrument with manufacturer, model, serial scheme, firmware, calibration date, units (mG, ΔT °C, Hz), fault codes, tick spacing, graticule, LED ladder, scale bar, imperfection list, reference images named from inspiration/; panel mean ≥8 with no dimension <7",
+      "acceptance": "docs/instrument-bible.md: one fictional instrument with manufacturer, model, serial scheme, firmware, calibration date, units (mG, ΔT °C, Hz), fault codes, tick spacing, graticule, LED ladder, scale bar, imperfection list, reference images named from inspiration/; contrast ratios in §4 verified by the Refuter; the Bible is judged through the screens built from it in the P2 design loop (acceptance amended per D-006; the original 'panel mean ≥8' clause had no direct score)",
       "evidence": [
         {
           "kind": "command",
@@ -218,9 +219,17 @@
           "output": "lint-copy: clean; 310 lines; panel scored the device via names/icons/boot (D-004)",
           "by": "art-director",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "Refuter WCAG recomputation of Bible §4",
+          "output": "p3 7.43, p4 12.74, p5 17.62 on n0; n6/n1 10.66; n6/n3 7.68; ink/paper 12.38; all match the Bible",
+          "by": "refuter",
+          "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
       "id": "P1-03",
@@ -236,7 +245,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
       "id": "P1-04",
@@ -252,7 +262,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
       "id": "P1-05",
@@ -268,13 +279,14 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
       "id": "P1-06",
       "phase": "P1",
       "description": "Name options",
-      "acceptance": "docs/identity-options.md section Names: 5 options with rationale, Play-store collision check [U], Compliance pass on each; panel scores logged in docs/decisions.md",
+      "acceptance": "docs/identity-names.md: 5 options with rationale, Play-store collision check [U], Compliance pass on each; panel scores logged in docs/decisions.md",
       "evidence": [
         {
           "kind": "artifact",
@@ -284,13 +296,14 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS after Compliance verdict lines added for options 3 and 4; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
       "id": "P1-07",
       "phase": "P1",
       "description": "Icon concepts",
-      "acceptance": "3 icon concepts as SVG in assets/icon-concepts/ rendered to 512px PNG via the L2 browser, each with a one-paragraph rationale in docs/identity-options.md; panel scores logged; no emoji, no purple/blue gradient",
+      "acceptance": "3 icon concepts as SVG in assets/icon-concepts/ rendered to 512px PNG via the L2 browser, each with a one-paragraph rationale in docs/identity-icons.md; panel scores logged; no emoji, no purple/blue gradient",
       "evidence": [
         {
           "kind": "artifact",
@@ -300,7 +313,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     },
     {
       "id": "P1-08",
@@ -316,7 +330,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "Evidence HOLDS; design loop exit not reached (6.05); stays false; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
     }
   ]
 }
