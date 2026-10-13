@@ -32,7 +32,11 @@ test('boot to viewfinder, scan, result and history', async ({ page }, testInfo) 
   await shot('result');
   await expect(page).toHaveScreenshot('result.png', { maxDiffPixels: 150 });
 
-  await page.getByTestId('screen-result').getByTestId('key-forward').click();
+  // History is one tap from the viewfinder: back to it, then LOG.
+  await page.getByTestId('screen-result').getByTestId('key-back').click();
+  // The stack keeps the first viewfinder mounted behind the new one.
+  await expect(page.getByTestId('screen-viewfinder').last()).toBeVisible();
+  await page.getByTestId('key-log').last().click();
   await expect(page.getByTestId('screen-history')).toBeVisible();
   await shot('history');
   await expect(page).toHaveScreenshot('history.png', { maxDiffPixels: 150 });

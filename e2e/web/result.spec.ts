@@ -10,8 +10,11 @@ const DEMOS = [
   { demo: 'critical', tier: 'CRITICAL' },
 ] as const;
 
-// The same active demo over the other photos, with a second case number.
-const FIXTURES = ['bright', 'outdoors'] as const;
+// The active demo over the other photos: each has its own seed (so its own profile) and case number.
+const FIXTURES = [
+  { fixture: 'bright', caseNo: '0003' },
+  { fixture: 'outdoors', caseNo: '0007' },
+] as const;
 
 function watch(page: import('@playwright/test').Page) {
   const consoleErrors: string[] = [];
@@ -26,10 +29,14 @@ function watch(page: import('@playwright/test').Page) {
   };
 }
 
+const frames = (page: import('@playwright/test').Page) => page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+
 async function settle(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('result-photo')).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0));
+  // The photo and digit canvases have drawn.
+  await frames(page);
 }
 
 for (const { demo, tier } of DEMOS) {
@@ -45,21 +52,23 @@ for (const { demo, tier } of DEMOS) {
       await expect(page.getByTestId('key-deepscan')).toHaveCount(0);
       await expect(page.getByTestId('result-offer')).toHaveCount(0);
       await expect(page.getByTestId('result-profile').getByText('NO SIGNATURE')).toBeVisible();
-      await expect(page.getByTestId('ghost-v0')).toHaveCount(0);
+      await expect(page.getByTestId('composite')).toHaveCount(0);
     } else {
       await expect(page.getByTestId('key-deepscan')).toBeVisible();
       await expect(page.getByTestId('result-offer')).toHaveText('Run DEEP SCAN to resolve designation, behaviour and EVP. Short video plays.');
       await expect(page.getByTestId('result-decoded')).toContainText('SIGNATURE PARTIALLY DECODED:');
       await expect(page.getByTestId('profile-mask')).toHaveCount(3);
-      await expect(page.getByTestId('ghost-v0')).toHaveCount(1);
+      await expect(page.getByTestId('composite')).toHaveCount(1);
+      await expect(page.getByTestId('ghost-v0')).toHaveCount(0);
+      await expect(page.getByTestId('profile-era')).toHaveText(/^[^a-z]+$/);
     }
     await expect(page.getByTestId('key-back')).toHaveText('NEW SCAN');
     const line = page.getByTestId('result-line');
     if (demo === 'strong') {
       await expect(line).toHaveText('Strong. Signature resolving.');
-      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT ΔT -\d+\.\d °C$/);
-      const cold = await page.getByTestId('result-coldspot').innerText();
-      const therm = await page.getByText(/^THERM/).first().innerText();
+      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT ΔT -\d+\.\d °C · DRIFT \d\.\d kHz$/);
+      const cold = (await page.getByTestId('result-coldspot').innerText()).split(' · ')[0]!;
+      const therm = await page.getByText(/^THERM\s+-?\d/).first().innerText();
       expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD SPOT ΔT ', ''));
     } else {
       await expect(page.getByTestId('result-coldspot')).toHaveCount(0);
@@ -93,20 +102,60 @@ for (const { demo, tier } of DEMOS) {
   });
 }
 
-for (const fixture of FIXTURES) {
+for (const { fixture, caseNo } of FIXTURES) {
   test(`result active over ${fixture}`, async ({ page }, testInfo) => {
     const check = watch(page);
-    await page.goto(`/result/demo?static=1&fixture=${fixture}&demo=active&case=0002`);
+    await page.goto(`/result/demo?static=1&fixture=${fixture}&demo=active&case=${caseNo}`);
     await expect(page.getByTestId('screen-result')).toBeVisible();
     await settle(page);
-    await expect(page.getByText('CASE 0002')).toBeVisible();
+    await expect(page.getByText(`CASE ${caseNo}`)).toBeVisible();
     await expect(page.getByTestId('result-tier')).toHaveText('ACTIVE');
-    await expect(page.getByTestId('ghost-v0')).toHaveCount(1);
+    await expect(page.getByTestId('composite')).toHaveCount(1);
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-active-${fixture}.png` });
     await expect(page).toHaveScreenshot(`result-active-${fixture}.png`, { maxDiffPixels: 150 });
     check();
   });
 }
+
+test('THERM swaps the photo for the thermal view of the same frame and PHOTO swaps back', async ({ page }) => {
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=cellar&demo=critical');
+  await settle(page);
+  const photo = (await page.getByTestId('result-photo').boundingBox())!;
+  await expect(page.getByTestId('key-therm')).toHaveText('THERM');
+  await expect(page.getByTestId('thermal-view')).toHaveCount(0);
+  await page.getByTestId('key-therm').click();
+  await expect(page.getByTestId('thermal-view')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('key-therm')).toHaveText('PHOTO');
+  const view = (await page.getByTestId('thermal-view').boundingBox())!;
+  expect(Math.abs(view.x - photo.x)).toBeLessThan(1.5);
+  expect(Math.abs(view.width - photo.width)).toBeLessThan(1.5);
+  expect(view.y).toBeGreaterThanOrEqual(photo.y - 1.5);
+  expect(view.y + view.height).toBeLessThanOrEqual(photo.y + photo.height + 1.5);
+  // The view prints the reading the THERM line shows.
+  const therm = (await page.getByText(/^THERM\s+-?\d/).first().innerText()).replace(/\s+/g, ' ');
+  const dt = /(-\d+\.\d)/.exec(therm)?.[1];
+  expect(dt).toBeDefined();
+  await expect(page.getByTestId('thermal-view')).toHaveAttribute('aria-label', new RegExp(`ΔT ${dt!} `));
+  await page.getByTestId('key-therm').click();
+  await expect(page.getByTestId('thermal-view')).toHaveCount(0);
+  await expect(page.getByTestId('key-therm')).toHaveText('THERM');
+  check();
+});
+
+test('result-therm-critical: the thermal view', async ({ page }, testInfo) => {
+  test.skip(page.viewportSize()?.width !== 390, 'one golden, at 390');
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=cellar&demo=critical&therm=1');
+  await expect(page.getByTestId('screen-result')).toBeVisible();
+  await expect(page.getByTestId('thermal-view')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('key-therm')).toHaveText('PHOTO');
+  await page.evaluate(() => document.fonts.ready);
+  await frames(page);
+  await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-therm-critical.png` });
+  await expect(page).toHaveScreenshot('result-therm-critical.png', { maxDiffPixels: 150 });
+  check();
+});
 
 test('inert keys show one line and no ad surface exists', async ({ page }) => {
   const check = watch(page);
@@ -139,6 +188,11 @@ test('QUIET fills the lower glass with the best earlier case', async ({ page }) 
   await page.goto('/result/demo?static=1&fixture=cellar&demo=quiet&case=0002');
   await settle(page);
   await expect(page.getByTestId('result-best')).toHaveText('BEST SO FAR: 84 STRONG · CELLAR · 23:41');
+  const best = await page.getByTestId('result-best').boundingBox();
+  const text = await page.getByTestId('result-best').locator('div,span').first().boundingBox();
+  // Glass text under a rule, left aligned, not a boxed card.
+  expect(await page.getByTestId('result-best').evaluate((el) => getComputedStyle(el).borderLeftWidth)).toBe('0px');
+  expect(text!.x - best!.x).toBeLessThan(4);
   check();
 });
 
