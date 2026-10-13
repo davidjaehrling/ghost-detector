@@ -337,8 +337,16 @@
       "id": "P2-01",
       "phase": "P2",
       "description": "Navigation skeleton",
-      "acceptance": "expo-router routes: / (boot), /viewfinder, /scan, /result/[id], /history, /settings; typed links; back behaviour; L2 spec navigates boot → viewfinder → scan → result with screenshots at the three viewports; no name-dependent strings",
-      "evidence": [],
+      "acceptance": "expo-router routes: / (boot), /viewfinder, /scan, /result/[id], /history, /settings; back behaviour (typed links deferred to P8, D-008); L2 spec navigates boot → viewfinder → scan → result with screenshots at the three viewports; no name-dependent strings",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (x2)",
+          "output": "39 passed both runs; flow boot → viewfinder → scan → result → history at three viewports; back from result lands on viewfinder with 1 record",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -346,8 +354,17 @@
       "phase": "P2",
       "description": "Engine v0: dark-region finder",
       "acceptance": "src/engine/darkRegion.ts: downsample to 64..96 px luma, integral image, 20th-percentile threshold, 4-connected components, score area × darkness × low variance with an edge penalty; pure TS; tests on 5 synthetic fixtures (cellar-like, bright room, pitch black, outdoors, attic) assert region choice and determinism",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test -- darkRegion; adversarial 1px edge column",
+          "output": "5 fixtures assert region choice; determinism; thin edge line accepted (fixed in round 2 with a thickness/aspect filter)",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 at e0d75da (D-008)"
     },
     {
       "id": "P2-03",
@@ -370,16 +387,34 @@
       "phase": "P2",
       "description": "Viewfinder screen",
       "acceptance": "expo-camera preview with permission flow in character (voice guide permission.*), EMF needle placeholder driven by a seeded jitter, capture key; web fallback shows a fixture photo; L2 goldens; design loop entry",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "viewfinder spec x2; cmp against goldens",
+          "output": "expo-camera on native, in-glass permission panel, web fixture fallback; goldens byte-identical except 24 corner AA pixels (<150 tolerance)",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 at e0d75da (D-008)"
     },
     {
       "id": "P2-06",
       "phase": "P2",
       "description": "Scan theatre",
       "acceptance": "6 to 10 s sequence per docs/sound-palette.md §5 timeline (phases, 1.2 s silent hold); progress readouts in character; cancel; deterministic in ?static=1; L2 goldens of two phases",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "scan spec x2",
+          "output": "duration = outcome.scanDurationMs; HOLD_MS 1200; cancel saves nothing (localStorage null); scan-phase2 and scan-hold byte-identical at three viewports",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 at e0d75da (D-008)"
     },
     {
       "id": "P2-07",
