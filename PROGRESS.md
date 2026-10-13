@@ -8,6 +8,8 @@ Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what i
 P0 merged as PR #1, P1 as PR #2 (2026-10-13). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P1-08 boot screen loop at 6.05 (continues as P2-08).
 
 ## Last thing done
+- P2 wave 1 merged into the branch: engine v0 (dark-region finder, seeded outcome matching the psych-brief tables within 0.7 points, profile generator; 55 engine tests), navigation skeleton with flow spec, boot screen round 3 (seeded install identity with Luhn serial, contrast test, key row, graticule per §3). 71 unit tests, 15 goldens.
+- Wave 2 running: viewfinder + scan theatre + state store (Builder A), v0 ghost compositor (FX Engineer).
 - P1 complete except P1-08 (boot screen loop at 6.05, carried over). Panel D-004, rounds D-005, Refuter D-006. PR #2 open, CI green.
 - P1 wave 1 committed: docs/instrument-bible.md (Velden FS-4/87-P), docs/competitor-teardown.md, docs/voice-guide.md, docs/sound-palette.md. Decisions D-002, D-003 logged.
 - P0: Refuter sweep: 7 of 9 P0 claims hold and are flipped to passes:true; P0-06 unverified and P0-09 blocked (both need expo.dev and EXPO_TOKEN). Defects it found are fixed (Maestro selector, screenshot diff, copy linter stems and framing, init.sh pnpm pin).
@@ -17,8 +19,8 @@ P0 merged as PR #1, P1 as PR #2 (2026-10-13). Carried forward: P0-06, P0-09 (exp
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Wave 1 (parallel): Builder B engine v0 (P2-02, 03, 04); Builder A navigation skeleton and boot round 3 (P2-01, P2-08).
-2. Wave 2: viewfinder, scan theatre, result with v0 ghost (P2-05, 06, 07); design loop on four screens (P2-09).
+1. Wave 2 (running): viewfinder, scan theatre, state store (P2-05, 06); v0 ghost compositor in src/fx.
+2. Result screen with the v0 ghost (P2-07); then the design loop on four screens (P2-09) and the Refuter sweep; PR.
 3. When Gate 1 closes: apply identity (P2-11). When expo.dev and the Play items are cleared: first AAB and Maestro video (P2-10), then Phone check 1.
 
 ## Blockers (owner)
