@@ -30,7 +30,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
@@ -61,7 +61,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
@@ -78,7 +78,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
@@ -102,7 +102,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
@@ -126,7 +126,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
@@ -161,7 +161,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
@@ -178,7 +178,7 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
+      "passes": true,
       "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
