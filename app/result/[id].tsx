@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Text as SkText, useImage } from '@shopify/react-native-skia';
+import { Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
@@ -310,9 +310,12 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
     return () => clearTimeout(id);
   }, [isStatic, settled]);
   const stable = isStatic || (settled && faded && scareView.pop === null && scareView.flash === 0);
+  // The SPI digit draws once its font has loaded; the warped snapshot waits for it.
+  const digitFont = useVT323(72);
+  const digitReady = digitFont !== null;
   useEffect(() => {
-    onStable(stable);
-  }, [stable, onStable]);
+    onStable(stable && digitReady);
+  }, [stable, digitReady, onStable]);
 
   const mainLine =
     tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
@@ -525,9 +528,12 @@ function PhotoPanel({
   const image = useImage(v1 ? photoUri : null);
   const photoReady = v1 ? image !== null : loaded;
 
+  // The data strip's font: the warped glass retakes its snapshot once the photo and the strip are both drawn.
+  const stampFont = useVT323(16);
+  const stampReady = stampFont !== null;
   useEffect(() => {
-    onPhotoLoaded(photoReady);
-  }, [photoReady, onPhotoLoaded]);
+    onPhotoLoaded(photoReady && stampReady);
+  }, [photoReady, stampReady, onPhotoLoaded]);
 
   useEffect(() => {
     if (!wantsFigure) return;
@@ -647,7 +653,7 @@ function PhotoPanel({
           <ThermalView field={field} width={W} height={height} top={top} static={isStatic || reduceMotion} />
         </View>
       ) : null}
-      {therm || !ready ? null : <DataStrip text={stamp} width={W} height={height} />}
+      {therm || !ready ? null : <DataStrip text={stamp} width={W} height={height} font={stampFont} />}
       {therm ? null : (
         // The thermal view has its own readout box in the same corner.
         <View style={s.caseBand} pointerEvents="none">
@@ -664,8 +670,7 @@ function PhotoPanel({
 // burned into the picture. A 1 px n0 copy under the text keeps it legible on a bright frame.
 const STRIP_H = 24;
 const STRIP_X = 8;
-function DataStrip({ text, width, height }: { text: string; width: number; height: number }) {
-  const font = useVT323(16);
+function DataStrip({ text, width, height, font }: { text: string; width: number; height: number; font: SkFont | null }) {
   const base = STRIP_H - 8;
   return (
     <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null}>
