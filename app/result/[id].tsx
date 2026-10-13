@@ -4,19 +4,20 @@ import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'reac
 import type { Tier } from '../../src/engine';
 import { GhostV0, placeGhost, regionFromImage, type Placement, type RegionResult } from '../../src/fx/ghostV0';
 import { BELIEF_PROFILE, getBelief } from '../../src/state/belief';
-import { getScan, type ScanRecord } from '../../src/state/scans';
+import { getScan, listScans, type ScanRecord } from '../../src/state/scans';
 import { mulberry32 } from '../../src/ui/boot/seed';
 import type { KeySlot } from '../../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
 import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
 import { demoRecord, isDemoName } from '../../src/ui/result/demo';
-import { panelRegion, panelTop } from '../../src/ui/result/panel';
+import { bestSoFar, NO_PRIOR } from '../../src/ui/result/best';
+import { cropOnFigure, panelRegion, panelTop } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
 import { Readout } from '../../src/ui/Readout';
 import { SpiDial } from '../../src/ui/result/SpiDial';
 import { type GlassSize, Housing } from '../../src/ui/screens/Housing';
-import { color, needle, type } from '../../src/ui/tokens';
+import { color, motion, needle, type } from '../../src/ui/tokens';
 
 const copy = {
   glass: 'Scan result.',
@@ -29,14 +30,14 @@ const copy = {
     trace: 'Trace only. Below threshold for class.',
     active: 'Activity logged.',
     strong: 'Strong. Signature resolving.',
-    critical: 'EVP fragment logged.',
-  } satisfies Record<Tier, string>,
-  coldSpot: (dt: string) => ` Cold spot ${dt} ΔT °C.`,
+    critical: (hz: number) => `EVP fragment logged. CH2 ${hz} Hz.`,
+  },
+  coldSpot: (dt: string) => `COLD SPOT dT ${dt} °C`,
   flux: 'FLUX',
   thermal: 'THERM',
   acoustic: 'ACOUST',
   profile: 'ENTITY PROFILE',
-  offer: 'Run DEEP SCAN to resolve designation, behaviour and EVP.',
+  offer: 'Run DEEP SCAN to resolve designation, behaviour and EVP. Short video plays.',
   none: 'NO SIGNATURE',
   decoded: 'SIGNATURE PARTIALLY DECODED:',
   classLabel: 'CLASS',
@@ -49,15 +50,14 @@ const copy = {
   deepLabel: 'Deep scan',
   log: 'LOG',
   logLabel: 'Open history',
-  back: 'BACK',
+  back: 'NEW SCAN',
   backLabel: 'Back to viewfinder',
   photoLabel: 'Captured photo',
 };
 
 const NOT_FITTED_MS = 1500;
 const FADE_MS = 1500;
-const PANEL_FRACTION = 0.46; // ACTIVE and up
-const PANEL_FRACTION_LOW = 0.34;
+const PHOTO_MIN = 0.3; // least share of the glass the photo keeps on a short screen
 const CHAR_XS = 6.9; // VT323 16 px: 0.4 em advance plus 0.5 tracking
 const FLUX_HOT = 1000; // mG, p5 above
 const THERMAL_COLD = -5; // °C, p5 below
@@ -84,18 +84,18 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
-    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE));
+    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : '0001');
     return getScan(String(params.id ?? ''));
-  }, [harness, params.demo, params.id]);
+  }, [harness, params.demo, params.id, params.case]);
 
   const toViewfinder = () => router.navigate('/viewfinder');
   const [notice, setNotice] = useState(false);
@@ -137,7 +137,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder },
     { testID: 'key-share', label: copy.shareLabel, legend: copy.share, onPress: inert },
     { testID: 'key-forward', label: copy.logLabel, legend: copy.log, onPress: () => router.push('/history') },
-    deepScan ? { testID: 'key-deepscan', label: copy.deepLabel, legend: copy.deep, onPress: inert } : null,
+    deepScan ? { testID: 'key-deepscan', label: copy.deepLabel, legend: copy.deep, onPress: inert, primary: true } : null,
   ];
 
   return (
@@ -148,22 +148,35 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       glassLabel={copy.glass}
       keys={keySlots}
     >
-      {(size) => <ResultGlass size={size} record={record} isStatic={harness.isStatic} notice={notice} />}
+      {(size) => <ResultGlass size={size} record={record} isStatic={harness.isStatic} speed={harness.speed} notice={notice} />}
     </Housing>
   );
 }
 
-function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; record: ScanRecord; isStatic: boolean; notice: boolean }) {
+// Body heights on the 4 px grid. The photo panel takes what is left of the glass.
+const BODY = { pad: 4, reveal: 92, line: 20, readings: 60, profile: 100, profileNone: 36, best: 84, decoded: 28, offer: 36, bottom: 12, gap: 4 };
+
+function bodyHeight(tier: Tier): number {
+  const lines = tier === 'strong' ? 2 : 1;
+  let h = BODY.pad + BODY.reveal + BODY.gap + BODY.line * lines + BODY.gap + BODY.readings + BODY.gap + (tier === 'quiet' ? BODY.profileNone : BODY.profile);
+  if (tier === 'quiet') h += BODY.gap + BODY.best;
+  else h += BODY.gap + BODY.decoded;
+  if (tier === 'active' || tier === 'strong' || tier === 'critical') h += BODY.offer + BODY.gap;
+  return h + BODY.bottom;
+}
+
+function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSize; record: ScanRecord; isStatic: boolean; speed: number; notice: boolean }) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
   const wide = tier === 'active' || tier === 'strong' || tier === 'critical';
-  const photoH = Math.round(size.h * (wide ? PANEL_FRACTION : PANEL_FRACTION_LOW));
+  const quiet = tier === 'quiet';
+  const photoH = Math.round(Math.max(size.h * PHOTO_MIN, size.h - bodyHeight(tier)));
   const reading = readingsFor(record.seed, tier);
 
-  // Needle reveal spring (Bible section 3). Only the needle springs: the number
-  // is blank (--) while it travels and lands in one frame at its first crossing
-  // of the target. The figure fades in once the needle has settled.
+  // Reveal (psych brief 2.6): 1.2 s of silence with the number blank, the needle at
+  // rest and the photo up; then the needle springs and the number lands in one frame at
+  // its first crossing of the target; the figure fades in once the needle has settled.
   const [value] = useState(() => new Animated.Value(isStatic ? outcome.spi : 0));
   const [landed, setLanded] = useState(isStatic);
   const [settled, setSettled] = useState(isStatic);
@@ -173,6 +186,7 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
       if (v >= outcome.spi - 0.25) setLanded(true);
     });
     let anim: Animated.CompositeAnimation | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     let alive = true;
     AccessibilityInfo.isReduceMotionEnabled()
       .catch(() => false)
@@ -184,32 +198,37 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
           setSettled(true);
           return;
         }
-        if (outcome.spi <= 0) setLanded(true);
-        anim = Animated.spring(value, {
-          toValue: outcome.spi,
-          mass: needle.reveal.mass,
-          stiffness: needle.reveal.stiffness,
-          damping: needle.reveal.damping,
-          useNativeDriver: false,
-        });
-        anim.start(() => {
+        timer = setTimeout(() => {
           if (!alive) return;
-          setLanded(true);
-          setSettled(true);
-        });
+          if (outcome.spi <= 0) setLanded(true);
+          anim = Animated.spring(value, {
+            toValue: outcome.spi,
+            mass: needle.reveal.mass,
+            stiffness: needle.reveal.stiffness,
+            damping: needle.reveal.damping,
+            useNativeDriver: false,
+          });
+          anim.start(() => {
+            if (!alive) return;
+            setLanded(true);
+            setSettled(true);
+          });
+        }, motion.hold / speed);
       });
     return () => {
       alive = false;
+      if (timer) clearTimeout(timer);
       anim?.stop();
       value.removeListener(id);
     };
-  }, [isStatic, outcome.spi, value]);
+  }, [isStatic, speed, outcome.spi, value]);
 
-  const quiet = tier === 'quiet';
-  const cold = tier === 'strong' || tier === 'critical' ? copy.coldSpot(reading.thermalC.toFixed(1)) : '';
-  const resultLine = notice ? copy.notFitted : `${copy.line[tier]}${cold}`;
+  const mainLine =
+    tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
+  const resultLine = notice ? copy.notFitted : mainLine;
   const pct = profile.signatureDecodedPct;
   const innerW = size.w - 24;
+  const best = useMemo(() => (quiet ? bestSoFar(listScans(), record.id) : null), [quiet, record.id]);
 
   // Hidden strings for the redaction bars: the real name, the first trait line
   // and an EVP line of seeded length. Bars match their width, never a block glyph.
@@ -232,29 +251,34 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
         </View>
-        <View style={s.readRow2}>
-          <View style={s.readings}>
-            <Readout
-              size="rdXS"
-              label={copy.flux}
-              value={String(reading.fluxMg)}
-              unit="mG"
-              labelCh={6}
-              valueColor={reading.fluxMg > FLUX_HOT ? color.p5 : color.p4}
-            />
-            <Readout
-              size="rdXS"
-              label={copy.thermal}
-              value={reading.thermalC.toFixed(1)}
-              unit="°C"
-              labelCh={6}
-              valueColor={reading.thermalC < THERMAL_COLD ? color.p5 : color.p4}
-            />
-            <Readout size="rdXS" label={copy.acoustic} value={String(reading.levelDb)} unit="dBFS" labelCh={6} />
-          </View>
-          <Text style={s.resultLine} testID="result-line">
+        <View style={s.lines}>
+          <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
             {resultLine}
           </Text>
+          {tier === 'strong' ? (
+            <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
+              {copy.coldSpot(reading.coldSpotC.toFixed(1))}
+            </Text>
+          ) : null}
+        </View>
+        <View style={s.readings}>
+          <Readout
+            size="rdXS"
+            label={copy.flux}
+            value={String(reading.fluxMg)}
+            unit="mG"
+            labelCh={6}
+            valueColor={reading.fluxMg > FLUX_HOT ? color.p5 : color.p4}
+          />
+          <Readout
+            size="rdXS"
+            label={copy.thermal}
+            value={reading.thermalC.toFixed(1)}
+            unit="°C"
+            labelCh={6}
+            valueColor={reading.thermalC < THERMAL_COLD ? color.p5 : color.p4}
+          />
+          <Readout size="rdXS" label={copy.acoustic} value={String(reading.levelDb)} unit="dBFS" labelCh={6} />
         </View>
         <View style={s.profile} testID="result-profile">
           <Text style={s.profileHead}>{copy.profile}</Text>
@@ -270,18 +294,30 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
             </>
           )}
         </View>
-        <View style={s.spacer} />
         {quiet ? null : (
-          <View style={s.bottom}>
-            {wide ? (
-              <Text style={s.offer} testID="result-offer">
-                {copy.offer}
-              </Text>
-            ) : null}
+          <View style={s.decodedBlock}>
             <Text style={s.decoded} testID="result-decoded">{`${copy.decoded} ${pct}%`}</Text>
             <DecodeBar pct={pct} />
           </View>
         )}
+        {quiet ? null : <View style={s.spacer} />}
+        {wide ? (
+          <Text style={s.offer} testID="result-offer">
+            {copy.offer}
+          </Text>
+        ) : null}
+        {quiet ? (
+          <View style={s.best} testID="result-best">
+            {best ? (
+              <Text style={s.bestText}>
+                <Text style={{ color: color.p3 }}>{`${best.prefix} `}</Text>
+                {best.value}
+              </Text>
+            ) : (
+              <Text style={[s.bestText, { color: color.p3 }]}>{NO_PRIOR}</Text>
+            )}
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -340,10 +376,10 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
     if (!wantsFigure || !read.done) return null;
     const region = read.result?.region ?? null;
     const meanLuma = read.result?.meanLuma ?? DEFAULT_MEAN_LUMA;
-    const top = panelTop(height, imgH, region ? region.cy : null);
+    const top0 = panelTop(height, imgH, region ? region.cy : null);
     const belief = getBelief();
     const opacityRange = outcome.smudge ? SMUDGE_OPACITY : belief ? BELIEF_PROFILE[belief].opacityRange : undefined;
-    let placement = placeGhost(panelRegion(region, imgH, height, top), { w: W, h: height }, seed, opacityRange ? { opacityRange } : {});
+    let placement = placeGhost(panelRegion(region, imgH, height, top0), { w: W, h: height }, seed, { tier: outcome.tier, ...(opacityRange ? { opacityRange } : {}) });
     if (outcome.smudge) {
       const w = placement.w * SMUDGE_SCALE;
       const h = placement.h * SMUDGE_SCALE;
@@ -356,7 +392,10 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
         offsetCopies: placement.offsetCopies.map((c) => ({ ...c, dx: c.dx * SMUDGE_SCALE, dy: c.dy * SMUDGE_SCALE })),
       };
     }
-    return { placement, meanLuma, p90: read.result?.p90Luma, top };
+    // Second pass: slide the photo so the figure, not the dark region, is what the crop centres on.
+    const crop = cropOnFigure(height, imgH, top0, placement);
+    placement = { ...placement, y: placement.y + crop.dy };
+    return { placement, meanLuma, p90: read.result?.p90Luma, top: crop.top };
   }, [wantsFigure, read, W, imgH, height, seed, outcome.smudge]);
 
   const ready = read.done && loaded;
@@ -399,24 +438,26 @@ const s = StyleSheet.create({
   // Hard-edged n0 band over the top of the photo carries the case number.
   caseBand: { position: 'absolute', left: 0, right: 0, top: 0, height: 20, backgroundColor: 'rgba(10, 15, 11, 0.64)', justifyContent: 'center', paddingHorizontal: 12 },
   caseText: { ...type.rdXS, color: color.p3 },
-  body: { flex: 1, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6 },
-  revealRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  body: { flex: 1, paddingHorizontal: 12, paddingTop: BODY.pad, paddingBottom: BODY.bottom },
+  revealRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: BODY.reveal },
   revealLeft: { flexShrink: 1 },
   tier: { letterSpacing: 1 },
   spi: { height: 64, minWidth: 88 },
-  readRow2: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 4 },
-  readings: { width: 17 * CHAR_XS + 2 },
-  resultLine: { ...type.rdXS, flex: 1, color: color.p4 },
-  profile: { borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 4, marginTop: 4 },
+  lines: { marginTop: BODY.gap },
+  resultLine: { ...type.rdXS, height: BODY.line, color: color.p4 },
+  readings: { marginTop: BODY.gap, width: 17 * CHAR_XS + 2 },
+  profile: { borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 4, marginTop: BODY.gap },
   profileHead: { ...type.lbXS, color: color.p3, height: 12 },
   profRow: { flexDirection: 'row', alignItems: 'center', height: 16 },
   profLabel: { ...type.lbXS, width: LABEL_W, color: color.p3 },
   profileValue: { ...type.rdXS, color: color.p4 },
   mask: { height: 8, backgroundColor: color.p2 },
-  spacer: { flex: 1 },
-  bottom: { gap: 2 },
-  offer: { ...type.rdXS, color: color.p4 },
+  decodedBlock: { marginTop: BODY.gap, gap: 2 },
+  spacer: { flex: 1, minHeight: BODY.gap },
+  offer: { ...type.rdXS, color: color.p4, marginBottom: BODY.gap },
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },
+  best: { flex: 1, borderWidth: 1, borderColor: color.p1, alignItems: 'center', justifyContent: 'center', marginTop: BODY.gap, paddingHorizontal: 4 },
+  bestText: { ...type.rdXS, color: color.p4, textAlign: 'center' },
 });

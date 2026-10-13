@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_AREA_FRACTION, placeGhost } from '../../../fx/ghostV0/placement';
-import { panelRegion, panelTop } from '../panel';
+import { cropOnFigure, panelRegion, panelTop } from '../panel';
 
 const W = 320;
 const IMG_H = Math.round(W * (4 / 3));
@@ -40,5 +40,29 @@ describe('result photo panel', () => {
         expect(p.y + p.h).toBeLessThanOrEqual(panelH + 1);
       }
     }
+  });
+
+  it('crops on the figure so its centre sits 15 to 40% in from the nearer panel edge', () => {
+    const panelH = 298;
+    let checked = 0;
+    for (const cy of [0.3, 0.45, 0.6, 0.7, 0.8]) {
+      const reg = { ...region, y: cy - 0.12, h: 0.24, cy };
+      for (let seed = 1; seed <= 40; seed++) {
+        const top0 = panelTop(panelH, IMG_H, reg.cy);
+        const p0 = placeGhost(panelRegion(reg, IMG_H, panelH, top0), { w: W, h: panelH }, seed);
+        const { top, dy } = cropOnFigure(panelH, IMG_H, top0, p0);
+        const y = p0.y + dy;
+        expect(top).toBeLessThanOrEqual(0);
+        expect(top).toBeGreaterThanOrEqual(panelH - IMG_H);
+        expect(y).toBeGreaterThanOrEqual(-1);
+        expect(y + p0.h).toBeLessThanOrEqual(panelH + 1);
+        const c = (y + p0.h / 2) / panelH;
+        const near = Math.min(c, 1 - c);
+        expect(near).toBeGreaterThanOrEqual(0.15 - 0.01);
+        expect(near).toBeLessThanOrEqual(0.4 + 0.01);
+        checked++;
+      }
+    }
+    expect(checked).toBe(200);
   });
 });

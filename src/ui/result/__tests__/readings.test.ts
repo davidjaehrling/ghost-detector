@@ -19,6 +19,20 @@ describe('readingsFor', () => {
       expect(lows[4]!.thermalC).toBeLessThan(lows[0]!.thermalC);
     }
   });
+  it('draws a cold spot below THERM and an EVP carrier in 180 to 420 Hz', () => {
+    for (let seed = 1; seed < 300; seed++) {
+      for (const t of TIERS) {
+        const r = readingsFor(seed, t);
+        expect(r.coldSpotC).toBeLessThanOrEqual(r.thermalC);
+        expect(r.coldSpotC).toBeGreaterThanOrEqual(-12);
+        expect(Number.isInteger(r.evpHz)).toBe(true);
+        expect(r.evpHz).toBeGreaterThanOrEqual(180);
+        expect(r.evpHz).toBeLessThanOrEqual(420);
+      }
+      const strong = readingsFor(seed, 'strong');
+      expect(strong.coldSpotC).not.toBe(strong.thermalC);
+    }
+  });
   it('formats with units', () => {
     expect(formatReadings({ fluxMg: 1230, thermalC: -4.7, levelDb: -38 })).toEqual({
       flux: '1230 mG',

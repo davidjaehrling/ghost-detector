@@ -312,6 +312,8 @@ export type KeySlot = {
   onPress: () => void;
   /** Engraved but not live: n4 legend, press does nothing. */
   inert?: boolean;
+  /** The one offered action: p5 backlit legend and a 1 px p3 keyline. */
+  primary?: boolean;
 };
 
 export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
@@ -344,7 +346,7 @@ export function DummyCap() {
 
 // Rubber key: darker n2 face, 1 px n4 top highlight. Legend is lbM (Bible
 // section 5 sets key legends at 13 px). Long legends wrap on the space.
-export function Key({ testID, label, legend, onPress, inert = false }: KeySlot) {
+export function Key({ testID, label, legend, onPress, inert = false, primary = false }: KeySlot) {
   return (
     <Pressable
       testID={testID}
@@ -352,9 +354,9 @@ export function Key({ testID, label, legend, onPress, inert = false }: KeySlot) 
       accessibilityLabel={label}
       accessibilityState={{ disabled: inert }}
       onPress={inert ? undefined : onPress}
-      style={({ pressed }) => [st.key, pressed && !inert && st.keyDown]}
+      style={({ pressed }) => [st.key, primary && st.keyPrimary, pressed && !inert && st.keyDown]}
     >
-      <Text style={[st.keyLegend, inert && st.keyLegendInert]} numberOfLines={2}>
+      <Text style={[st.keyLegend, inert && st.keyLegendInert, primary && st.keyLegendPrimary]} numberOfLines={2}>
         {legend}
       </Text>
     </Pressable>
@@ -501,8 +503,10 @@ const st = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 2,
   },
+  keyPrimary: { outlineWidth: 1, outlineColor: color.p3, outlineStyle: 'solid', outlineOffset: 0 },
   keyDown: { borderBottomWidth: 1, borderTopWidth: 3, borderTopColor: color.n0 },
   keyLegend: { ...type.lbM, color: color.n6, opacity: 0.85, textAlign: 'center' },
+  keyLegendPrimary: { color: color.p5, opacity: 1 },
   keyLegendInert: { color: color.n4, opacity: 1 },
   dummy: {
     width: KEY_W,

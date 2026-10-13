@@ -6,7 +6,15 @@ import { mulberry32 } from '../boot/seed';
 // record, same lines, and a stronger tier reads higher flux, colder and louder.
 // Bible section 3 units: mG (1 below 1000, 10 above), dT in 0.1 C, dBFS in 1 dB.
 
-export type Readings = { fluxMg: number; thermalC: number; levelDb: number };
+export type Readings = {
+  fluxMg: number;
+  thermalC: number;
+  levelDb: number;
+  /** Local minimum under the ambient THERM reading (STRONG line). Never equal to thermalC. */
+  coldSpotC: number;
+  /** EVP fragment carrier, 180 to 420 Hz (CRITICAL line). */
+  evpHz: number;
+};
 
 type Band = { flux: [number, number]; dt: [number, number]; db: [number, number] };
 
@@ -27,10 +35,13 @@ export function readingsFor(seed: number, tier: Tier): Readings {
   const fluxMg = raw >= 1000 ? Math.min(2000, Math.round(raw / 10) * 10) : Math.round(raw);
   const thermalC = Math.round(between(r(), b.dt) * 10) / 10;
   const levelDb = Math.round(between(r(), b.db));
-  return { fluxMg, thermalC, levelDb };
+  // Drawn after the three readings so those keep their values for a given seed.
+  const coldSpotC = Math.max(-12, Math.round((thermalC - between(r(), [0.6, 1.8])) * 10) / 10);
+  const evpHz = Math.round(between(r(), [180, 420]));
+  return { fluxMg, thermalC, levelDb, coldSpotC, evpHz };
 }
 
-export function formatReadings({ fluxMg, thermalC, levelDb }: Readings) {
+export function formatReadings({ fluxMg, thermalC, levelDb }: Pick<Readings, 'fluxMg' | 'thermalC' | 'levelDb'>) {
   return {
     flux: `${fluxMg} mG`,
     thermal: `${thermalC.toFixed(1)} °C`,
