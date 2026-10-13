@@ -35,6 +35,8 @@ const copy = {
   'hud.tagLabel': 'Location tag, step to the next',
   'hud.allow': 'ALLOW',
   'hud.allowLabel': 'Allow camera access',
+  'hud.log': 'LOG',
+  'hud.logLabel': 'Open history',
   'hud.capture': 'CAPTURE',
   'hud.captureLabel': 'Capture photo',
 };
@@ -158,7 +160,8 @@ function Viewfinder({
   const lore = hasSeenTag(tag) ? null : LORE[tag];
 
   const keySlots: (KeySlot | null)[] = [
-    null,
+    // History is one tap from here (the result screen's key row carries THERM instead).
+    { testID: 'key-log', label: copy['hud.logLabel'], legend: copy['hud.log'], onPress: () => router.push('/history') },
     null,
     showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
     canCapture ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => void capture(), backlit: true } : null,

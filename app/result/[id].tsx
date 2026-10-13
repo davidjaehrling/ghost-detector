@@ -6,6 +6,7 @@ import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'reac
 import type { Tier } from '../../src/engine';
 import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
 import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
+import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
 import { useSkiaReady } from '../../src/fx/useSkiaReady';
 import { BELIEF_PROFILE, getBelief } from '../../src/state/belief';
 import { getScan, listScans, type ScanRecord } from '../../src/state/scans';
@@ -57,8 +58,9 @@ const copy = {
   shareLabel: 'Share result',
   deep: 'DEEP SCAN',
   deepLabel: 'Deep scan',
-  log: 'LOG',
-  logLabel: 'Open history',
+  thermKeyLabel: 'Thermal view',
+  photoKey: 'PHOTO',
+  photoKeyLabel: 'Photo view',
   back: 'NEW SCAN',
   backLabel: 'Back to viewfinder',
   photoLabel: 'Captured photo',
@@ -93,12 +95,12 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
@@ -119,6 +121,8 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
         ? 'armed'
         : 'off';
 
+  // Thermal view of the photo panel (THERM key). ?static=1&therm=1 opens it for the golden.
+  const [therm, setTherm] = useState(harness.isStatic && params.therm === '1');
 
   const toViewfinder = () => router.navigate('/viewfinder');
   const [notice, setNotice] = useState(false);
@@ -153,13 +157,15 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     );
   }
 
-  // Fixed four-slot row: BACK, SHARE, LOG, then the primary slot. DEEP SCAN
+  // Fixed four-slot row: BACK, SHARE, THERM (PHOTO while it shows), then the primary slot. DEEP SCAN
   // takes the far right on ACTIVE and up and is a dummy cap below that.
   const deepScan = record.outcome.tier !== 'quiet' && record.outcome.tier !== 'trace';
   const keySlots: (KeySlot | null)[] = [
     { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder },
     { testID: 'key-share', label: copy.shareLabel, legend: copy.share, onPress: inert },
-    { testID: 'key-forward', label: copy.logLabel, legend: copy.log, onPress: () => router.push('/history') },
+    therm
+      ? { testID: 'key-therm', label: copy.photoKeyLabel, legend: copy.photoKey, onPress: () => setTherm(false), backlit: true }
+      : { testID: 'key-therm', label: copy.thermKeyLabel, legend: copy.thermal, onPress: () => setTherm(true) },
     deepScan ? { testID: 'key-deepscan', label: copy.deepLabel, legend: copy.deep, onPress: inert, primary: true } : null,
   ];
 
@@ -171,7 +177,17 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       glassLabel={copy.glass}
       keys={keySlots}
     >
-      {(size) => <ResultGlass size={size} record={record} isStatic={harness.isStatic} speed={harness.speed} notice={notice} scare={scareMode} />}
+      {(size) => (
+        <ResultGlass
+          size={size}
+          record={record}
+          isStatic={harness.isStatic}
+          speed={harness.speed}
+          notice={notice}
+          scare={scareMode}
+          therm={therm}
+        />
+      )}
     </Housing>
   );
 }
@@ -195,9 +211,10 @@ type GlassProps = {
   speed: number;
   notice: boolean;
   scare: ScareMode;
+  therm: boolean;
 };
 
-function ResultGlass({ size, record, isStatic, speed, notice, scare }: GlassProps) {
+function ResultGlass({ size, record, isStatic, speed, notice, scare, therm }: GlassProps) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -279,6 +296,8 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare }: GlassProp
         settled={settled}
         isStatic={isStatic}
         pop={scareView.pop}
+        therm={therm}
+        thermalC={reading.thermalC}
       />
       <View style={s.body}>
         <View style={s.revealRow}>
@@ -390,6 +409,9 @@ function DecodeBar({ pct }: { pct: number }) {
 
 type Layout = { placement: Placement; region: ReturnType<typeof panelRegion>; meanLuma: number; top: number } | null;
 
+// A flat mid-grey grid for a photo that cannot be read (the thermal view still has a room to draw).
+const FLAT_GRID: LumaGrid = { luma: new Uint8Array(72 * 96).fill(128), width: 72, height: 96 };
+
 // Catches a compositor that cannot start (shader compile) and hands the panel to the v0 path.
 class V1Boundary extends Component<{ onFail: () => void; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -409,7 +431,8 @@ class V1Boundary extends Component<{ onFail: () => void; children: ReactNode }, 
 // (frame = panel size), so the 15% cap applies to what is seen. The panel mounts once the region
 // read is done (and the photo has decoded), so a screenshot never catches a half-built picture.
 // Compositor v1 (Skia) draws photo, figure and grain on one canvas; the RN image with GhostV0
-// stays as the fallback when Skia is not ready or the shader cannot compile.
+// stays as the fallback when Skia is not ready or the shader cannot compile. The THERM key swaps
+// the contents for the thermal view of the same frame.
 function PhotoPanel({
   size,
   height,
@@ -417,6 +440,8 @@ function PhotoPanel({
   settled,
   isStatic,
   pop,
+  therm,
+  thermalC,
 }: {
   size: GlassSize;
   height: number;
@@ -424,9 +449,12 @@ function PhotoPanel({
   settled: boolean;
   isStatic: boolean;
   pop: number | null;
+  therm: boolean;
+  thermalC: number;
 }) {
   const { outcome, photoUri, seed, id } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
+  const reduceMotion = useReduceMotion();
   const skia = useSkiaReady();
   const [v1Failed, setV1Failed] = useState(false);
   const v1 = skia && !v1Failed && wantsFigure;
@@ -483,6 +511,21 @@ function PhotoPanel({
     return { placement, region: panel, meanLuma, top: crop.top };
   }, [wantsFigure, read, W, imgH, height, placementSeed, outcome.smudge, outcome.tier]);
 
+  // The thermal field: built once per record from the photo's luma, pinned to the THERM reading.
+  const [field, setField] = useState<ThermalField | null>(null);
+  useEffect(() => {
+    let alive = true;
+    lumaFromImage(photoUri)
+      .catch(() => null)
+      .then((src) => {
+        if (!alive) return;
+        setField(buildThermalField(src?.grid ?? FLAT_GRID, src?.region ?? null, { seed, tier: outcome.tier, deltaC: thermalC }));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [photoUri, seed, outcome.tier, thermalC]);
+
   const ready = read.done && photoReady;
   const top = layout ? layout.top : panelTop(height, imgH, null);
   const showGhost = layout !== null && ready && settled;
@@ -532,7 +575,7 @@ function PhotoPanel({
           <GhostV0 placement={layout.placement} regionMeanLuma={layout.meanLuma} regionP90Luma={read.result?.p90Luma} fadeInMs={isStatic ? 0 : FADE_MS} />
         </View>
       ) : null}
-      {layout && ready && pop !== null ? (
+      {layout && ready && pop !== null && !therm ? (
         // Jump-scare: the compositor has no pop prop, so a GhostV0 layer above the canvas carries it:
         // a second figure layer at the matte's full opacity for one frame (0 until then).
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -544,9 +587,17 @@ function PhotoPanel({
           />
         </View>
       ) : null}
-      <View style={s.caseBand} pointerEvents="none">
-        <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
-      </View>
+      {therm && field ? (
+        <View style={StyleSheet.absoluteFill}>
+          <ThermalView field={field} width={W} height={height} top={top} static={isStatic || reduceMotion} />
+        </View>
+      ) : null}
+      {therm ? null : (
+        // The thermal view has its own readout box in the same corner.
+        <View style={s.caseBand} pointerEvents="none">
+          <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
+        </View>
+      )}
     </View>
   );
 }
