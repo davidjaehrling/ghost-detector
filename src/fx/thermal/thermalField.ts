@@ -4,13 +4,15 @@
  * size (120 x 160 for a portrait photo) and the view upscales it in blocks.
  *
  * Temperature model, all in °C:
- *   T = ambient + base(luma) + noise - coldSpot
+ *   T = ambient + base(luma) + edge(luma) + noise - coldSpot
  * - ambient: seeded, 17 to 23 °C.
  * - base: smoothed luma around its median over its 5 to 95% spread, bright = warm, soft-clamped
  *   to ±4 °C.
- * - noise: slow seeded value noise, never beyond ±0.4 °C.
+ * - edge: the luma's high-pass, up to ±1.8 °C (hot and cold rims at edges).
+ * - noise: slow seeded value noise plus a fixed per-pixel pattern, never beyond ±0.4 °C.
  * - coldSpot: a Gaussian dip centred in the dark region (psych brief 2: the cold spot is the
- *   retellable detail), radius 8 to 14% of the frame's short side, depth by tier.
+ *   retellable detail), radius 8 to 14% of the frame's short side, depth by tier; from STRONG up
+ *   half of it is a body-height smudge (about 1.6:1, upright).
  * The cold spot draws from its own random stream, so the same seed on QUIET and CRITICAL gives
  * the same room with and without the dip; `coldSpotC` is exactly the dip at its centre.
  */
@@ -29,6 +31,26 @@ export const NOISE_AMP = 0.4;
 export const BASE_SPAN = 4;
 /** Bible section 3: ΔT reads -12.0 to +6.0; a cold spot is never colder than -12. */
 export const DELTA_MIN = -12;
+/**
+ * Hot and cold edges (D-017): the luma's high-pass (fine minus coarse) adds up to ±EDGE_C, so an
+ * edge between a lit and a dark surface reads as a warm rim against a cold one, as on a real
+ * microbolometer. Flat luma gives none.
+ */
+export const EDGE_C = 1.8;
+/** Share of the noise budget that is fixed per-pixel sensor pattern (makes the 160 x 120 blocks show). */
+export const FPN_SHARE = 0.3;
+/**
+ * From STRONG up the cold spot carries a body-height smudge (D-017): an upright ellipse about
+ * 1.6:1 that takes SMUDGE_SHARE of the dip, inside the round rest. Both parts are 1 at the
+ * centre, so ΔT is unchanged.
+ */
+export const SMUDGE_FROM: readonly Tier[] = ['strong', 'critical'];
+export const SMUDGE_ASPECT = 1.6;
+export const SMUDGE_SHARE = 0.75;
+/** Smudge half-width as a fraction of the round dip's sigma. */
+export const SMUDGE_W = 0.55;
+/** With the smudge, the round rest of the dip tightens to this share of its sigma. */
+export const SMUDGE_CORE = 0.6;
 
 /** Cold-spot depth in °C by tier (QUIET has none). */
 export const TIER_DEPTH: Readonly<Record<Tier, number>> = {
@@ -231,15 +253,23 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
   const spotRnd = mulberry32((seed ^ 0x9e3779b9) >>> 0);
 
   const ambientC = AMBIENT_RANGE[0] + room() * (AMBIENT_RANGE[1] - AMBIENT_RANGE[0]);
-  const lum = boxBlur(resample(grid, w, h), w, h, 2, 3);
+  const raw = resample(grid, w, h);
+  // A light blur for the picture (the sensor's own softness), a heavy one for the edge term.
+  // boxBlur reuses its input as scratch, so each gets its own copy.
+  const lum = boxBlur(raw.slice(), w, h, 1, 2);
+  const coarse = boxBlur(raw.slice(), w, h, 4, 3);
   // Contrast-stretched like a camera's gain: the photo's own 5 to 95% luma spread sets the scale,
   // so a dark cellar still shows its walls. Flat luma stays flat (the floor of 40 levels).
   const [p5, med, p95] = percentiles(lum);
   const lumScale = 1.6 / Math.max(40, p95 - p5);
 
-  // Two octaves whose peaks sum to NOISE_AMP.
+  // Two octaves plus a fixed per-pixel pattern whose peaks sum to NOISE_AMP. The pattern has its
+  // own stream, so the room's slow noise is the same as before it was added.
   const n1 = valueNoise(w, h, 40, room);
   const n2 = valueNoise(w, h, 17, room);
+  const fpnRnd = mulberry32((seed ^ 0x51ed270b) >>> 0);
+  const fpn = new Float32Array(w * h);
+  for (let i = 0; i < fpn.length; i++) fpn[i] = fpnRnd() * 2 - 1;
 
   const depth = coldSpotDepth(opts.tier, opts.deltaC);
   const centre = spotCentre(region, lum, w, h, spotRnd);
@@ -248,6 +278,11 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
   const cxp = centre.x * w;
   const cyp = centre.y * h;
   const inv2s2 = 1 / (2 * sigma * sigma);
+  const smudge = depth > 0 && SMUDGE_FROM.includes(opts.tier);
+  const sx = SMUDGE_W * sigma;
+  const sy = SMUDGE_ASPECT * sx;
+  // A slight seeded lean and a narrower top (the head end), so it is not a clean ellipse.
+  const lean = (spotRnd() * 2 - 1) * 0.25;
 
   const data = new Float32Array(w * h);
   let minC = Infinity;
@@ -256,11 +291,19 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
       const base = BASE_SPAN * Math.tanh((lum[i]! - med) * lumScale);
-      const noise = NOISE_AMP * (0.68 * n1[i]! + 0.32 * n2[i]!);
+      const edge = EDGE_C * Math.tanh((lum[i]! - coarse[i]!) * lumScale * 3);
+      const noise = NOISE_AMP * ((1 - FPN_SHARE) * (0.68 * n1[i]! + 0.32 * n2[i]!) + FPN_SHARE * fpn[i]!);
       const dx = x + 0.5 - cxp;
       const dy = y + 0.5 - cyp;
-      const dip = depth > 0 ? depth * Math.exp(-(dx * dx + dy * dy) * inv2s2) : 0;
-      data[i] = ambientC + base + noise - dip;
+      const round = Math.exp(-(dx * dx + dy * dy) * inv2s2);
+      let dip = 0;
+      if (depth > 0 && smudge) {
+        const ux = dx - lean * dy;
+        const wx = sx * (dy < 0 ? 0.8 + 0.2 * Math.exp(-(dy * dy) / (2 * sy * sy)) : 1);
+        const core = Math.exp(-((dx * dx + dy * dy) * inv2s2) / (SMUDGE_CORE * SMUDGE_CORE));
+        dip = depth * ((1 - SMUDGE_SHARE) * core + SMUDGE_SHARE * Math.exp(-(ux * ux) / (2 * wx * wx) - (dy * dy) / (2 * sy * sy)));
+      } else if (depth > 0) dip = depth * round;
+      data[i] = ambientC + base + edge + noise - dip;
       const t = data[i]!; // min and max of the stored float32 values
       if (t < minC) minC = t;
       if (t > maxC) maxC = t;

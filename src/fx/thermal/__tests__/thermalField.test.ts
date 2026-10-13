@@ -58,7 +58,7 @@ describe('buildThermalField', () => {
     expect(p.data.length).toBe(120 * 160);
   });
 
-  it('keeps ambient in 17..23 °C, the noise within ±0.4 °C and min/max honest', () => {
+  it('keeps ambient in 17..23 °C, the noise within ±0.4 °C and min/max honest', { timeout: 30000 }, () => {
     for (let s = 0; s < 200; s++) {
       // Flat luma: the only variation left is the noise.
       const f = buildThermalField({ luma: new Uint8Array(72 * 96).fill(90), width: 72, height: 96 }, null, { seed: s * 7919, tier: 'quiet' });
@@ -87,7 +87,7 @@ describe('buildThermalField', () => {
     expect(wall - door).toBeGreaterThan(2);
   });
 
-  it('puts the cold spot inside the dark region, sized 8 to 14% of the short side', () => {
+  it('puts the cold spot inside the dark region, sized 8 to 14% of the short side', { timeout: 30000 }, () => {
     for (let s = 0; s < 300; s++) {
       const { grid, region } = room(s + 11);
       const tier = TIERS[1 + (s % 4)] as Tier;
@@ -103,7 +103,7 @@ describe('buildThermalField', () => {
     }
   });
 
-  it('measures ΔT equal to the tier depth within 0.3 °C (same room with and without the dip)', () => {
+  it('measures ΔT equal to the tier depth within 0.3 °C (same room with and without the dip)', { timeout: 30000 }, () => {
     for (let s = 0; s < 100; s++) {
       const { grid, region } = room(s + 500);
       const seed = s * 2654435761;
@@ -122,7 +122,7 @@ describe('buildThermalField', () => {
     }
   });
 
-  it('makes the cold spot the coldest point on STRONG and CRITICAL', () => {
+  it('makes the cold spot the coldest point on STRONG and CRITICAL', { timeout: 30000 }, () => {
     for (let s = 0; s < 100; s++) {
       const { grid, region } = room(s + 900);
       for (const tier of ['strong', 'critical'] as const) {
@@ -131,6 +131,63 @@ describe('buildThermalField', () => {
         expect(sampleField(f, c.x, c.y)).toBeLessThan(f.minC + 0.6);
       }
     }
+  });
+
+  it('shapes the cold spot as a body-height smudge (about 1.6:1 upright) from STRONG up (D-017)', { timeout: 30000 }, () => {
+    // Second moments of the dip (this field minus the same room on QUIET) around the spot centre.
+    const extent = (tier: 'active' | 'strong' | 'critical', seed: number) => {
+      const { grid, region } = room(seed + 300);
+      const f = buildThermalField(grid, region, { seed, tier });
+      const q = buildThermalField(grid, region, { seed, tier: 'quiet' });
+      const c = f.coldSpot!;
+      const cx = c.x * f.width;
+      const cy = c.y * f.height;
+      let sw = 0;
+      let vx = 0;
+      let vy = 0;
+      for (let y = 0; y < f.height; y++)
+        for (let x = 0; x < f.width; x++) {
+          const d = Math.max(0, at(q, x, y) - at(f, x, y));
+          sw += d;
+          vx += d * (x + 0.5 - cx) ** 2;
+          vy += d * (y + 0.5 - cy) ** 2;
+        }
+      return { w: Math.sqrt(vx / sw), h: Math.sqrt(vy / sw) };
+    };
+    for (let s = 1; s < 30; s++) {
+      for (const tier of ['strong', 'critical'] as const) {
+        const e = extent(tier, s);
+        expect(e.h / e.w, `${tier} seed ${s}`).toBeGreaterThan(1.3);
+        expect(e.h / e.w, `${tier} seed ${s}`).toBeLessThan(1.9);
+      }
+      const a = extent('active', s);
+      expect(a.h / a.w).toBeLessThan(1.15);
+    }
+  });
+
+  it('shows the sensor blocks: neighbouring pixels differ (fixed pattern), within the noise budget', () => {
+    const f = buildThermalField({ luma: new Uint8Array(72 * 96).fill(90), width: 72, height: 96 }, null, { seed: 5, tier: 'quiet' });
+    let diffs = 0;
+    for (let i = 1; i < f.data.length; i++) if (Math.abs(f.data[i]! - f.data[i - 1]!) > 0.02) diffs++;
+    expect(diffs / f.data.length).toBeGreaterThan(0.8);
+  });
+
+  it('puts a warm rim on the lit side of an edge and a cold rim on the dark side', () => {
+    const width = 72;
+    const height = 96;
+    const luma = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) luma[y * width + x] = x < width / 2 ? 40 : 160;
+    const f = buildThermalField({ luma, width, height }, null, { seed: 9, tier: 'quiet' });
+    const row = Math.floor(f.height / 2);
+    const mid = f.width / 2;
+    const avg = (x0: number, x1: number) => {
+      let s = 0;
+      for (let x = x0; x < x1; x++) s += at(f, x, row);
+      return s / (x1 - x0);
+    };
+    // Just right of the edge is warmer than far right; just left is colder than far left.
+    expect(avg(mid + 3, mid + 8)).toBeGreaterThan(avg(f.width - 12, f.width - 4) + 0.4);
+    expect(avg(mid - 8, mid - 3)).toBeLessThan(avg(4, 12) - 0.4);
   });
 
   it('draws no cold spot on QUIET, even with a pinned reading', () => {

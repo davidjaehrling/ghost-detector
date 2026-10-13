@@ -1,8 +1,9 @@
-import { Canvas, FilterMode, Group, Image, LinearGradient, MipmapMode, Path, Rect, Skia, Text, useFont, vec, type SkFont } from '@shopify/react-native-skia';
+import { FilterMode, Group, Image, LinearGradient, MipmapMode, Path, Rect, Skia, Text, useFont, vec, type SkFont } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { color } from '../../ui/tokens';
+import { SnapshotCanvas } from '../glass/snapshotRegistry';
 import { displayPos, displayRange } from './encode';
 import { PALETTE_NAME, PH_WHT } from './palette';
 import { makeLutEffect, renderThermalImage } from './render';
@@ -144,7 +145,7 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
       accessibilityLabel={readout ? `Thermal view ${PALETTE_NAME}, ${readout}` : `Thermal view ${PALETTE_NAME}, no cold spot`}
       style={{ width, height, overflow: 'hidden', backgroundColor: color.n0 }}
     >
-      <Canvas style={{ width, height }}>
+      <SnapshotCanvas style={{ width, height }}>
         <Rect x={0} y={0} width={width} height={height} color={color.n0} />
         <Image
           image={image}
@@ -194,7 +195,7 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
             <Text x={13} y={height - 12} text={PALETTE_NAME} font={lb} color={color.p3} />
           </Group>
         ) : null}
-      </Canvas>
+      </SnapshotCanvas>
     </View>
   );
 }

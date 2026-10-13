@@ -2,8 +2,8 @@
  * Field to bytes for the raster pass. Pure TS, tested. Each sensor pixel becomes one opaque grey
  * RGBA texel holding its position on the display scale, 0 at the field minimum, 1 at the maximum.
  *
- * The scale is what FLIR cameras call histogram (plateau) equalisation, half strength: half
- * linear in °C, half the pixel's rank in the field. A deep cold spot would otherwise squeeze the
+ * The scale is what FLIR cameras call histogram (plateau) equalisation, at full strength: the
+ * pixel's rank in the field. A deep cold spot would otherwise squeeze the
  * whole room into the top two palette stops. The scale bar places its ticks with the same
  * `displayPos`, so the labels stay true to the picture.
  */
@@ -25,8 +25,11 @@ export function rangePos(c: number, lo: number, hi: number): number {
   return Math.min(1, Math.max(0, (c - lo) / (hi - lo)));
 }
 
-/** Weight of the rank term in `displayPos` (0 = linear, 1 = full equalisation). */
-export const EQUALISE = 0.5;
+/**
+ * Weight of the rank term in `displayPos` (0 = linear, 1 = full equalisation). Full strength since
+ * round 2 (D-017): half strength left the room soft and low in contrast.
+ */
+export const EQUALISE = 1;
 
 /** Bins of the cumulative histogram behind `rankOf`. */
 const CDF_BINS = 1024;
