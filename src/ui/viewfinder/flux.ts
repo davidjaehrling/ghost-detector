@@ -79,6 +79,17 @@ export function liveThermal(mg: number): number {
   return Math.round(Math.min(6, Math.max(-12, dt)) * 10) / 10;
 }
 
+export const formatThermal = (dt: number) => `ΔT ${dt.toFixed(1)} °C`;
+
+// The live reading wobbles by 0.1 °C around its mean: the displayed digit lifts or drops one step.
+export const THERMAL_WOBBLE = 0.1;
+
+// `mg` is the flux the reading follows, `wobble` is -1, 0 or 1. Stays in -12.0 to +6.0.
+export function liveThermalStep(mg: number, wobble: number): number {
+  const dt = liveThermal(mg) + Math.max(-1, Math.min(1, Math.round(wobble))) * THERMAL_WOBBLE;
+  return Math.round(Math.min(6, Math.max(-12, dt)) * 10) / 10;
+}
+
 // ---------- magnetometer mapping (P4-05, Bible section 3 and 6) ----------
 
 // Flux uses the real magnetometer: 1 microtesla = 10 milligauss (Earth's field, 25 to 65 uT,

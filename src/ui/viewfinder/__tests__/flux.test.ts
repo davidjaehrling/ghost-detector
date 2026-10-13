@@ -15,6 +15,7 @@ import {
   liveLeds,
   liveTier,
   liveThermal,
+  liveThermalStep,
   magnitudeUt,
   microTeslaToMilliGauss,
   quantizeMg,
@@ -178,5 +179,21 @@ describe('harness params', () => {
     });
     expect(resolveHarness({}, state)).toEqual({ isStatic: true, fixture: 'attic', speed: 20, phase: null });
     expect(resolveHarness({ fixture: 'nope' }, state).fixture).toBe('attic');
+  });
+});
+
+describe('live thermal wobble', () => {
+  it('moves the digit by at most one tenth and stays in range', () => {
+    for (const mg of [10, 400, 900, 2000]) {
+      const base = liveThermal(mg);
+      for (const w of [-1, 0, 1]) {
+        const v = liveThermalStep(mg, w);
+        expect(Math.abs(v - base)).toBeLessThanOrEqual(0.1000001);
+        expect(v).toBeGreaterThanOrEqual(-12);
+        expect(v).toBeLessThanOrEqual(6);
+      }
+      expect(liveThermalStep(mg, 0)).toBe(base);
+      expect(liveThermalStep(mg, 5)).toBe(liveThermalStep(mg, 1));
+    }
   });
 });

@@ -8,6 +8,7 @@ import type { KeySlot } from '../src/ui/boot/parts';
 import { captureSeed } from '../src/ui/capture';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
 import { fixtureSource, fixtureUri } from '../src/ui/fixtures';
+import { readBootParams } from '../src/ui/boot/params';
 import { type Harness, readHarness } from '../src/ui/harness';
 import { sound } from '../src/ui/audio';
 import { Readout } from '../src/ui/Readout';
@@ -17,8 +18,9 @@ import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
-import { formatFlux, formatGeo, jitteredAngle, liveLeds, liveThermal, liveTier } from '../src/ui/viewfinder/flux';
+import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier } from '../src/ui/viewfinder/flux';
 import { useFlux } from '../src/ui/viewfinder/useFlux';
+import { useLiveThermal } from '../src/ui/viewfinder/useLiveThermal';
 import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend, tagTracking } from '../src/ui/viewfinder/lore';
 
 // Copy keys follow docs/voice-guide.md section 3. The denied-permission strings are
@@ -45,8 +47,6 @@ const copy = {
 const STATIC_CAPTURE_MS = Date.UTC(2026, 9, 13, 12);
 const STATIC_SEED = 417;
 const FIXTURE_SIZE = { w: 768, h: 1024 };
-// Harness: tonight's activity index is read at a fixed time so the golden repeats.
-const STATIC_NOW = new Date(2026, 9, 13, 12);
 const BAND = 0.3; // scrim band: lower 30% of the glass, never less than it needs
 const BAND_MIN = TAG_HIT + 36 + 96; // tag row, two lore rows, dial plate height
 const RETICLE_TOP = 68; // keep in step with s.reticle.top
@@ -103,7 +103,9 @@ function Viewfinder({
   const { sample } = useFlux({ seed: fluxSeed, isStatic, active });
   const [tag, setTag] = useState<LocationTag>(() => (harness.fixture ? FIXTURE_TAG[harness.fixture] : LOCATION_TAGS[0]));
   const busy = useRef(false);
-  const { index } = sessionActivity(isStatic ? STATIC_NOW : new Date());
+  // One index per session (boot fixes it first). Under ?static=1 the clock is the boot screen's:
+  // ?date=&time= when given, else the harness time, so a direct visit shows the same number.
+  const { index } = sessionActivity(isStatic ? readBootParams().date : new Date());
 
   // Sound follows the screen: on while it is focused and in the foreground, off on a blur or when
   // the app goes to the background (useActive). The flux and its tier drive the clicks and the hum.
@@ -127,7 +129,7 @@ function Viewfinder({
 
   const angle = jitteredAngle(sample.mg, sample.jitter, reduceMotion);
   const flux = formatFlux(sample.mg);
-  const dT = liveThermal(sample.mg);
+  const dT = useLiveThermal({ mg: sample.mg, seed: fluxSeed, isStatic, active });
 
   const capture = async () => {
     if (busy.current) return;
@@ -200,7 +202,6 @@ function Viewfinder({
             <View style={s.topScrim} pointerEvents="none" />
             <View style={s.topLeft} pointerEvents="none" testID="hud-top">
               <Readout label="IDX" value={`${index}/5`} labelCh={3} valueCh={5} unitCh={0} {...HUD} />
-              <Readout label="ΔT" value={dT.toFixed(1)} unit="°C" labelCh={3} valueCh={5} unitCh={2} {...HUD} />
             </View>
 
             {source === 'ask' ? (
@@ -228,9 +229,12 @@ function Viewfinder({
                     accessibilityState={{ selected: tg === tag }}
                     style={s.tagHit}
                   >
-                    <Text style={[s.tag, { letterSpacing: tagTracking(windowW) }, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
-                      {tagLegend(tg, windowW)}
-                    </Text>
+                    <View>
+                      <Text style={[s.tag, { letterSpacing: tagTracking(windowW) }, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
+                        {tagLegend(tg, windowW)}
+                      </Text>
+                      {tg === tag ? <View style={s.tagLine} testID="tag-underline" /> : null}
+                    </View>
                   </Pressable>
                 ))}
               </View>
@@ -246,9 +250,15 @@ function Viewfinder({
                   <Text style={s.fluxValue}>{String(sample.mg).padStart(4, ' ')}</Text>
                   <Text style={s.fluxUnit}>mG</Text>
                 </View>
-                <Text style={s.geo} testID="hud-geo">
-                  {formatGeo(sample.mg)}
-                </Text>
+                <View style={s.geoRow}>
+                  <Text style={s.geo} testID="hud-geo">
+                    {formatGeo(sample.mg)}
+                  </Text>
+                  <Text style={s.dt} testID="hud-dt" accessibilityLabel={formatThermal(dT)}>
+                    <Text style={s.dtLabel}>{'ΔT '}</Text>
+                    {`${dT.toFixed(1)} °C`}
+                  </Text>
+                </View>
                 <Text style={s.state} testID="hud-state">
                   {state}
                 </Text>
@@ -315,7 +325,9 @@ const s = StyleSheet.create({
   tagRow: { position: 'absolute', left: TAG_ROW_PAD, right: TAG_ROW_PAD, top: 0, flexDirection: 'row', justifyContent: 'space-between' },
   tagHit: { minWidth: TAG_HIT, height: TAG_HIT, alignItems: 'center', justifyContent: 'center' },
   tag: { ...type.lbXS, color: color.n5 },
-  tagOn: { color: color.p5, textDecorationLine: 'underline' },
+  // Selected: p5 text with a 1 px p4 rule under it (its own view, so the rule is not the text's colour).
+  tagOn: { color: color.p5 },
+  tagLine: { position: 'absolute', left: 0, right: 0, bottom: -2, height: 1, backgroundColor: color.p4 },
   lore: { position: 'absolute', left: 12, right: 12, top: TAG_HIT },
   loreText: { ...type.rdXS, color: color.p4, height: 18 },
   fluxBlock: { position: 'absolute', left: 12, bottom: 8 },
@@ -323,7 +335,10 @@ const s = StyleSheet.create({
   fluxLabel: { ...type.rdXS, color: color.p3, marginBottom: 2, marginRight: 4 },
   fluxValue: { ...type.rdL, color: color.p4, width: 4 * 19.2, textAlign: 'right' },
   fluxUnit: { ...type.rdXS, color: color.p3, marginBottom: 2, marginLeft: 4 },
+  geoRow: { flexDirection: 'row', alignItems: 'center' },
   geo: { ...type.rdXS, color: color.p3, height: 18 },
+  dt: { ...type.rdXS, color: color.p4, height: 18, marginLeft: 12 },
+  dtLabel: { color: color.p3 },
   state: { ...type.lbS, color: color.p3 },
   dialPlate: {
     position: 'absolute',
