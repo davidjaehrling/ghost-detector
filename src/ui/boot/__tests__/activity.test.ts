@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityIndex } from '../activity';
+import { activityIndex, daysToFullMoon, formatWindowCountdown } from '../activity';
 import { parseBootParams } from '../params';
 
 describe('activityIndex', () => {
@@ -16,7 +16,21 @@ describe('activityIndex', () => {
   });
 });
 
+describe('daysToFullMoon', () => {
+  it('counts whole days to the next full moon', () => {
+    expect(daysToFullMoon(new Date(2026, 9, 13, 12, 0))).toBe(13);
+    expect(daysToFullMoon(new Date(2026, 9, 26, 3, 30))).toBe(0);
+  });
+});
+
 describe('parseBootParams', () => {
+  it('reads time=HH:MM into the dated clock', () => {
+    const p = parseBootParams('?static=1&date=2026-10-13&time=22:48');
+    expect(p.date.getHours()).toBe(22);
+    expect(p.date.getMinutes()).toBe(48);
+    expect(parseBootParams('?date=2026-10-13&time=25:00').date.getHours()).toBe(12);
+  });
+
   it('reads static and date', () => {
     const p = parseBootParams('?static=1&date=2026-10-13');
     expect(p.isStatic).toBe(true);
@@ -24,10 +38,21 @@ describe('parseBootParams', () => {
     expect(p.date.getMonth()).toBe(9);
     expect(p.date.getDate()).toBe(13);
     expect(p.date.getHours()).toBe(12);
+    expect(p.dated).toBe(true);
   });
 
   it('defaults to now and animated', () => {
     const now = new Date(2026, 0, 1);
-    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now });
+    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now, dated: false, calib: false });
+  });
+});
+
+describe('window countdown', () => {
+  it('counts down to the next 03:00 on the local clock', () => {
+    expect(formatWindowCountdown(new Date(2026, 9, 13, 22, 48))).toBe('03:00 WINDOW IN 4 H 12 MIN');
+    expect(formatWindowCountdown(new Date(2026, 9, 13, 12, 0))).toBe('03:00 WINDOW IN 15 H 0 MIN');
+    expect(formatWindowCountdown(new Date(2026, 9, 13, 2, 15))).toBe('03:00 WINDOW IN 45 MIN');
+    expect(formatWindowCountdown(new Date(2026, 9, 13, 4, 0))).toBe('03:00 WINDOW IN 23 H 0 MIN');
+    expect(formatWindowCountdown(new Date(2026, 9, 13, 3, 30))).toBe('03:00 WINDOW OPEN');
   });
 });

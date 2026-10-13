@@ -15,7 +15,7 @@ Inspiration folder at time of writing: `inspiration/README.md` only, no referenc
 | Model | FS-4 Feldsonde (field probe), sales name `FS-4 FIELD SPECTROMETER` |
 | Model number | `FS-4/87`, variant `FS-4/87-P` (P = Parapsychologie conversion) |
 | Production run | 1986 to 1989, 4,800 units |
-| Serial scheme | `FS4-YYWW-NNNNN-C`: build year and week (8601 to 8952), unit number 00001 to 04800, Luhn check digit. Seeded once per install, e.g. `FS4-8711-00417-6` |
+| Serial scheme | `FS4-YYWW-NNNNN-C`: build year and week (8601 to 8952), unit number 00001 to 04800, Luhn check digit. Seeded once per install, e.g. `FS4-8711-00417-9` |
 | Firmware string | `FW 3.1.7 · ROM C2-8811 · SELFTEST OK` (boot line) |
 | Calibration | `CAL 2026-10-13 · DUE 2027-10 · PRÜF 07`: CAL is the install date, DUE is 12 months later, PRÜF is the inspector stamp 01 to 12 seeded per install |
 | Sticker format | Paper label 64 × 30 px at 390 width, off-white, black ink, ISO dates, one rubber-stamp inspector number in a 14 px circle |
@@ -305,6 +305,6 @@ Wording (15 words, the disclosure required by plan §7):
 
 > SIMULATION UNIT · ENTERTAINMENT USE ONLY. All readings are generated in software. This unit detects nothing.
 
-Metadata line beneath, not part of the disclosure: `VELDEN FS-4/87-P · FS4-8711-00417-6 · CAL 2026-10-13 · PRÜF 07`.
+Metadata line beneath, not part of the disclosure: `VELDEN FS-4/87-P · FS4-8711-00417-9 · CAL 2026-10-13 · PRÜF 07`.
 
 The same sticker, smaller, stays on the housing for the life of the install (§2). Copy & Localization owns the DE, ES and PT versions; each must keep the meaning of all three sentences and stay at 25 words or fewer.

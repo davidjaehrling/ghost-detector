@@ -332,6 +332,196 @@
       ],
       "passes": false,
       "refuter": "Evidence HOLDS; design loop exit not reached (6.05); stays false; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
+    },
+    {
+      "id": "P2-01",
+      "phase": "P2",
+      "description": "Navigation skeleton",
+      "acceptance": "expo-router routes: / (boot), /viewfinder, /scan, /result/[id], /history, /settings; back behaviour (typed links deferred to P8, D-008); L2 spec navigates boot → viewfinder → scan → result with screenshots at the three viewports; no name-dependent strings",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (x2)",
+          "output": "39 passed both runs; flow boot → viewfinder → scan → result → history at three viewports; back from result lands on viewfinder with 1 record",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
+    },
+    {
+      "id": "P2-02",
+      "phase": "P2",
+      "description": "Engine v0: dark-region finder",
+      "acceptance": "src/engine/darkRegion.ts: downsample to 64..96 px luma, integral image, 20th-percentile threshold, 4-connected components, score area × darkness × low variance with an edge penalty; pure TS; tests on 5 synthetic fixtures (cellar-like, bright room, pitch black, outdoors, attic) assert region choice and determinism",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test -- darkRegion; adversarial 1px edge column",
+          "output": "5 fixtures assert region choice; determinism; thin edge line accepted (fixed in round 2 with a thickness/aspect filter)",
+          "by": "refuter",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "mutation: minThickness=0, maxAspect=Infinity",
+          "output": "4 edge-line tests fail, 11 pass; reverted",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS incl. thin-region filter mutation check; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
+    },
+    {
+      "id": "P2-03",
+      "phase": "P2",
+      "description": "Engine v0: seeded scan outcome",
+      "acceptance": "src/engine/outcome.ts: seed from photo hash + timestamp; tier distribution per intensity from docs/psych-brief.md §3 (Calm 30/40/22/7/1, Standard 20/35/28/13/4, Brave 12/28/32/20/8); first-session rules (scan 1 ACTIVE or STRONG, no CRITICAL before scan 4, CRITICAL ≥5 scans apart, forced STRONG after 12/16/8 dry scans); distribution test over 10,000 seeds within ±1.5 points per tier; rule tests",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test -- outcome (10,000 seeds)",
+          "output": "calm 30.45/40.27/21.91/6.38/0.99; standard 20.30/35.07/28.00/12.77/3.86; brave 12.11/28.00/32.69/19.83/7.37; targets hard-coded",
+          "by": "builder-b",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; hard-coded BRIEF_TARGETS; two mutations fail; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
+    },
+    {
+      "id": "P2-04",
+      "phase": "P2",
+      "description": "Engine v0: entity profile generator",
+      "acceptance": "src/engine/profile.ts: seeded Barnum-style profile (class, era, trait lines) from a word bank with no repeats within 20 results; EN only; tests for determinism and the no-repeat window",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "25-profile sequences on 5 seed bases with the 20-result window",
+          "output": "0 repeated names, 0 repeated lines in the engine; app store cap of 40 lines disproved and fixed",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS engine and app; Refuter final pass at 8fed917 (D-012)"
+    },
+    {
+      "id": "P2-05",
+      "phase": "P2",
+      "description": "Viewfinder screen",
+      "acceptance": "expo-camera preview with permission flow in character (voice guide permission.*), EMF needle placeholder driven by a seeded jitter, capture key; web fallback shows a fixture photo; L2 goldens; design loop entry",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "viewfinder spec x2; cmp against goldens",
+          "output": "expo-camera on native, in-glass permission panel, web fixture fallback; goldens byte-identical except 24 corner AA pixels (<150 tolerance)",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS in both P2 passes (D-008, D-010); native camera unverified until a phone build"
+    },
+    {
+      "id": "P2-06",
+      "phase": "P2",
+      "description": "Scan theatre",
+      "acceptance": "6 to 10 s sequence per docs/sound-palette.md §5 timeline (phases, 1.2 s silent hold); progress readouts in character; cancel; deterministic in ?static=1; L2 goldens of two phases",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "scan spec x2",
+          "output": "duration = outcome.scanDurationMs; HOLD_MS 1200; cancel saves nothing (localStorage null); scan-phase2 and scan-hold byte-identical at three viewports",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS in both P2 passes (D-008, D-010); native camera unverified until a phone build"
+    },
+    {
+      "id": "P2-07",
+      "phase": "P2",
+      "description": "Result screen with v0 ghost",
+      "acceptance": "photo with a v0 apparition composited into the darkest region at 8..25% opacity (plain Image/Skia-free v0: a blurred procedural matte), tier word and SPI number via the needle spring, entity profile preview with the curiosity-gap line; share and Deep Scan keys present but inert; L2 goldens for QUIET, ACTIVE and CRITICAL fixtures",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "luma difference with and without ghost, 390x844, cellar fixture",
+          "output": "active: mean lift 13.0, max 58, 0 darkened px, box 13.5% of panel; critical: 9.0, max 30, 0 darkened, 13.6%",
+          "by": "refuter",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "luma difference with/without ghost at 390, cellar, round 3",
+          "output": "ACTIVE: mean lift 10.99, max 58, 0 darkened, 13.9% union box, centre x 0.294; CRITICAL: 10.64, 44, 0, 13.6%, 0.305",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS on web (lift 11.0/10.6 luma, 0 darkened px, 13.9%/13.6% of panel, centre at 0.29/0.31); native path unit-tested, device unverified (P2-10); D-012"
+    },
+    {
+      "id": "P2-08",
+      "phase": "P2",
+      "description": "Boot screen round 3",
+      "acceptance": "the D-005 and D-006 carry-over list applied; contrast of every text on n0 ≥4.5:1 checked by a unit test over tokens; loop score ≥8 with no dimension <7 OR leftovers logged as FX-only",
+      "evidence": [
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/*/boot.png, boot-calib.png",
+          "output": "round 4: ACK inert until typing done; belief card maps per psych-brief §2.9; stored once; loop round 2 mean 7.24",
+          "by": "refuter",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/*/boot.png, boot-calib.png (round 4 and 5)",
+          "output": "loop rounds: 7.1 → 7.24 → 7.19 weighted; exit 8 not reached; leftovers in D-011; re-enters loop in P3",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "id": "P2-09",
+      "phase": "P2",
+      "description": "Design loop on four screens",
+      "acceptance": "Art Director and Dr. Hollow score boot, viewfinder, scan, result (swapped order); exit ≥8 / no dimension <7, or leftovers logged after 5 rounds; Refuter holds",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-007, D-009, D-011",
+          "output": "three rounds on four screens; final means boot 7.19, viewfinder 7.38, scan 7.0, result 7.24; ghost 6; stopped by ruling D-009 (Skia stack is P3)",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "id": "P2-10",
+      "phase": "P2",
+      "description": "First internal-testing AAB",
+      "acceptance": "eas build production profile uploaded to Play internal testing; Maestro full-flow video from EAS; blocked by expo.dev allowlist, EXPO_TOKEN, Play Console app and service account (owner)",
+      "evidence": [],
+      "passes": false,
+      "blocked_by": "owner: expo.dev allowlist, EXPO_TOKEN, Play Console app + service account"
+    },
+    {
+      "id": "P2-11",
+      "phase": "P2",
+      "description": "Identity applied",
+      "acceptance": "app.json name, slug, android.package and icon from Gate 1; adaptive icon from the chosen concept; blocked by Gate 1 (owner)",
+      "evidence": [],
+      "passes": false,
+      "blocked_by": "Gate 1 (owner picks name and icon)"
     }
   ]
 }

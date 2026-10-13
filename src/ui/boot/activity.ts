@@ -37,3 +37,27 @@ export function activityIndex(date: Date): Activity {
   const index = Math.max(1, Math.min(5, score)) as Activity['index'];
   return { index, moonPct };
 }
+
+// Whole days from `date` until the next full moon (0 on the day itself).
+export function daysToFullMoon(date: Date): number {
+  const half = SYNODIC_DAYS / 2;
+  const d = (((half - moonAge(date)) % SYNODIC_DAYS) + SYNODIC_DAYS) % SYNODIC_DAYS;
+  return Math.round(d);
+}
+
+// The peak hour of the activity index starts at 03:00 (psych brief section 4).
+export const PEAK_HOUR = 3;
+
+// Time until the next 03:00 on the local clock. Inside the 03:00 hour the window is open.
+export function windowCountdown(date: Date): { open: boolean; hours: number; minutes: number } {
+  const now = date.getHours() * 60 + date.getMinutes();
+  if (date.getHours() === PEAK_HOUR) return { open: true, hours: 0, minutes: 0 };
+  const left = (((PEAK_HOUR * 60 - now) % 1440) + 1440) % 1440;
+  return { open: false, hours: Math.floor(left / 60), minutes: left % 60 };
+}
+
+export function formatWindowCountdown(date: Date): string {
+  const c = windowCountdown(date);
+  if (c.open) return '03:00 WINDOW OPEN';
+  return c.hours > 0 ? `03:00 WINDOW IN ${c.hours} H ${c.minutes} MIN` : `03:00 WINDOW IN ${c.minutes} MIN`;
+}
