@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>FS-4 icon concept 2: LED ladder</title>
+  <desc>The five-LED SPI ladder plate reading STRONG, four lit, the CRITICAL lens dark. Safe zone: centred circle, diameter 683.</desc>
+
+  <defs><filter id="bloom" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="12"/></filter></defs>
+  <rect width="1024" height="1024" fill="#2E3229"/>
+  <rect y="0" width="1024" height="6" fill="#4A4D42"/>
+  <!-- engraved SPI scale beside the plate: tier ticks at 20, 45, 70, 90 -->
+  <path d="M396 760V264" stroke="#8A8B7C" stroke-width="7"/>
+  <path d="M358 735.2H396M358 710.4H396M358 685.6H396M358 636H396M358 611.2H396M358 586.4H396M358 561.6H396M358 512H396M358 487.2H396M358 462.4H396M358 437.6H396M358 388H396M358 363.2H396M358 338.4H396M358 288.8H396" stroke="#8A8B7C" stroke-width="6"/>
+  <path d="M316 760H396M316 660.8H396M316 536.8H396M316 412.8H396M316 313.6H396M316 264H396" stroke="#C9C7B6" stroke-width="10"/>
+  <path d="M400 660.8L418 689H436M400 536.8L418 571H436M400 412.8L418 453H436M400 313.6L418 335H436" fill="none" stroke="#8A8B7C" stroke-width="4"/>
+  <!-- ladder plate -->
+  <rect x="441" y="201" width="216" height="636" rx="26" fill="#121712"/>
+  <rect x="436" y="194" width="216" height="636" rx="26" fill="#1E221C"/>
+  <rect x="436" y="194" width="216" height="636" rx="26" fill="none" stroke="#4A4D42" stroke-width="3"/>
+    <g>
+      <circle cx="472" cy="230" r="17" fill="#121712"/>
+      <circle cx="472" cy="230" r="14" fill="#4A4D42"/>
+      <path d="M464.8 225.1L479.2 234.9M476.9 222.8L467.1 237.2" stroke="#121712" stroke-width="3.9" stroke-linecap="round"/>
+    </g>
+    <g>
+      <circle cx="472" cy="794" r="17" fill="#121712"/>
+      <circle cx="472" cy="794" r="14" fill="#4A4D42"/>
+      <path d="M475.3 786L468.7 802M480 797.3L464 790.7" stroke="#121712" stroke-width="3.9" stroke-linecap="round"/>
+      <path d="M469.1 798.2l6 -2" stroke="#C9C7B6" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+  <g>
+    <circle cx="562" cy="748" r="68" fill="#4FB46A" opacity="0.35" filter="url(#bloom)"/>
+    <circle cx="562" cy="748" r="56" fill="#121712"/>
+    <circle cx="562" cy="748" r="50" fill="#4FB46A"/>
+    <circle cx="562" cy="630" r="68" fill="#7CE895" opacity="0.35" filter="url(#bloom)"/>
+    <circle cx="562" cy="630" r="56" fill="#121712"/>
+    <circle cx="562" cy="630" r="50" fill="#7CE895"/>
+    <circle cx="562" cy="512" r="68" fill="#7CE895" opacity="0.35" filter="url(#bloom)"/>
+    <circle cx="562" cy="512" r="56" fill="#121712"/>
+    <circle cx="562" cy="512" r="50" fill="#7CE895"/>
+    <circle cx="562" cy="394" r="68" fill="#D4FFDC" opacity="0.35" filter="url(#bloom)"/>
+    <circle cx="562" cy="394" r="56" fill="#121712"/>
+    <circle cx="562" cy="394" r="50" fill="#D4FFDC"/>
+    <circle cx="562" cy="276" r="56" fill="#121712"/>
+    <circle cx="562" cy="276" r="50" fill="#1E221C"/>
+    <circle cx="544" cy="258" r="7" fill="#4A4D42"/>
+  </g>
+</svg>

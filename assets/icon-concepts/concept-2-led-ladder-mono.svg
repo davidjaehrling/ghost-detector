@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>FS-4 icon concept 2: LED ladder, monochrome</title>
+  <desc>Single colour on transparent for Android themed icons. Safe zone: centred circle, diameter 683.</desc>
+
+  <g fill="none" stroke="#7CE895">
+    <rect x="444" y="202" width="200" height="620" rx="22" stroke-width="16"/>
+    <path d="M396 760V264" stroke-width="8"/>
+    <path d="M316 760H396M316 660.8H396M316 536.8H396M316 412.8H396M316 313.6H396M316 264H396" stroke-width="12"/>
+    <path d="M358 735.2H396M358 710.4H396M358 685.6H396M358 636H396M358 611.2H396M358 586.4H396M358 561.6H396M358 512H396M358 487.2H396M358 462.4H396M358 437.6H396M358 388H396M358 363.2H396M358 338.4H396M358 288.8H396" stroke-width="6"/>
+    <circle cx="562" cy="276" r="44" stroke-width="10"/>
+  </g>
+  <g fill="#7CE895"><circle cx="472" cy="230" r="12"/><circle cx="472" cy="794" r="12"/></g>
+  <g fill="#7CE895">
+    <circle cx="562" cy="748" r="50"/>
+    <circle cx="562" cy="630" r="50"/>
+    <circle cx="562" cy="512" r="50"/>
+    <circle cx="562" cy="394" r="50"/>
+  </g>
+</svg>

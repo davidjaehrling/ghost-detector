@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>FS-4 icon concept 1: device face</title>
+  <desc>Velden FS-4 screen window with log flux gauge, needle held near the top of the scale. Safe zone: centred circle, diameter 683.</desc>
+
+  <rect width="1024" height="1024" fill="#2E3229"/>
+  <!-- cast housing: top-edge light, bottom shadow, both outside the safe circle -->
+  <rect y="0" width="1024" height="6" fill="#4A4D42"/>
+  <rect y="1016" width="1024" height="8" fill="#121712"/>
+  <!-- bezel recess -->
+  <rect x="237" y="293" width="550" height="438" rx="58" fill="#121712"/>
+  <rect x="235" y="291" width="550" height="438" rx="58" fill="none" stroke="#4A4D42" stroke-width="3" opacity="0.6"/>
+  <!-- glass -->
+  <rect x="249" y="305" width="526" height="414" rx="46" fill="#0A0F0B"/>
+  <path d="M249 410V351a46 46 0 0 1 46 -46H600" fill="none" stroke="#121712" stroke-width="10" opacity="0.9"/>
+  <g clip-path="url(#glass)">
+    <path d="M292 336V688M336 336V688M380 336V688M424 336V688M468 336V688M556 336V688M600 336V688M644 336V688M688 336V688M732 336V688M292 336H732M292 380H732M292 424H732M292 468H732M292 556H732M292 600H732M292 644H732M292 688H732" stroke="#1C4A2A" stroke-width="2" stroke-dasharray="2 6" opacity="0.6"/>
+    <path d="M292 512H732M512 336V688" stroke="#1C4A2A" stroke-width="2"/>
+    <path d="M292 507V517M300 507V517M308 507V517M316 507V517M324 507V517M332 507V517M340 507V517M348 507V517M356 507V517M364 507V517M372 507V517M380 507V517M388 507V517M396 507V517M404 507V517M412 507V517M420 507V517M428 507V517M436 507V517M444 507V517M452 507V517M460 507V517M468 507V517M476 507V517M484 507V517M492 507V517M500 507V517M508 507V517M516 507V517M524 507V517M532 507V517M540 507V517M548 507V517M556 507V517M564 507V517M572 507V517M580 507V517M588 507V517M596 507V517M604 507V517M612 507V517M620 507V517M628 507V517M636 507V517M644 507V517M652 507V517M660 507V517M668 507V517M676 507V517M684 507V517M692 507V517M507 336H517M507 344H517M507 352H517M507 360H517M507 368H517M507 376H517M507 384H517M507 392H517M507 400H517M507 408H517M507 416H517M507 424H517M507 432H517M507 440H517M507 448H517M507 456H517M507 464H517M507 472H517M507 480H517M507 488H517M507 496H517M507 504H517M507 512H517M507 520H517M507 528H517M507 536H517M507 544H517M507 552H517M507 560H517M507 568H517M507 576H517M507 584H517M507 592H517M507 600H517M507 608H517M507 616H517M507 624H517M507 632H517M507 640H517M507 648H517M507 656H517" stroke="#1C4A2A" stroke-width="2"/>
+    <!-- GEO band 250 to 650 mG -->
+    <path d="M560.5 396.6A260 260 0 0 1 637.2 424.1" fill="none" stroke="#2F7A45" stroke-width="12"/>
+    <!-- scale -->
+    <path d="M282.2 459.2A300 300 0 0 1 741.8 459.2" fill="none" stroke="#4FB46A" stroke-width="10"/>
+    <path d="M365.3 390.3L377.1 411.2M390.8 377.6L400.5 399.5M428.4 363.9L435.1 386.9M443.1 360L448.6 383.4M456 357.3L460.5 380.8M467.5 355.3L471.1 379.1M585.6 361.2L579.7 384.4M612.8 369.4L604.7 392M649.5 385.4L638.5 406.7M662.8 392.7L650.8 413.4M674.1 399.6L661.1 419.8M683.8 406L670 425.7" stroke="#2F7A45" stroke-width="6"/>
+    <path d="M282.2 459.2L317.4 488.7M331.8 412.1L359.4 448.9M411.2 369.4L426.7 412.8M477.8 354L483.1 399.7M546.2 354L540.9 399.7M633.2 377.6L614.6 419.7M692.2 412.1L664.6 448.9M741.8 459.2L706.6 488.7" stroke="#4FB46A" stroke-width="12"/>
+    <!-- needle shadow, then needle -->
+    <path d="M498.2 680.6L724.4 445.8" stroke="#1C4A2A" stroke-width="30" stroke-linecap="round" opacity="0.8"/>
+    <path d="M491.2 673.6L717.4 438.8" stroke="#7CE895" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="710.4" cy="446" r="11" fill="#D4FFDC"/>
+    <circle cx="512" cy="652" r="38" fill="#2E3229"/>
+    <circle cx="512" cy="652" r="38" fill="none" stroke="#4A4D42" stroke-width="3"/>
+  </g>
+  <defs><clipPath id="glass"><rect x="249" y="305" width="526" height="414" rx="46"/></clipPath></defs>
+  <!-- four screws on the bezel, slots at seeded angles, one burred; they sit outside the safe circle on purpose -->
+    <g>
+      <circle cx="222" cy="278" r="23" fill="#121712"/>
+      <circle cx="222" cy="278" r="20" fill="#4A4D42"/>
+      <path d="M210.5 273.4L233.5 282.6M226.6 266.5L217.4 289.5" stroke="#121712" stroke-width="5.6" stroke-linecap="round"/>
+    </g>
+    <g>
+      <circle cx="802" cy="278" r="23" fill="#121712"/>
+      <circle cx="802" cy="278" r="20" fill="#4A4D42"/>
+      <path d="M798 266.3L806 289.7M813.7 274L790.3 282" stroke="#121712" stroke-width="5.6" stroke-linecap="round"/>
+      <path d="M805.6 285.6l6 -2" stroke="#C9C7B6" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <g>
+      <circle cx="222" cy="746" r="23" fill="#121712"/>
+      <circle cx="222" cy="746" r="20" fill="#4A4D42"/>
+      <path d="M231.2 737.7L212.8 754.3M230.3 755.2L213.7 736.8" stroke="#121712" stroke-width="5.6" stroke-linecap="round"/>
+    </g>
+    <g>
+      <circle cx="802" cy="746" r="23" fill="#121712"/>
+      <circle cx="802" cy="746" r="20" fill="#4A4D42"/>
+      <path d="M789.8 744.1L814.2 747.9M803.9 733.8L800.1 758.2" stroke="#121712" stroke-width="5.6" stroke-linecap="round"/>
+    </g>
+</svg>

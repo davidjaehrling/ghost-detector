@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>FS-4 icon concept 1: device face, monochrome</title>
+  <desc>Single colour on transparent for Android themed icons. Safe zone: centred circle, diameter 683.</desc>
+
+  <g fill="none" stroke="#7CE895">
+    <rect x="258" y="314" width="508" height="396" rx="38" stroke-width="20"/>
+    <path d="M282.2 459.2A300 300 0 0 1 741.8 459.2" stroke-width="12"/>
+    <path d="M282.2 459.2L317.4 488.7M331.8 412.1L359.4 448.9M411.2 369.4L426.7 412.8M477.8 354L483.1 399.7M546.2 354L540.9 399.7M633.2 377.6L614.6 419.7M692.2 412.1L664.6 448.9M741.8 459.2L706.6 488.7" stroke-width="14"/>
+    <path d="M365.3 390.3L376.1 409.5M390.8 377.6L399.7 397.7M428.4 363.9L434.5 385M443.1 360L448.2 381.4M456 357.3L460.1 378.9M467.5 355.3L470.8 377.1M585.6 361.2L580.2 382.5M612.8 369.4L605.4 390.1M649.5 385.4L639.4 404.9M662.8 392.7L651.8 411.7M674.1 399.6L662.2 418.1M683.8 406L671.2 424.1" stroke-width="6"/>
+    <path d="M491.2 673.6L717.4 438.8" stroke-width="24" stroke-linecap="round"/>
+  </g>
+  <g fill="#7CE895">
+    <circle cx="512" cy="652" r="34"/>
+  </g>
+</svg>

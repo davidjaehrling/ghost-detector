@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>FS-4 icon concept 3: nameplate, monochrome</title>
+  <desc>Single colour on transparent for Android themed icons. Safe zone: centred circle, diameter 683.</desc>
+
+  <defs>
+    <mask id="cut">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <path d="M302 567V417H388M302 487H370M512 439C496 413 430 411 428 455C426 501 514 479 514 527C514 575 440 577 424 545M552 501H598M696 567V417L626 521H724" fill="none" stroke="#000" stroke-width="29" stroke-linecap="round" stroke-linejoin="round" transform="translate(512 507) scale(1.12) translate(-513 -492)"/>
+      <circle cx="240" cy="507" r="13" fill="#000"/><circle cx="784" cy="507" r="13" fill="#000"/>
+      <circle cx="690" cy="690" r="102" fill="#000"/>
+    </mask>
+  </defs>
+  <rect x="212" y="357" width="600" height="300" rx="12" fill="#7CE895" mask="url(#cut)"/>
+  <g transform="rotate(-8 690 690)" fill="none" stroke="#7CE895">
+    <circle cx="690" cy="690" r="82" stroke-width="10"/>
+    <path d="M690 614L690 630M728 624.2L720 638M755.8 652L742 660M766 690L750 690M755.8 728L742 720M728 755.8L720 742M690 766L690 750M652 755.8L660 742M624.2 728L638 720M614 690L630 690M624.2 652L638 660M652 624.2L660 638" stroke-width="7"/>
+    <path d="M664 666h22v48h-22zM696 666H720L704 714" stroke-width="9"/>
+  </g>
+</svg>

@@ -8,10 +8,11 @@ test('boot screen renders', async ({ page }, testInfo) => {
   });
   page.on('pageerror', (err) => pageErrors.push(String(err)));
 
-  await page.goto('/');
+  await page.goto('/?static=1&date=2026-10-13');
   const boot = page.locator('[data-testid="boot-screen"]');
   await boot.waitFor();
-  await expect(page.getByText('FIELD UNIT').first()).toBeVisible();
+  await expect(page.getByText('SELFTEST OK')).toBeVisible();
+  await expect(page.getByText('This unit detects nothing.')).toBeVisible();
   await page.screenshot({
     path: `e2e/screenshots/current/${testInfo.project.name}/boot.png`,
     fullPage: false,

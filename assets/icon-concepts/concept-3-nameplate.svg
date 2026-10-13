@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>FS-4 icon concept 3: nameplate</title>
+  <desc>Riveted aluminium FS-4 nameplate with a round inspection sticker over its corner. Safe zone: centred circle, diameter 683.</desc>
+
+  <rect width="1024" height="1024" fill="#2E3229"/>
+  <rect y="0" width="1024" height="6" fill="#4A4D42"/>
+  <!-- plate shadow, plate, edge light -->
+  <rect x="216" y="365" width="600" height="300" rx="12" fill="#121712"/>
+  <rect x="212" y="357" width="600" height="300" rx="12" fill="#8A8B7C"/>
+  <path d="M220 359H804" stroke="#C9C7B6" stroke-width="3"/>
+  <!-- brushed grain, a few hairlines -->
+  <path d="M232 384H560M300 396H790M226 626H700M420 640H796M244 610H330" stroke="#C9C7B6" stroke-width="1.5" opacity="0.25"/>
+  <!-- scuff -->
+  <path d="M286 380l34 -5M293 387l22 -3" stroke="#4A4D42" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <!-- engraved legend: highlight on the lower lip, then the cut -->
+  <g transform="translate(512 507) scale(1.12) translate(-513 -492)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M302 567V417H388M302 487H370M512 439C496 413 430 411 428 455C426 501 514 479 514 527C514 575 440 577 424 545M552 501H598M696 567V417L626 521H724" stroke="#C9C7B6" stroke-width="29" transform="translate(3 3.5)" opacity="0.55"/>
+    <path d="M302 567V417H388M302 487H370M512 439C496 413 430 411 428 455C426 501 514 479 514 527C514 575 440 577 424 545M552 501H598M696 567V417L626 521H724" stroke="#1E221C" stroke-width="27"/>
+  </g>
+  <!-- rivets -->
+  <circle cx="240" cy="507" r="14" fill="#4A4D42"/><circle cx="236" cy="502" r="5" fill="#C9C7B6"/>
+  <circle cx="784" cy="507" r="14" fill="#4A4D42"/><circle cx="780" cy="502" r="5" fill="#C9C7B6"/>
+  <!-- inspection sticker, rotated, one edge lifted -->
+  <g transform="rotate(-8 690 690)">
+    <circle cx="695" cy="697" r="86" fill="#121712" opacity="0.7"/>
+    <circle cx="690" cy="690" r="86" fill="#E8E2C8"/>
+    <circle cx="690" cy="690" r="80" fill="none" stroke="#23211A" stroke-width="4"/>
+    <path d="M690 614L690 630M728 624.2L720 638M755.8 652L742 660M766 690L750 690M755.8 728L742 720M728 755.8L720 742M690 766L690 750M652 755.8L660 742M624.2 728L638 720M614 690L630 690M624.2 652L638 660M652 624.2L660 638" stroke="#23211A" stroke-width="6"/>
+    <path d="M690 690L711.2 769.2A82 82 0 0 1 668.8 769.2Z" fill="#23211A" opacity="0.12"/>
+    <circle cx="690" cy="690" r="44" fill="none" stroke="#23211A" stroke-width="5"/>
+    <path d="M664 666h22v48h-22zM696 666H720L704 714" fill="none" stroke="#23211A" stroke-width="8" stroke-linejoin="miter"/>
+  </g>
+</svg>
