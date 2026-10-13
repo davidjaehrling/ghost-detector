@@ -25,6 +25,8 @@ const copy = {
   'hud.captureLabel': 'Capture photo',
 };
 
+// Harness: a fixed capture time so the scan seed, and the result golden, repeat.
+const STATIC_CAPTURE_MS = Date.UTC(2026, 9, 13, 12);
 const STATIC_SEED = 417;
 const TICK_MS = 100;
 const NEEDLE_JITTER_DEG = 0.006 * 100;
@@ -102,7 +104,7 @@ function Viewfinder({
         uri = pic.uri;
         size = { w: pic.width, h: pic.height };
       }
-      const seed = captureSeed(uri, size.w, size.h, Date.now());
+      const seed = captureSeed(uri, size.w, size.h, isStatic ? STATIC_CAPTURE_MS : Date.now());
       router.push({ pathname: '/scan', params: { photo: uri, seed: String(seed) } });
     } finally {
       busy.current = false;
