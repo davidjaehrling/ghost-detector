@@ -31,7 +31,15 @@
       "phase": "P0",
       "description": "GitHub Actions CI: lint, typecheck, unit tests, Expo web export, Playwright screenshots uploaded as artifacts",
       "acceptance": "Workflow file in .github/workflows; the run on the P0 PR is green; screenshot artifact present",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "file",
+          "ref": ".github/workflows/ci.yml",
+          "output": "Workflow added (jobs: checks, web-screenshots); YAML parses via PyYAML. Run output pending from the P0 PR.",
+          "by": "qa-runner",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -39,7 +47,22 @@
       "phase": "P0",
       "description": "Playwright L2 harness: Expo web export served and screenshotted at 360x800, 390x844 and 428x926",
       "acceptance": "pnpm e2e:web produces three PNGs under e2e/screenshots with those exact pixel sizes; committed goldens exist",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "file e2e/screenshots/golden/*/boot.png",
+          "output": "e2e/screenshots/golden/android-360x800/boot.png: PNG image data, 360 x 800, 8-bit/color RGB, non-interlaced\ne2e/screenshots/golden/android-390x844/boot.png: PNG image data, 390 x 844, 8-bit/color RGB, non-interlaced\ne2e/screenshots/golden/android-428x926/boot.png: PNG image data, 428 x 926, 8-bit/color RGB, non-interlaced",
+          "by": "qa-runner",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web",
+          "output": "Running 3 tests using 2 workers\n  ✓ [android-360x800] boot screen renders\n  ✓ [android-390x844] boot screen renders\n  ✓ [android-428x926] boot screen renders\n  3 passed",
+          "by": "qa-runner",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {

@@ -3,5 +3,5 @@ const expo = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
   expo,
-  globalIgnores(['dist/*', '.expo/*', 'coverage/*', 'e2e/screenshots/*']),
+  globalIgnores(['dist/*', '.expo/*', 'coverage/*', 'e2e/screenshots/*', 'test-results/*']),
 ]);
