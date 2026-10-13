@@ -22,6 +22,8 @@ const FIGURES = [
 
 // Runs inside the page. Must stay self-contained.
 function drawMatte(fig) {
+  const ALPHA_EASE = 3.2;
+  const MAX_STRETCH = 1.3;
   const W = 512;
   const H = 1024;
   let a = fig.seed >>> 0;
@@ -119,37 +121,115 @@ function drawMatte(fig) {
     n.restore();
   }
 
-  // 3. Composite: blur the body, multiply its alpha by the noise.
+  // 3. Head-breaking noise: a second, finer field, used two ways in the head zone only. It warps
+  // where the head samples the body (so the outline goes lumpy and lopsided) and bites gaps out
+  // of it, so the head never reads as a round blob. Drawn after the body noise, so the rnd stream
+  // for everything above is unchanged.
+  const headNoise = make(W, H);
+  const hn = headNoise.getContext('2d');
+  hn.fillStyle = '#000';
+  hn.fillRect(0, 0, W, H);
+  for (const [gw, gh, weight, blurPx] of [
+    [12, 24, 0.55, 18],
+    [40, 80, 0.45, 6],
+  ]) {
+    const cell = make(gw, gh);
+    const cx = cell.getContext('2d');
+    const img = cx.createImageData(gw, gh);
+    for (let i = 0; i < gw * gh; i++) {
+      const v = Math.floor(rnd() * 255);
+      img.data[i * 4] = v;
+      img.data[i * 4 + 1] = v;
+      img.data[i * 4 + 2] = v;
+      img.data[i * 4 + 3] = 255;
+    }
+    cx.putImageData(img, 0, 0);
+    hn.save();
+    hn.globalAlpha = weight;
+    hn.globalCompositeOperation = 'lighter';
+    hn.filter = `blur(${blurPx}px)`;
+    hn.drawImage(cell, -blurPx, -blurPx, W + blurPx * 2, H + blurPx * 2);
+    hn.restore();
+  }
+  const hz = hn.getImageData(0, 0, W, H).data;
+  const headEnd = H * 0.24;
+  const headWeight = (y) => Math.min(1, Math.max(0, (headEnd - y) / (H * 0.08)));
+
+  // 4. Composite: blur the body, warp the head, multiply alpha by the noise masks.
   const out = make(W, H);
   const o = out.getContext('2d');
   o.filter = 'blur(14px)';
   o.drawImage(body, 0, 0);
   o.filter = 'none';
   const px = o.getImageData(0, 0, W, H);
+  const src = Uint8ClampedArray.from(px.data);
   const nz = n.getImageData(0, 0, W, H).data;
   const cutY = fig.cut * H;
+  const alphaOut = new Float32Array(W * H);
   for (let y = 0; y < H; y++) {
     // Feathered vertical fade at the bottom, plus a soft occlusion edge for cut figures.
     const bottom = Math.min(1, Math.max(0, (H - 30 - y) / 160));
+    const hw = headWeight(y);
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
       const nv = nz[i] / 255;
+      let bodyA = src[i + 3] / 255;
+      if (hw > 0) {
+        const hv = hz[i] / 255;
+        const hv2 = hz[(y * W + ((x + 97) % W)) * 4] / 255;
+        const sx = Math.min(W - 1, Math.max(0, Math.round(x + hw * (hv - 0.5) * 70)));
+        const sy = Math.min(H - 1, Math.max(0, Math.round(y + hw * (hv2 - 0.5) * 50)));
+        const warped = src[(sy * W + sx) * 4 + 3] / 255;
+        const bite = Math.min(1, Math.max(0, (hv - 0.3) * 2.6));
+        bodyA = (bodyA * (1 - hw) + warped * hw) * (1 - hw + hw * bite);
+      }
       // Ragged occluder edge: the cut line wanders with x, like a chair back or a doorframe in shadow.
       const wobble = 22 * Math.sin(x / 61 + fig.seed) + 14 * Math.sin(x / 17);
       const occl = fig.cut < 1 ? Math.min(1, Math.max(0, (cutY + wobble - y) / 34)) : 1;
       // Contrast-stretch the noise so gaps open up inside the figure.
       const m = Math.min(1, Math.max(0, (nv - 0.36) * 2.4));
       const edge = Math.min(1, Math.min(x, W - 1 - x) / 40);
-      const alpha = (px.data[i + 3] / 255) * m * bottom * occl * edge;
+      alphaOut[y * W + x] = bodyA * m * bottom * occl * edge;
       const lum = Math.round(200 + 55 * nv);
       px.data[i] = lum;
       px.data[i + 1] = lum;
       px.data[i + 2] = lum;
-      px.data[i + 3] = Math.round(Math.min(1, alpha * 1.5) * 255);
     }
   }
+  // 5. Normalise: the densest 2% of the frame reaches full alpha, then an ease-out curve
+  // (1 - (1 - a)^ALPHA_EASE) fills the drape while the edge ramp stays soft (finite slope at 0,
+  // unlike a gamma, which would harden the outline). The compositor's opacity (8 to 25%) is then the figure's real peak, not a fraction of it.
+  const sorted = Float32Array.from(alphaOut).sort();
+  const peak = Math.max(1e-3, sorted[Math.floor(sorted.length * 0.98)]);
+  for (let k = 0; k < W * H; k++) {
+    px.data[k * 4 + 3] = Math.round((1 - Math.pow(1 - Math.min(1, alphaOut[k] / peak), ALPHA_EASE)) * 255);
+  }
   o.putImageData(px, 0, 0);
-  return out.toDataURL('image/png');
+
+  // 6. Fill the box: crop to where the figure is, then stretch it back to 512 x 1024, at most
+  // MAX_STRETCH per axis (more would read as a squashed body). The compositor places the PNG box,
+  // so empty margins would only dilute the figure inside its own bounding box.
+  let x0 = W, x1 = 0, y0 = H, y1 = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (px.data[(y * W + x) * 4 + 3] > 10) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  const cw = Math.max(W / MAX_STRETCH, x1 - x0 + 1);
+  const ch = Math.max(H / MAX_STRETCH, y1 - y0 + 1);
+  const cxm = (x0 + x1 + 1) / 2;
+  const sx0 = Math.min(W - cw, Math.max(0, cxm - cw / 2));
+  const sy0 = Math.min(H - ch, Math.max(0, y0));
+  const fitted = make(W, H);
+  const f = fitted.getContext('2d');
+  f.imageSmoothingQuality = 'high';
+  f.drawImage(out, sx0, sy0, cw, ch, 0, 0, W, H);
+  return fitted.toDataURL('image/png');
 }
 
 const browser = await chromium.launch();
