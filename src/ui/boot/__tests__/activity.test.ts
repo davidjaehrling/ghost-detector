@@ -36,6 +36,6 @@ describe('parseBootParams', () => {
 
   it('defaults to now and animated', () => {
     const now = new Date(2026, 0, 1);
-    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now, dated: false });
+    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now, dated: false, calib: false });
   });
 });

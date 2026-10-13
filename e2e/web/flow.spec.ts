@@ -11,6 +11,7 @@ test('boot to viewfinder, scan, result and history', async ({ page }, testInfo) 
   // static=1 freezes the viewfinder; speed=8 runs the real scan timeline in about a second.
   await page.goto('/?static=1&date=2026-10-13&speed=8');
   await page.getByTestId('key-acknowledge').click();
+  await page.getByTestId('key-calib-unsure').click();
 
   const shot = (name: string) => page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/${name}.png` });
 

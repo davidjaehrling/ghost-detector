@@ -9,6 +9,8 @@ export type ScanRecord = {
   id: string;
   createdAt: number;
   photoUri: string;
+  /** Location tag chosen in the viewfinder, when there was one. */
+  tag?: string;
   seed: number;
   outcome: Outcome;
   profile: EntityProfile;
@@ -22,6 +24,8 @@ export type ScanStore = {
   listScans(): ScanRecord[];
   getHistory(nowMs?: number): OutcomeHistory;
   getRecentNames(): string[];
+  /** Trait lines of the most recent profiles, newest last (no-repeat input for the profile generator). */
+  getRecentLines(): string[];
   getIntensity(): Intensity;
   setIntensity(i: Intensity): void;
 };
@@ -33,7 +37,7 @@ const DEFAULT_INTENSITY: Intensity = 'standard';
 const INTENSITIES: readonly Intensity[] = ['calm', 'standard', 'brave'];
 const DRY_TIERS = new Set(['quiet', 'trace', 'active']);
 
-function webStorage(): KeyValueStore | null {
+export function webStorage(): KeyValueStore | null {
   try {
     const ls = (globalThis as { localStorage?: KeyValueStore }).localStorage;
     return ls ?? null;
@@ -82,6 +86,7 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
     getScan: (id) => load().find((r) => r.id === id),
     listScans: () => [...load()],
     getRecentNames: () => load().map((r) => r.profile.name).slice(-20),
+    getRecentLines: () => load().flatMap((r) => r.profile.traits ?? []).slice(-40),
     getHistory(nowMs = Date.now()) {
       const all = load();
       let scansSinceCritical: number | null = null;
@@ -145,5 +150,6 @@ export const getScan = store.getScan;
 export const listScans = store.listScans;
 export const getHistory = store.getHistory;
 export const getRecentNames = store.getRecentNames;
+export const getRecentLines = store.getRecentLines;
 export const getIntensity = store.getIntensity;
 export const setIntensity = store.setIntensity;
