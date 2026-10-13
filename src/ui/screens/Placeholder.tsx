@@ -1,10 +1,10 @@
 import { type ReactNode, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Graticule, Key, KeyRow, Screw } from '../boot/parts';
+import { Graticule, type KeySlot, KeyRow, Screw } from '../boot/parts';
 import { color, font, radius, space, type } from '../tokens';
 
-export type KeySpec = { testID: string; label: string; legend: string; onPress: () => void; width?: number };
+export type KeySpec = KeySlot;
 
 // In-character placeholder: housing frame, nameplate with the screen code, one
 // readout line on the glass, and keys (the forward key last, right of centre).
@@ -52,11 +52,7 @@ export function Placeholder({
         <Screw corner={3} burred />
       </View>
       <View style={s.keyBand}>
-        <KeyRow dummies={Math.max(0, 3 - keys.length)}>
-          {keys.map((k) => (
-            <Key key={k.testID} {...k} />
-          ))}
-        </KeyRow>
+        <KeyRow slots={[null, null, null, ...keys].slice(-4)} />
       </View>
     </View>
   );

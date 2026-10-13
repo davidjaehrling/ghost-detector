@@ -2,7 +2,7 @@ import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-
 import { useRouter } from 'expo-router';
 import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Image, Linking, Platform, StyleSheet, Text, View } from 'react-native';
-import { Key } from '../src/ui/boot/parts';
+import type { KeySlot } from '../src/ui/boot/parts';
 import { captureSeed } from '../src/ui/capture';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
 import { fixtureSource, fixtureUri } from '../src/ui/fixtures';
@@ -119,23 +119,20 @@ function Viewfinder({
   const canCapture = source === 'camera' || source === 'fixture' || source === 'denied';
   const showAllow = source === 'ask' || source === 'denied';
 
+  const keySlots: (KeySlot | null)[] = [
+    null,
+    null,
+    showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
+    canCapture ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => void capture() } : null,
+  ];
+
   return (
     <Housing
       testID="screen-viewfinder"
       leds={liveLeds(sample.mg)}
       fixedIdentity={isStatic}
       glassLabel={`${copy['hud.mode']}. ${flux}.`}
-      dummies={Math.max(0, 3 - (canCapture ? 1 : 0) - (showAllow ? 1 : 0))}
-      keys={
-        <>
-          {showAllow ? (
-            <Key testID="key-allow" label={copy['hud.allowLabel']} legend={copy['hud.allow']} width={72} onPress={onAllow} />
-          ) : null}
-          {canCapture ? (
-            <Key testID="key-capture" label={copy['hud.captureLabel']} legend={copy['hud.capture']} onPress={() => void capture()} />
-          ) : null}
-        </>
-      }
+      keys={keySlots}
     >
       {() => (
         <>

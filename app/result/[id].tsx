@@ -4,7 +4,7 @@ import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'reac
 import type { Tier } from '../../src/engine';
 import { GhostV0, placeGhost, regionFromImage, type Placement, type RegionResult } from '../../src/fx/ghostV0';
 import { getScan, type ScanRecord } from '../../src/state/scans';
-import { Key } from '../../src/ui/boot/parts';
+import type { KeySlot } from '../../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
 import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
@@ -106,8 +106,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
         leds={1}
         fixedIdentity={harness.isStatic}
         glassLabel={copy.glass}
-        dummies={2}
-        keys={<Key testID="key-back" label={copy.backLabel} legend={copy.back} width={72} onPress={toViewfinder} />}
+        keys={[{ testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder }, null, null, null]}
       >
         {() => (
           <View style={s.missing} testID="result-missing">
@@ -120,21 +119,23 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     );
   }
 
+  // Fixed four-slot row: BACK, SHARE, LOG, then the primary slot. DEEP SCAN
+  // takes the far right on ACTIVE and up and is a dummy cap below that.
+  const deepScan = record.outcome.tier !== 'quiet' && record.outcome.tier !== 'trace';
+  const keySlots: (KeySlot | null)[] = [
+    { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder },
+    { testID: 'key-share', label: copy.shareLabel, legend: copy.share, onPress: inert },
+    { testID: 'key-forward', label: copy.logLabel, legend: copy.log, onPress: () => router.push('/history') },
+    deepScan ? { testID: 'key-deepscan', label: copy.deepLabel, legend: copy.deep, onPress: inert } : null,
+  ];
+
   return (
     <Housing
       testID="screen-result"
       leds={LEDS[record.outcome.tier]}
       fixedIdentity={harness.isStatic}
       glassLabel={copy.glass}
-      dummies={0}
-      keys={
-        <>
-          <Key testID="key-share" label={copy.shareLabel} legend={copy.share} width={66} onPress={inert} />
-          <Key testID="key-deepscan" label={copy.deepLabel} legend={copy.deep} width={98} onPress={inert} />
-          <Key testID="key-forward" label={copy.logLabel} legend={copy.log} width={52} onPress={() => router.push('/history')} />
-          <Key testID="key-back" label={copy.backLabel} legend={copy.back} width={62} onPress={toViewfinder} />
-        </>
-      }
+      keys={keySlots}
     >
       {(size) => <ResultGlass size={size} record={record} isStatic={harness.isStatic} notice={notice} />}
     </Housing>

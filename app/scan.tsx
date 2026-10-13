@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { drawOutcome, generateProfile, seedFrom } from '../src/engine';
 import { getHistory, getIntensity, getRecentNames, saveScan } from '../src/state/scans';
-import { Key } from '../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
 import { fixtureUri } from '../src/ui/fixtures';
 import { type Harness, readHarness } from '../src/ui/harness';
@@ -82,8 +81,7 @@ function Scan({ params }: { params: { photo?: string; seed?: string; static?: st
       leds={scanLeds(frame)}
       fixedIdentity={isStatic}
       glassLabel={copy.glass}
-      dummies={2}
-      keys={<Key testID="key-cancel" label={copy.cancelLabel} legend={copy.cancel} onPress={cancel} />}
+      keys={[null, null, null, { testID: 'key-cancel', label: copy.cancelLabel, legend: copy.cancel, onPress: cancel }]}
     >
       {(size) => <TheatreGlass size={size} seed={draw.seed} frame={frame} />}
     </Housing>

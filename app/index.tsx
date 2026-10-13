@@ -13,7 +13,6 @@ import {
   Graticule,
   GridLabels,
   IdleTrace,
-  Key,
   KeyRow,
   LedLadder,
   MiniSticker,
@@ -40,7 +39,7 @@ const copy = {
   gauge100: '100',
   gauge1000: '1000',
   gaugeUnit: 'mG',
-  key: 'ACKNOWLEDGE',
+  key: 'ACK',
   keyLabel: 'Acknowledge',
 };
 
@@ -153,9 +152,7 @@ function Boot({ params: { isStatic, date, dated } }: { params: BootParams }) {
             <MiniSticker {...identity} />
           </View>
         ) : null}
-        <KeyRow>
-          <Key testID="key-acknowledge" label={copy.keyLabel} legend={copy.key} onPress={onAcknowledge} />
-        </KeyRow>
+        <KeyRow slots={[null, null, null, { testID: 'key-acknowledge', label: copy.keyLabel, legend: copy.key, onPress: onAcknowledge }]} />
       </View>
     </View>
   );

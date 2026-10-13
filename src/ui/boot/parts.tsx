@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
+import { KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
 import { mulberry32 } from './seed';
 
 // ---------- typed self-test ----------
@@ -138,7 +139,7 @@ export function IdleTrace({ w, seed }: { w: number; seed: number }) {
 }
 
 // Text outside the grid: firmware line and trigger label above it, timebase below.
-export function GridLabels({ w, fw, trig, tb }: { w: number; fw: string; trig: string; tb: string }) {
+export function GridLabels({ w, fw, trig, tb, sens }: { w: number; fw: string; trig: string; tb: string; sens?: string }) {
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
   const left = Math.round((w - gw) / 2);
@@ -147,6 +148,7 @@ export function GridLabels({ w, fw, trig, tb }: { w: number; fw: string; trig: s
       <Text style={[st.cornerText, { left, top: 3 }]}>{fw}</Text>
       <Text style={[st.cornerText, { right: left, top: 3 }]}>{trig}</Text>
       <Text style={[st.cornerText, { left, top: GRID_TOP + div * GRID_ROWS + 3 }]}>{tb}</Text>
+      {sens ? <Text style={[st.cornerText, { right: left, top: GRID_TOP + div * GRID_ROWS + 3 }]}>{sens}</Text> : null}
     </>
   );
 }
@@ -243,6 +245,7 @@ const copy = {
 };
 
 const FOLD = 16;
+const SERIAL_MIN_W = 380;
 
 // Bible section 11. `meta` data comes from the install identity. The lower
 // right corner is lifted: the corner is cut away over `bg`, the folded flap
@@ -260,8 +263,10 @@ export function Sticker({
   bg?: string;
   style?: object;
 }) {
-  // One line; the segments wrap whole when the glass is too narrow for it.
-  const parts = [copy.model, serial, `CAL ${cal}`, `PRÜF ${pruef}`];
+  // One line; the segments wrap whole when the glass is too narrow for it. The
+  // serial is on the nameplate too, so it drops off the sticker under 380 px.
+  const { width } = useWindowDimensions();
+  const parts = [copy.model, ...(width < SERIAL_MIN_W ? [] : [serial]), `CAL ${cal}`, `PRÜF ${pruef}`];
   const line = parts.join(' · ');
   const segments = parts.map((t, i) => (i < parts.length - 1 ? `${t} · ` : t));
   return (
@@ -296,45 +301,61 @@ export function MiniSticker(props: { serial: string; cal: string; pruef: string 
 
 // ---------- key row ----------
 
-// Recessed plate with two blank dummy caps on the left and the live key right
-// of centre. The live key is passed in as children.
-export function KeyRow({ children, dummies = 2 }: { children: React.ReactNode; dummies?: number }) {
+// One fixed four-slot key row (D-007 item 1). Every screen uses the same four
+// 72 x 44 caps at the same x positions; a slot with no function is an engraved
+// dummy cap. Slot 3 (far right) is the primary action.
+const KEY_GUTTER = 14; // housing side padding, see Housing
+
+export type KeySlot = {
+  testID: string;
+  label: string;
+  legend: string;
+  onPress: () => void;
+  /** Engraved but not live: n4 legend, press does nothing. */
+  inert?: boolean;
+};
+
+export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
+  const { width } = useWindowDimensions();
+  const { gap, left } = keyLayout(width - KEY_GUTTER * 2);
   return (
     <View style={st.keyPlate}>
-      <View style={st.dummyGroup}>
-        {Array.from({ length: dummies }, (_, i) => (
-          <View key={i} style={st.dummy} />
-        ))}
+      <View style={[st.slotRow, { marginLeft: left, gap }]}>
+        {Array.from({ length: KEY_SLOTS }, (_, i) => {
+          const slot = slots[i];
+          return slot ? <Key key={slot.testID} {...slot} /> : <DummyCap key={`d${i}`} />;
+        })}
       </View>
-      <View style={st.liveGroup}>{children}</View>
+    </View>
+  );
+}
+
+// Engraved dummy cap: same footprint as a live key, three engraved dots, no legend.
+export function DummyCap() {
+  return (
+    <View style={st.dummy} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={st.dots}>
+        <View style={st.dot} />
+        <View style={st.dot} />
+        <View style={st.dot} />
+      </View>
     </View>
   );
 }
 
 // Rubber key: darker n2 face, 1 px n4 top highlight. Legend is lbM (Bible
-// section 5 sets key legends at 13 px), 15% fainter on the most-used key.
-export function Key({
-  testID,
-  label,
-  legend,
-  onPress,
-  width = 120,
-}: {
-  testID: string;
-  label: string;
-  legend: string;
-  onPress: () => void;
-  width?: number;
-}) {
+// section 5 sets key legends at 13 px). Long legends wrap on the space.
+export function Key({ testID, label, legend, onPress, inert = false }: KeySlot) {
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={onPress}
-      style={({ pressed }) => [st.key, { width }, pressed && st.keyDown]}
+      accessibilityState={{ disabled: inert }}
+      onPress={inert ? undefined : onPress}
+      style={({ pressed }) => [st.key, pressed && !inert && st.keyDown]}
     >
-      <Text style={st.keyLegend} numberOfLines={1}>
+      <Text style={[st.keyLegend, inert && st.keyLegendInert]} numberOfLines={2}>
         {legend}
       </Text>
     </Pressable>
@@ -459,10 +480,7 @@ const st = StyleSheet.create({
 
   keyPlate: {
     height: size.keyH + 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    justifyContent: 'center',
     backgroundColor: color.n1,
     borderRadius: radius.key,
     borderTopWidth: 1,
@@ -470,9 +488,25 @@ const st = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: color.n4,
   },
-  dummyGroup: { flexDirection: 'row', gap: 8 },
-  liveGroup: { flexDirection: 'row', gap: 8 },
+  slotRow: { flexDirection: 'row' },
   key: {
+    width: KEY_W,
+    height: size.keyH,
+    borderRadius: radius.key,
+    backgroundColor: color.n2,
+    borderTopWidth: 1,
+    borderTopColor: color.n4,
+    borderBottomWidth: 3,
+    borderBottomColor: color.n0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  keyDown: { borderBottomWidth: 1, borderTopWidth: 3, borderTopColor: color.n0 },
+  keyLegend: { ...type.lbM, color: color.n6, opacity: 0.85, textAlign: 'center' },
+  keyLegendInert: { color: color.n4, opacity: 1 },
+  dummy: {
+    width: KEY_W,
     height: size.keyH,
     borderRadius: radius.key,
     backgroundColor: color.n2,
@@ -483,16 +517,6 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  keyDown: { borderBottomWidth: 1, borderTopWidth: 3, borderTopColor: color.n0 },
-  keyLegend: { ...type.lbM, color: color.n6, opacity: 0.85 },
-  dummy: {
-    width: 72,
-    height: size.keyH,
-    borderRadius: radius.key,
-    backgroundColor: color.n2,
-    borderTopWidth: 1,
-    borderTopColor: color.n4,
-    borderBottomWidth: 3,
-    borderBottomColor: color.n0,
-  },
+  dots: { flexDirection: 'row', gap: 4 },
+  dot: { width: 2, height: 2, borderRadius: 1, backgroundColor: color.n1 },
 });
