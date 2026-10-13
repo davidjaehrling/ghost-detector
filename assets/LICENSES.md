@@ -4,4 +4,4 @@ Every image, font or sound in this repo is listed here with its source URL, lice
 
 | File | Source URL | Licence | Author | Notes |
 |---|---|---|---|---|
-| (none yet) | | | | |
+| `@expo-google-fonts/vt323` (VT323-Regular.ttf, bundled via npm) | https://github.com/google/fonts/tree/main/ofl/vt323 | SIL Open Font License 1.1 | Peter Hull | Boot screen and pixel UI face |
