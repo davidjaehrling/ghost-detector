@@ -10,7 +10,7 @@ import type { Tier } from '../../engine';
 import { makeSurface, snapshot } from '../apparition/render';
 import { imageRectFor } from '../apparition/shape';
 import type { Placement } from '../ghostV0/placement';
-import { ghostBlurSigma, motionCopies, smearFor } from './motion';
+import { ghostBlurSigma, layerCopies, smearFor } from './motion';
 
 export interface GhostLayerInput {
   /** The figure: white with alpha (apparition) or a v0 matte. */
@@ -52,7 +52,7 @@ export function buildGhostLayer({ figure, padded = true, placement, width, heigh
   const smear = smearFor(seed);
   // Farthest copy first so the main figure lands on top (normal "over" inside the layer). The
   // CRITICAL echo goes under everything.
-  const layers = (placement.echo ? [placement.echo] : []).concat(motionCopies(placement.offsetCopies).reverse(), { dx: 0, dy: 0, alpha: 1 });
+  const layers = layerCopies(placement);
   const layerPaint = Skia.Paint();
   const paint = Skia.Paint();
   paint.setAntiAlias(true);

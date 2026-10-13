@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { alphaGrid, DENSITY_FLOOR, densityAt, largestHoleFraction, maskAlpha, mirrorCorrelation, silhouetteMetrics } from '../metrics';
-import { buildSilhouette, coverageAt, HEM, LEAN_DISSOLVE, OCCLUDED_VARIANTS, TRAIL_HEM, VARIANT_COUNT } from '../shape';
+import { alphaGrid, DENSITY_FLOOR, densityAt, edgeIrregularity, HEM_RAG, largestHoleFraction, maskAlpha, mirrorCorrelation, silhouetteMetrics } from '../metrics';
+import { buildSilhouette, coverageAt, HEM_DISSOLVE, OCCLUDED_VARIANTS, VARIANT_COUNT } from '../shape';
 
 const SEEDS = Array.from({ length: 20 }, (_, i) => 1 + i * 7919);
 
 describe('apparition silhouettes (6 variants x 20 seeds)', () => {
   for (let v = 0; v < VARIANT_COUNT; v++) {
-    it(`variant ${v}: asymmetric (mirror <= 0.55), no enclosed hole over 1%, area 30 to 60% of its box`, { timeout: 30000 }, () => {
+    it(`variant ${v}: asymmetric (mirror <= 0.55), no enclosed hole over 1%, area 30 to 60% of its box, ragged edge (outline >= 1.25 x hull)`, { timeout: 30000 }, () => {
       for (const seed of SEEDS) {
         const m = silhouetteMetrics(v, seed);
+        expect(m.edge, `edge v${v} s${seed}`).toBeGreaterThanOrEqual(1.25);
         expect(m.mirror, `mirror v${v} s${seed}`).toBeLessThanOrEqual(0.55);
         expect(m.hole, `hole v${v} s${seed}`).toBeLessThanOrEqual(0.01);
         expect(m.area, `area v${v} s${seed}`).toBeGreaterThanOrEqual(0.3);
@@ -34,7 +35,7 @@ describe('apparition silhouettes (6 variants x 20 seeds)', () => {
     expect(OCCLUDED_VARIANTS).toHaveLength(2);
   });
 
-  it('the occluder hides 3 to 30% of the body', () => {
+  it('the occluder hides 2 to 40% of the visible body (above the end of the hem dissolve)', () => {
     // Over a domain larger than the box: the fit uses the visible extents, so the hidden part
     // may fall outside the image.
     for (const v of OCCLUDED_VARIANTS) {
@@ -42,14 +43,14 @@ describe('apparition silhouettes (6 variants x 20 seeds)', () => {
         const sil = buildSilhouette(v, seed);
         let whole = 0;
         let kept = 0;
-        for (let y = -0.2; y < 1.8; y += 0.01)
+        for (let y = -0.2; y < sil.fade.to; y += 0.01)
           for (let x = -0.5; x < 1.5; x += 0.01) {
             whole += coverageAt({ ...sil, cut: null }, x, y);
             kept += coverageAt(sil, x, y);
           }
         const hidden = 1 - kept / whole;
-        expect(hidden, `variant ${v} seed ${seed}`).toBeGreaterThan(0.03);
-        expect(hidden, `variant ${v} seed ${seed}`).toBeLessThan(0.3);
+        expect(hidden, `variant ${v} seed ${seed}`).toBeGreaterThan(0.02);
+        expect(hidden, `variant ${v} seed ${seed}`).toBeLessThan(0.4);
       }
     }
   });
@@ -65,38 +66,56 @@ describe('believability (D-017)', () => {
     expect(core(0) / core(1)).toBeCloseTo(0.4, 2);
     const edge = (n: number) => maskAlpha(0.4, 0, 1, 0.3, 1, 0.3, n);
     expect(edge(0)).toBeCloseTo(edge(1), 9);
-    // On the rendered grids: the densest interior cells are at least twice the thinnest ones.
+    // On the rendered grids: the densest cells are well above the thinnest ones. Twice in round 2;
+    // 1.8 since the ragged erosion (D-022) cuts the soft low-alpha rim that part of that spread
+    // came from (the interior band itself is pinned by the formula checks above).
     for (let v = 0; v < VARIANT_COUNT; v++) {
       const g = alphaGrid(buildSilhouette(v, 17));
       const inner = Array.from(g.alpha).filter((a, i) => a > 0.2 && i / g.w / g.h < 0.55).sort((a, b) => a - b);
-      expect(inner[Math.floor(inner.length * 0.95)]! / inner[Math.floor(inner.length * 0.05)]!, `variant ${v}`).toBeGreaterThan(2);
+      expect(inner[Math.floor(inner.length * 0.95)]! / inner[Math.floor(inner.length * 0.05)]!, `variant ${v}`).toBeGreaterThan(1.8);
     }
   });
 
-  it('dissolves the lean variant at 55 to 65% of its height and leaves no tail below', () => {
-    for (const seed of SEEDS) {
-      const sil = buildSilhouette(0, seed);
-      expect(sil.fade.floor).toBe(0);
-      const g = alphaGrid(sil);
-      // Below the end of the fade nothing is left.
-      const below = Math.ceil(sil.fade.to * g.h) + 1;
-      for (let y = below; y < g.h; y++) for (let x = 0; x < g.w; x++) expect(g.alpha[y * g.w + x]).toBe(0);
-      // The fade's centre sits 55 to 65% of the way down the whole body (head top to hem; the
-      // polygons run on below the box, faded out).
-      let y0 = Infinity;
-      let y1 = -Infinity;
-      for (const p of sil.parts)
-        for (const [, y] of p.poly) {
-          y0 = Math.min(y0, y);
-          y1 = Math.max(y1, y);
-        }
-      const frac = ((sil.fade.from + sil.fade.to) / 2 - y0) / (y1 - y0);
-      expect(frac, `seed ${seed}`).toBeGreaterThanOrEqual(0.53);
-      expect(frac, `seed ${seed}`).toBeLessThanOrEqual(0.67);
-      expect(LEAN_DISSOLVE).toEqual([0.55, 0.65]);
+  it('dissolves every variant between 50 and 70% of its height and leaves no tail below (D-022)', { timeout: 60000 }, () => {
+    expect(HEM_DISSOLVE).toEqual([0.5, 0.7]);
+    for (let v = 0; v < VARIANT_COUNT; v++)
+      for (const seed of SEEDS) {
+        const sil = buildSilhouette(v, seed);
+        expect(sil.fade.floor).toBe(0);
+        // The fade starts and ends 50 to 70% of the way down the whole body (head top to hem; the
+        // polygons run on below the box, faded out).
+        let y0 = Infinity;
+        let y1 = -Infinity;
+        for (const p of sil.parts)
+          for (const [, y] of p.poly) {
+            y0 = Math.min(y0, y);
+            y1 = Math.max(y1, y);
+          }
+        const from = (sil.fade.from - y0) / (y1 - y0);
+        const to = (sil.fade.to - y0) / (y1 - y0);
+        expect(from, `v${v} s${seed}`).toBeGreaterThanOrEqual(0.5 - 1e-9);
+        expect(to, `v${v} s${seed}`).toBeLessThanOrEqual(0.7 + 1e-9);
+        // Below the fade (its end, plus the ragged line's reach and one cell of the fine feather)
+        // the alpha is exactly 0: no drape, no flare, no tail on any variant.
+        // (The hood's cut can end the body above its fade; then the fade lies under the box.)
+        const g = alphaGrid(sil);
+        const below = Math.min(g.h - 2, Math.ceil((sil.fade.to + HEM_RAG / 2) * g.h) + 1);
+        for (let y = below; y < g.h; y++) for (let x = 0; x < g.w; x++) expect(g.alpha[y * g.w + x], `v${v} s${seed} row ${y}`).toBe(0);
+      }
+  });
+
+  it('the hem line is ragged: the lowest visible cell varies across the figure', () => {
+    for (let v = 0; v < VARIANT_COUNT; v++) {
+      const g = alphaGrid(buildSilhouette(v, 7));
+      const lows: number[] = [];
+      for (let x = 0; x < g.w; x++) {
+        let low = -1;
+        for (let y = 0; y < g.h; y++) if (g.alpha[y * g.w + x]! >= 0.25) low = y;
+        if (low >= 0) lows.push(low);
+      }
+      const steps = lows.slice(1).filter((l, i) => l !== lows[i]).length;
+      expect(steps, `variant ${v}`).toBeGreaterThan(lows.length / 3);
     }
-    // Other variants keep a hem fade (the trail variant a deeper one).
-    for (let v = 1; v < VARIANT_COUNT; v++) expect(buildSilhouette(v, 3).fade).toEqual(v === 5 ? TRAIL_HEM : HEM);
   });
 });
 
@@ -110,6 +129,16 @@ describe('metric functions', () => {
   it('a symmetric ellipse scores mirror correlation near 1', () => {
     const g = grid(20, 40, (x, y) => (((x - 9.5) / 6) ** 2 + ((y - 19.5) / 15) ** 2 <= 1 ? 1 : 0));
     expect(mirrorCorrelation(g)).toBeGreaterThan(0.98);
+  });
+
+  it('edge irregularity: about 1 for a smooth blob, higher for a ragged one', () => {
+    const blob = grid(40, 80, (x, y) => (((x - 19.5) / 12) ** 2 + ((y - 39.5) / 30) ** 2 <= 1 ? 1 : 0));
+    expect(edgeIrregularity(blob)).toBeLessThan(1.1);
+    const ragged = grid(40, 80, (x, y) => {
+      const r = 1 + 0.25 * Math.sin(Math.atan2(y - 39.5, x - 19.5) * 15);
+      return ((x - 19.5) / 12) ** 2 + ((y - 39.5) / 30) ** 2 <= r * r ? 1 : 0;
+    });
+    expect(edgeIrregularity(ragged)).toBeGreaterThan(1.25);
   });
 
   it('finds an enclosed hole and ignores a notch open to the outside', () => {

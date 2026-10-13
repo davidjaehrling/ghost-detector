@@ -20,7 +20,9 @@
 // pixels back from the Skia canvas).
 //
 // Targets: mean lift in the figure box 8 to 20, darkened 0, union box <= 15% of the panel,
-// figure centre 15 to 40% in from a side edge and 10% clear of the top and bottom.
+// figure centre 15 to 40% in from a side edge and 10% clear of the top and bottom, and at least
+// 10% of the figure cut by the scene's edges or, on a flat scene, the synthetic foreground band
+// (the compositor's own figure, published on window.__composite: gradient, band, cut).
 import { chromium } from '@playwright/test';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -243,6 +245,7 @@ async function pass(name, extra, warped) {
         clamp: !!a.info && m.overLimit === 0,
         union: m.union <= 0.15,
         place: sideIn >= 0.15 - 1e-3 && sideIn <= 0.4 + 1e-3 && m.cy >= 0.1 && m.cy <= 0.9,
+        cut: !!a.info && typeof a.info.cut === 'number' && a.info.cut >= 0.1,
       };
       runsOut.push({ ...m, info: a.info, settled: a.settled && b.settled, checks });
     }
@@ -281,11 +284,11 @@ if (flag('json')) {
   const f = (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : String(v));
   const per = (r, fn) => r.runs.map(fn).join(' / ');
   console.log(`\nroute=${route} demo=${demo} viewport 390x844 @1x, ${runs} runs per fixture (values per run)\n`);
-  console.log('| pass | fixture | variant | clamp ref | mean lift | spread | max lift | darkened px | over clamp px | union box | centre (x, y) | settled | target |');
-  console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+  console.log('| pass | fixture | variant | clamp ref | mean lift | spread | max lift | darkened px | over clamp px | union box | centre (x, y) | gradient | occluder | cut | settled | target |');
+  console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const r of all)
     console.log(
-      `| ${r.pass} | ${r.fixture} | ${r.variant} | ${f(r.clampRef)} | ${per(r, (x) => f(x.meanLift))} | ${f(r.spread, 2)} | ${per(r, (x) => f(x.maxLift, 0))} | ${per(r, (x) => x.darkened)} | ${per(r, (x) => (x.info ? x.overLimit : 'n/a'))} | ${per(r, (x) => f(x.union * 100) + '%')} | ${per(r, (x) => `${f(x.cx, 2)}, ${f(x.cy, 2)}`)} | ${per(r, (x) => (x.settled ? 'y' : 'n'))} | ${r.pass.includes('info') ? 'info' : r.ok ? 'PASS' : `FAIL (${r.failed.join(', ')})`} |`,
+      `| ${r.pass} | ${r.fixture} | ${r.variant} | ${f(r.clampRef)} | ${per(r, (x) => f(x.meanLift))} | ${f(r.spread, 2)} | ${per(r, (x) => f(x.maxLift, 0))} | ${per(r, (x) => x.darkened)} | ${per(r, (x) => (x.info ? x.overLimit : 'n/a'))} | ${per(r, (x) => f(x.union * 100) + '%')} | ${per(r, (x) => `${f(x.cx, 2)}, ${f(x.cy, 2)}`)} | ${f(r.runs[0].info?.gradient, 2)} | ${r.runs[0].info ? (r.runs[0].info.band ? 'band' : 'scene') : 'n/a'} | ${per(r, (x) => (typeof x.info?.cut === 'number' ? f(x.info.cut * 100) + '%' : 'n/a'))} | ${per(r, (x) => (x.settled ? 'y' : 'n'))} | ${r.pass.includes('info') ? 'info' : r.ok ? 'PASS' : `FAIL (${r.failed.join(', ')})`} |`,
     );
   for (const r of all)
     r.runs.forEach((x, i) => {

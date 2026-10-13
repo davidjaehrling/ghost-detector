@@ -1,6 +1,6 @@
 /** Pure helpers for the ghost layer: motion copies and blur. No Skia, so they run under Vitest. */
 import type { Tier } from '../../engine';
-import type { OffsetCopy } from '../ghostV0/placement';
+import type { OffsetCopy, Placement } from '../ghostV0/placement';
 
 /** Ghost blur sigma as a fraction of the figure width (the scene gets none). */
 export const GHOST_BLUR = 0.025;
@@ -53,4 +53,13 @@ export function smearFor(seed: number): { length: number; dir: 1 | -1; offsets: 
     offsets: raw.map((_, k) => (dir * length * k) / (SMEAR_STEPS - 1)),
     weights: raw.map((w) => w / sum),
   };
+}
+
+/**
+ * Every copy the ghost layer draws, in draw order, with its alpha as a multiple of
+ * `Placement.opacity`: the CRITICAL echo first (under everything), then the motion copies
+ * farthest first, then the main figure (alpha 1) on top.
+ */
+export function layerCopies(p: Pick<Placement, 'offsetCopies' | 'echo'>): OffsetCopy[] {
+  return (p.echo ? [p.echo] : []).concat(motionCopies(p.offsetCopies).reverse(), { dx: 0, dy: 0, alpha: 1 });
 }

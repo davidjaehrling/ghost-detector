@@ -3,7 +3,8 @@
  *
  * For a backdrop colour `bg` (0..1 per channel) and ghost alpha `a`:
  * 1. Occlusion: the ghost is hidden where the (slightly blurred) scene luma is above the region's
- *    80th percentile, with a soft ramp of `OCC_RAMP` luma.
+ *    80th percentile, with a soft ramp of `OCC_RAMP` luma. On a flat scene a synthetic foreground
+ *    band (`Band`, `bandVisibility`) hides it instead.
  * 2. Plus with white at the layer alpha: lift `min(a, 1 - bg)` per channel, so the ghost only adds
  *    light, by about the same amount over a dark or a bright backdrop. (Screen, `a * (1 - bg)`,
  *    adds almost nothing over a bright scene: on the bright fixture it lifted the figure box by
@@ -49,6 +50,39 @@ export const OCC_GRID_BLUR = 1;
 export const GRAIN = 0.04;
 
 export type RGB = [number, number, number];
+
+/**
+ * Synthetic foreground band (D-022), for scenes with nothing in front of the figure to cut it: a
+ * soft, slightly slanted band across the panel, with ragged top and bottom edges, that hides the
+ * ghost (the photo is untouched; the band reads as something dark or bright in the foreground).
+ * Panel pixels. `ph` are the phases of the edge noise (three for the top, three for the bottom).
+ */
+export interface Band {
+  y0: number;
+  y1: number;
+  /** Panel x the slope pivots on, and dy/dx of both edges. */
+  cx: number;
+  slope: number;
+  /** Peak offset of the ragged edges, px. */
+  rag: number;
+  ph: readonly [number, number, number, number, number, number];
+}
+/** Wavenumbers of the band's edge noise, per px (wavelengths about 30, 13 and 6 px). */
+export const BAND_K: readonly [number, number, number] = [0.21, 0.5, 1.1];
+/** Half width of the band edges' soft ramp, px. */
+export const BAND_SOFT = 2.5;
+
+const raggedEdge = (x: number, a: number, b: number, c: number) =>
+  (0.6 * Math.sin(x * BAND_K[0] + a) + 0.3 * Math.sin(x * BAND_K[1] + b) + 0.2 * Math.sin(x * BAND_K[2] + c)) / 1.1;
+
+/** Ghost visibility 0..1 at a panel point under the band (1 outside it, 0 inside). */
+export function bandVisibility(x: number, y: number, band: Band | null): number {
+  if (!band) return 1;
+  const tilt = band.slope * (x - band.cx);
+  const top = band.y0 + tilt + band.rag * raggedEdge(x, band.ph[0], band.ph[1], band.ph[2]);
+  const bot = band.y1 + tilt + band.rag * raggedEdge(x, band.ph[3], band.ph[4], band.ph[5]);
+  return 1 - smoothstep(top - BAND_SOFT, top + BAND_SOFT, y) * (1 - smoothstep(bot - BAND_SOFT, bot + BAND_SOFT, y));
+}
 
 export const luma = (c: readonly number[]) => LUMA[0] * c[0]! + LUMA[1] * c[1]! + LUMA[2] * c[2]!;
 
@@ -115,10 +149,33 @@ uniform float grain;
 uniform float occRadius;
 uniform float gammaK;
 uniform float peak;
+uniform float bandOn;
+uniform float bandY0;
+uniform float bandY1;
+uniform float bandCx;
+uniform float bandSlope;
+uniform float bandRag;
+uniform float bandSoft;
+uniform float3 bandK;
+uniform float3 bandPhT;
+uniform float3 bandPhB;
 
 const half3 W = half3(${LUMA.join(', ')});
 
 float L(float2 p) { return dot(photo.eval(p).rgb, W); }
+
+float edgeNoise(float x, float3 ph) {
+  return (0.6 * sin(x * bandK.x + ph.x) + 0.3 * sin(x * bandK.y + ph.y) + 0.2 * sin(x * bandK.z + ph.z)) / 1.1;
+}
+
+// Twin of bandVisibility: 0 inside the synthetic foreground band, 1 outside.
+float bandVis(float2 xy) {
+  if (bandOn < 0.5) return 1.0;
+  float tilt = bandSlope * (xy.x - bandCx);
+  float top = bandY0 + tilt + bandRag * edgeNoise(xy.x, bandPhT);
+  float bot = bandY1 + tilt + bandRag * edgeNoise(xy.x, bandPhB);
+  return 1.0 - smoothstep(top - bandSoft, top + bandSoft, xy.y) * (1.0 - smoothstep(bot - bandSoft, bot + bandSoft, xy.y));
+}
 
 half4 main(float2 xy) {
   half4 bgc = photo.eval(xy);
@@ -129,7 +186,7 @@ half4 main(float2 xy) {
   float scene = useGrid > 0.5 ? float(occl.eval(xy).r) : L(xy) * 0.2
     + (L(xy + float2(r, 0)) + L(xy - float2(r, 0)) + L(xy + float2(0, r)) + L(xy - float2(0, r))) * 0.12
     + (L(xy + float2(r, r) * 1.5) + L(xy - float2(r, r) * 1.5) + L(xy + float2(r, -r) * 1.5) + L(xy - float2(r, -r) * 1.5)) * 0.08;
-  float vis = 1.0 - smoothstep(occLo, occLo + occRamp, scene);
+  float vis = (1.0 - smoothstep(occLo, occLo + occRamp, scene)) * bandVis(xy);
   half4 gc = ghost.eval(xy);
   float a = gc.a * strength * vis;
   float dens = gc.a > 1e-4 ? clamp(float(gc.r) / float(gc.a), 0.0, 1.0) : 1.0;

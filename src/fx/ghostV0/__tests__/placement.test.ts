@@ -9,6 +9,7 @@ import {
   FALLBACK_LIFT,
   ECHO_ALPHA,
   ECHO_PX,
+  ECHO_SHARE,
   MAX_AREA_FRACTION,
   OPACITY_MAX,
   OPACITY_MIN,
@@ -278,9 +279,10 @@ describe('tier caps (D-009)', () => {
       const base = placeGhost(null, FRAMES[0]!, seed);
       const crit = placeGhost(null, FRAMES[0]!, seed, { tier: 'critical' });
       expect(crit.offsetCopies.length).toBe(base.offsetCopies.length - 1);
-      // The echo takes its share of the same budget.
-      expect(crit.offsetCopies.reduce((a, c) => a + c.alpha, 0) + crit.echo!.alpha).toBeCloseTo(COPY_ALPHA_SUM, 9);
-      expect(stackedAlpha(crit)).toBeLessThanOrEqual(crit.opacity * (1 + COPY_ALPHA_SUM) + 1e-12);
+      // The echo takes ECHO_SHARE out of the copies' budget; the stacked alpha keeps its bound.
+      expect(crit.offsetCopies.reduce((a, c) => a + c.alpha, 0) + ECHO_SHARE).toBeCloseTo(COPY_ALPHA_SUM, 9);
+      expect(stackedAlpha(crit)).toBeLessThanOrEqual(crit.opacity * (1 + COPY_ALPHA_SUM - ECHO_SHARE + ECHO_ALPHA) + 1e-12);
+      expect(stackedAlpha(crit)).toBeLessThanOrEqual(0.3);
       expect(placeGhost(null, FRAMES[0]!, seed, { tier: 'active' }).offsetCopies.length).toBe(base.offsetCopies.length);
     }
   });
@@ -305,16 +307,28 @@ describe('tier extent and the CRITICAL echo (D-017)', () => {
     }
   });
 
-  it('adds one faint echo 6 to 10 px off the figure on CRITICAL only', () => {
+  it('adds exactly one echo 8 to 12 px off the figure at 45% of its alpha, on CRITICAL only (D-022)', () => {
+    expect(ECHO_PX).toEqual([8, 12]);
+    expect(ECHO_ALPHA).toBe(0.45);
+    const dirs = new Set<string>();
     for (let seed = 0; seed < 300; seed++) {
       const crit = placeGhost(null, FRAMES[2]!, seed, { tier: 'critical' });
+      // One echo next to the motion copies (2 to 4 on CRITICAL); none of them is as strong.
+      expect(crit.echo).toBeDefined();
+      expect(crit.offsetCopies.length).toBeGreaterThanOrEqual(2);
+      expect(crit.offsetCopies.length).toBeLessThanOrEqual(4);
+      for (const c of crit.offsetCopies) expect(c.alpha).toBeLessThan(crit.echo!.alpha);
       const d = Math.hypot(crit.echo!.dx, crit.echo!.dy);
       expect(d).toBeGreaterThanOrEqual(ECHO_PX[0] - 1e-9);
       expect(d).toBeLessThanOrEqual(ECHO_PX[1] + 1e-9);
+      // Alpha ratio to the main figure (Placement.opacity is the main figure's alpha).
       expect(crit.echo!.alpha).toBe(ECHO_ALPHA);
+      dirs.add(`${Math.sign(crit.echo!.dx)}`);
       for (const tier of ['quiet', 'trace', 'active', 'strong'] as const) expect(placeGhost(null, FRAMES[2]!, seed, { tier }).echo).toBeUndefined();
       expect(placeGhost(null, FRAMES[2]!, seed).echo).toBeUndefined();
     }
+    // The direction is seeded: both sides occur.
+    expect(dirs).toEqual(new Set(['1', '-1']));
   });
 });
 

@@ -6,7 +6,7 @@ import { Easing, useDerivedValue, useSharedValue, withTiming } from 'react-nativ
 import type { Tier } from '../../engine';
 import { FIT_H, FIT_W, renderApparition, VARIANT_COUNT } from '../apparition';
 import { stackedAlpha, type Placement, type RegionInput } from '../ghostV0/placement';
-import { CLAMP_LIFT, COMPOSITE_SKSL, GAMMA, GRAIN, OCC_GRID_BLUR, POP_ALPHA, POP_LIFT } from './blend';
+import { BAND_K, BAND_SOFT, CLAMP_LIFT, COMPOSITE_SKSL, GAMMA, GRAIN, OCC_GRID_BLUR, POP_ALPHA, POP_LIFT, type Band } from './blend';
 import { SnapshotCanvas } from '../glass/snapshotRegistry';
 import { buildGhostLayer } from './ghostLayer';
 import { reference } from './reference';
@@ -92,6 +92,10 @@ export interface CompositeInfo {
   clampLift: number;
   occ: number;
   occRamp: number;
+  /** Mean luma gradient under the figure, the synthetic band (flat scenes) and the share of the figure cut. */
+  gradient: number | null;
+  band: Band | null;
+  cut: number | null;
   variant: number | 'png';
   seed: number;
   tier?: Tier;
@@ -148,7 +152,8 @@ function figureSize(p: Placement, scale: number): { width: number; height: numbe
 /**
  * Compositor v1: the photo and the apparition on one Skia canvas. The ghost layer (figure plus
  * 3 to 5 directional copies, Gaussian-blurred; the photo is not) goes through one runtime shader
- * that hides it where the scene is brighter than the region's 80th percentile, adds it with a
+ * that hides it where the scene is brighter than the region's 80th percentile (or, on a flat
+ * scene, behind a synthetic foreground band), adds it with a
  * Plus blend (light only), clamps each pixel to the clamp reference + CLAMP_LIFT luma on a smooth curve, and adds 4% seeded grain
  * over the whole panel after compositing.
  */
@@ -189,7 +194,13 @@ export function Composite(props: CompositeProps) {
   }, [fade, fadeInMs, isStatic, ghost]);
 
   const rect = props.photoRect ?? coverRect(photo, width, height);
-  const ref = reference({ meanLuma, p80Luma: props.p80Luma, p90Luma: props.p90Luma, region: props.region, grid: props.grid, placement, photoRect: rect });
+  const { x: rx, y: ry, width: rw, height: rh } = rect;
+  const { p80Luma, p90Luma, region, grid } = props;
+  const ref = useMemo(
+    () => reference({ meanLuma, p80Luma, p90Luma, region, grid, placement, photoRect: { x: rx, y: ry, width: rw, height: rh }, seed: seed >>> 0 }),
+    [meanLuma, p80Luma, p90Luma, region, grid, placement, rx, ry, rw, rh, seed],
+  );
+  const band = ref.band;
   const pop = Math.min(1, Math.max(0, props.pop ?? 0));
   const limit = Math.min(255, ref.mean + CLAMP_LIFT + pop * POP_LIFT) / 255;
   const occLo = Math.min(255, ref.occ) / 255;
@@ -200,9 +211,25 @@ export function Composite(props: CompositeProps) {
   // The ghost layer's highest alpha: the figure under all its copies (and the echo).
   const peak = stackedAlpha(placement);
   const useGrid = props.grid && ref.source === 'figure' ? 1 : 0;
+  // Synthetic foreground band on a flat scene (reference.ts); off otherwise.
+  const bandU = useMemo(
+    () => ({
+      bandOn: band ? 1 : 0,
+      bandY0: band?.y0 ?? 0,
+      bandY1: band?.y1 ?? 0,
+      bandCx: band?.cx ?? 0,
+      bandSlope: band?.slope ?? 0,
+      bandRag: band?.rag ?? 0,
+      bandSoft: BAND_SOFT,
+      bandK: [...BAND_K],
+      bandPhT: band ? [band.ph[0], band.ph[1], band.ph[2]] : [0, 0, 0],
+      bandPhB: band ? [band.ph[3], band.ph[4], band.ph[5]] : [0, 0, 0],
+    }),
+    [band],
+  );
   const uniforms = useDerivedValue(
-    () => ({ useGrid, strength: on * gain * fade.get(), limit, occLo, occRamp, grain: GRAIN, occRadius: OCC_RADIUS, gammaK: GAMMA, peak }),
-    [useGrid, on, gain, limit, occLo, occRamp, peak],
+    () => ({ useGrid, strength: on * gain * fade.get(), limit, occLo, occRamp, grain: GRAIN, occRadius: OCC_RADIUS, gammaK: GAMMA, peak, ...bandU }),
+    [useGrid, on, gain, limit, occLo, occRamp, peak, bandU],
   );
 
   // Harness: publish what was drawn so scripts/measure-ghost.mjs can check the clamp and the box.
@@ -219,12 +246,15 @@ export function Composite(props: CompositeProps) {
       clampLift: CLAMP_LIFT + pop * POP_LIFT,
       occ: ref.occ,
       occRamp: ref.ramp,
+      gradient: ref.gradient ?? null,
+      band,
+      cut: ref.cut ?? null,
       variant: variantShown,
       seed: seed >>> 0,
       tier,
       pop,
     };
-  }, [publish, placement, width, height, meanLuma, props.p80Luma, ref.mean, ref.occ, ref.ramp, variantShown, seed, tier, pop]);
+  }, [publish, placement, width, height, meanLuma, props.p80Luma, ref.mean, ref.occ, ref.ramp, ref.gradient, band, ref.cut, variantShown, seed, tier, pop]);
 
   if (!effect) throw new Error('Composite: shader failed to compile');
   const ready = !!photo && !!ghost && !!occl;

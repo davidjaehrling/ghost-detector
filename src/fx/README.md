@@ -26,9 +26,12 @@ so it runs before Skia lands. P3 swaps the internals; the props stay.
     is sized to `TIER_EXTENT` of the frame: ACTIVE 11%, STRONG 13%, CRITICAL 14.5% (the panel
     asked for about 11, 14 and 17%; plan section 6 caps the ghost at 15%, so STRONG and CRITICAL
     are scaled into the cap: a ruling for the Director). QUIET and TRACE keep the region size.
-  - `echo` (CRITICAL only): a second faint copy of the whole figure 6 to 10 px off (`ECHO_PX`),
-    mostly sideways, alpha 0.15 taken out of the same `COPY_ALPHA_SUM` budget, so the stacked
-    alpha bound below still holds. Optional field: older callers ignore it.
+  - `echo` (CRITICAL only): a second copy of the whole figure 8 to 12 px off (`ECHO_PX`, round 3,
+    D-022; 6 to 10 in round 2), mostly sideways, direction seeded, at 45% of the main figure's
+    alpha (`ECHO_ALPHA`; 0.15 in round 2, which vanished under the blur and smear). It takes
+    `ECHO_SHARE` 0.15 out of the copies' `COPY_ALPHA_SUM` budget, so the stacked alpha is at most
+    1.65 x opacity (0.297 at the CRITICAL cap of 0.18); the per-pixel clamp bounds the light.
+    Optional field: older callers ignore it.
   - `tier` (the result screen should pass `outcome.tier`): caps the band's top at
     `TIER_OPACITY_CAP` (quiet 0.10, trace 0.10, active 0.22, strong 0.20, critical 0.18; override
     per tier with `tierCap`). The tier shows in the SPI, not in the ghost's brightness. CRITICAL
@@ -344,26 +347,40 @@ P3-03 and P3-04. `ghostV0/` stays as the fallback and is unchanged.
     hood, turned, behind, trail), each a union of skewed, wobbling ellipses and Catmull-Rom blobs
     (cubic Beziers through anchors, flattened): head, uneven shoulders, a lean, a drape with a
     ragged hem. Hunch has a raised shoulder, turned has one soft arm hint (weight 0.45), hood and
-    behind carry a seeded ragged occluder (`OCCLUDED_VARIANTS` = 2 and 4). No features.
+    behind carry a seeded ragged occluder (`OCCLUDED_VARIANTS` = 2 and 4) that crosses the body
+    above the hem dissolve. Round 3 (D-022): two or three seeded tendrils (`TENDRIL_*`) leave the
+    side the figure leans toward between 25 and 55% of its height, drooping and tapering, so the
+    outline breaks at a scale the ghost layer's blur, copies and smear keep. No features.
   - `renderApparition({ variant, seed, width, height }) -> SkImage | null`: draws the polygons into
     an offscreen surface (native `Skia.Surface.MakeOffscreen`, snapshot made non-texture; web the
     CanvasKit CPU surface, because `MakeOffscreen` there opens a WebGL context per call whose
     textures the on-screen canvas cannot use). Pass 1: union minus the cut, `DisplacementMap` by
-    `FractalNoise`, Gaussian feather. Pass 2: SkSL noise alpha mask: edge erosion, a fine density
+    `FractalNoise`, Gaussian feather. Pass 2: SkSL noise alpha mask: (round 3) the feathered shape
+    sampled through a high-frequency displacement (`RAG_CYCLES` 24 per width, `RAG_DISPLACE` 0.12
+    of the width peak to peak, so 2 to 6 px at the drawn sizes) and eroded where a vertically
+    stretched noise is high (`RAG_ERODE`, teeth and notches), edge erosion, a fine density
     term (floor 0.88 to 0.95), the lower-body fade, and (round 2) the interior density: a
     low-frequency FractalNoise (`DENSITY_CYCLES` 1.6 per width) mapped to 40 to 100%
     (`DENSITY_FLOOR`, `DENSITY_EDGES`) times a seeded one-sided thinning (`lateral` 20 to 35%),
     on the interior only (`INTERIOR`: feathered coverage 0.45 to 0.8, eased out through the hem
     fade, so the outline keeps its density and no dark patch is ever enclosed). The alpha carries
     the outline; the interior density rides in the colour (premultiplied grey), which the
-    compositor applies after its clamp. Cached per variant, seed and size (24 entries). Skia is
-    only touched when called, never at module load.
-  - Lean (variant 0) dissolves (`LEAN_DISSOLVE`): a feathered fade to nothing centred 55 to 65%
-    down the body (feather 16% of the body height); the box is fitted to what stays visible, so
-    there is no tail. Trail (5) has a deeper hem fade (`TRAIL_HEM`), hood (2) a smaller flare.
+    compositor applies after its clamp. Pass 3 (round 3): a second, fine feather (`FEATHER2`, 0.8%
+    of the width). Cached per variant, seed and size (24 entries). Skia is only touched when
+    called, never at module load.
+  - Every variant dissolves (round 3, D-022; round 2 did only lean): a feathered fade to nothing
+    that starts and ends between 50 and 70% of the body's height (`HEM_DISSOLVE`, feather
+    `HEM_FEATHER` 12 to 16%, both seeded). The fade line is ragged: it moves by up to `HEM_RAG`
+    0.12 box heights with a noise stretched down the body, so the body ends in wisps. The box is
+    fitted to what stays visible, with the fade's end `HEM_RAG / 2` above the box bottom so the
+    wisps end inside it. No drape, no flare, no tail on any variant (alpha below the fade is 0,
+    tested for all six over 20 seeds).
   - `metrics.ts`: the same steps on a 40 x 80 alpha grid in pure TS (value noise stands in for
     FractalNoise at the same frequency and amplitude): `mirrorCorrelation`, `largestHoleFraction`,
-    `areaFraction`, `silhouetteMetrics(variant, seed)`.
+    `areaFraction`, `edgeIrregularity` (round 3: marching-squares outline length over its convex
+    hull's perimeter; about 1.0 for a smooth blob, tested at 1.25 or more for all six variants
+    over 20 seeds), `silhouetteMetrics(variant, seed)`. The grid measures the apparition image,
+    before the ghost layer's blur, copies and smear, which soften the finest teeth on screen.
   - `FIT_W`, `FIT_H`, `imageRectFor(box)`: the silhouette fills the centre 80 x 88% of its image;
     the compositor draws the image larger so the silhouette fills the placement box and the feather
     spills past it. Width may stretch up to 1.45x the height scale (1.25 in round 1; v0 mattes
@@ -377,7 +394,8 @@ P3-03 and P3-04. `ghostV0/` stays as the fallback and is unchanged.
     `pop` (round 2, 0..1, `useScare`'s value): on the pop frame the peak alpha rises to `POP_ALPHA`
     0.4 and the clamp opens by `POP_LIFT` 40 luma; the figure stays the same blurred layer.
     Under `?static=1` it publishes `window.__composite` (`CompositeInfo`: placement, panel, clamp
-    reference and lift, occlusion threshold and ramp, variant, seed, tier, pop) for
+    reference and lift, occlusion threshold and ramp, gradient under the figure, synthetic band,
+    share of the figure cut, variant, seed, tier, pop) for
     `scripts/measure-ghost.mjs`, on the probe and the result route alike.
   - `wantsCompositorV1()`: true when the web URL has `v=1`.
   - `regionFromImage(uri) -> RegionStats | null`: `{ region, meanLuma, p80Luma, p90Luma, grid }`.
@@ -385,9 +403,10 @@ P3-03 and P3-04. `ghostV0/` stays as the fallback and is unchanged.
     192 px, `makeNonTextureImage().readPixels` as RGBA, then the shared `statsFromRgba` (96 px grid,
     `findDarkRegion`). Falls back to the v0 path (expo-image-manipulator + jpeg-js) with the same
     stats when Skia cannot read the file. Web: the v0 2D-canvas read of the photo.
-  - Pure, tested helpers: `plusClamped`, `compositePixel`, `occlusion`, `grainOffset` (`blend.ts`,
-    the TS twin of the SkSL), `motionCopies`, `ghostBlurSigma` (`motion.ts`), `reference`,
-    `unionBox` (`reference.ts`), `statsFromRgba`, `lumaUnder`, `halvingSteps`, `estimateP80`.
+  - Pure, tested helpers: `plusClamped`, `compositePixel`, `occlusion`, `bandVisibility`,
+    `grainOffset` (`blend.ts`, the TS twin of the SkSL), `motionCopies`, `layerCopies`,
+    `ghostBlurSigma` (`motion.ts`), `reference`, `gradientEnergy`, `makeBand`, `bandCut`, `unionBox`
+    (`reference.ts`), `statsFromRgba`, `lumaUnder`, `halvingSteps`, `estimateP80`.
 
 ### What v1 does that v0 did not
 - One Skia canvas: the photo and the ghost go through one runtime shader, so the grain lands on
@@ -416,6 +435,16 @@ P3-03 and P3-04. `ghostV0/` stays as the fallback and is unchanged.
   figure's footprint (the ellipse in its box) is cut (`OCC_CUT_MIN` 10% is the tested floor); the
   ramp narrows to the scene's spread (3 to 10 luma), so a flat dark scene is cut in patches, not
   dimmed. Without the grid: 9 taps, 3 px radius, 80th percentile, 10 luma ramp, as before.
+- Synthetic foreground band on flat scenes (round 3, D-022): when the mean luma gradient of the
+  raw grid under the figure's ellipse is under `FLAT_GRADIENT` (2.5 luma per cell; black, bright
+  and the cellar's dark corner), lowering the threshold would only cut sensor noise, so the
+  threshold stays at the scene's own level and a soft band hides the ghost instead: seeded height
+  15 to 30% of the figure (`BAND_H`), its bottom 94 to 100% of the way down the figure box
+  (`BAND_BOTTOM`, past the hem dissolve, so nothing comes out under it; its centre in the lower
+  third), a seeded slant up to 0.12, ragged top and bottom edges (three seeded sines, `BAND_K`,
+  amplitude 3.5% of the figure height) with a 2.5 px soft ramp. Grown and then raised until it
+  hides at least 11% of the figure's ellipse. The photo is not touched. Scenes with edges keep
+  the adaptive scene-edge occlusion above.
 - Grain 4% after compositing, seeded FractalNoise, added equally with and without the ghost, so the
   with/without difference never goes negative.
 
@@ -486,6 +515,26 @@ lean figure on cellar and black dissolves below the waist (no tail), the attic b
 figure, the smear shows as a short vertical drag. Weak spot left: on bright the figure is still a
 pale highlight beside the lamp. Note: the goldens' default threshold (0.2 per pixel) does not see
 a ghost change of a few luma; `measure-ghost.mjs` is the check for the figure itself.
+
+Round 3 (D-022), result route (`node scripts/measure-ghost.mjs --no-export --out dist --route
+result`, flat glass, gating pass; the table now carries the gradient under the figure, which
+occluder cut it and the share of the figure's ellipse cut):
+
+| fixture | variant | clamp ref | mean lift | max lift | darkened px | over clamp px | union box | centre (x, y) | gradient | occluder | cut | target |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cellar | 3 | 9.8 | 8.5 | 37 | 0 | 0 | 11.0% | 0.31, 0.62 | 0.84 | band | 26.6% | PASS |
+| attic | 5 | 35.2 | 9.4 | 47 | 0 | 0 | 11.0% | 0.60, 0.38 | 4.82 | scene | 14.2% | PASS |
+| bright | 5 | 220.6 | 11.1 | 58 | 0 | 0 | 11.0% | 0.35, 0.62 | 2.12 | band | 12.8% | PASS |
+| black | 5 | 1.5 | 9.6 | 34 | 0 | 0 | 11.0% | 0.60, 0.38 | 0.23 | band | 24.4% | PASS |
+| outdoors | 2 | 118.4 | 14.4 | 59 | 0 | 0 | 11.0% | 0.78, 0.62 | 11.74 | scene | 11.0% | PASS |
+
+Two runs per fixture, spread 0.00. The warped pass (information only, the warp is a lens over the
+finished screen) shows 20 px over the clamp on outdoors, at the tree's bright edge (no-ghost luma
+155 to 196, lift 1 to 11). Silhouette metrics (6 variants x 20 seeds, round 3 shapes): edge
+irregularity at least 1.30 (test: 1.25), mirror at most 0.54, area 39 to 59%, largest enclosed
+hole under 1%. The grid measures the apparition image; on screen the ghost layer's blur, motion
+copies and smear soften the finest teeth, so the outline reads as lumpy and broken (tendrils, a
+ragged hem, the band's ragged edge) rather than toothed.
 
 ### What Builder A changes in the result screen
 1. Import from `src/fx/compositor`: `Composite`, `regionFromImage` (it returns a superset of the v0

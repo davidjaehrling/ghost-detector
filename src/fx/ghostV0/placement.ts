@@ -46,8 +46,9 @@ export interface Placement {
   /** 3 to 5 copies (2 to 4 on CRITICAL) along one direction: the v0 stand-in for motion blur. */
   offsetCopies: OffsetCopy[];
   /**
-   * CRITICAL only (D-017): a second faint copy of the whole figure 6 to 10 px off it, a double
-   * exposure. Its alpha comes out of the same `COPY_ALPHA_SUM` budget as the motion copies.
+   * CRITICAL only (D-017, D-022): a second copy of the whole figure 8 to 12 px off it at 45% of
+   * the main figure's alpha, a double exposure that reads at 1x. It takes `ECHO_SHARE` out of the
+   * motion copies' `COPY_ALPHA_SUM` budget; the rest of its alpha is extra (see `ECHO_ALPHA`).
    */
   echo?: OffsetCopy;
 }
@@ -72,9 +73,16 @@ export interface PlaceOptions {
  * ruling). QUIET and TRACE keep the region-based size (the result screen shrinks them to a smudge).
  */
 export const TIER_EXTENT: Readonly<Partial<Record<Tier, number>>> = { active: 0.11, strong: 0.13, critical: 0.145 };
-/** CRITICAL echo: offset in px and its share of the copy budget. */
-export const ECHO_PX: readonly [number, number] = [6, 10];
-export const ECHO_ALPHA = 0.15;
+/**
+ * CRITICAL echo: offset in px (direction seeded) and alpha as a multiple of the main figure's
+ * opacity. Round 2's 6 to 10 px at 0.15 vanished under the blur and smear (D-022); at 8 to 12 px
+ * and 0.45 it reads as a double exposure. It takes ECHO_SHARE out of the motion copies' budget, so
+ * the stacked alpha stays under `opacity * (1 + COPY_ALPHA_SUM - ECHO_SHARE + ECHO_ALPHA)` =
+ * 1.65 x opacity, 0.297 at the CRITICAL cap of 0.18; the per-pixel clamp bounds the light anyway.
+ */
+export const ECHO_PX: readonly [number, number] = [8, 12];
+export const ECHO_ALPHA = 0.45;
+export const ECHO_SHARE = 0.15;
 
 /** Default opacity ceilings by tier (D-009). QUIET only ever shows a smudge, so it shares TRACE's. */
 export const TIER_OPACITY_CAP: Readonly<Record<Tier, number>> = {
@@ -220,7 +228,7 @@ export function placeGhost(
   const step = h * stepFrac;
   const offsetCopies: OffsetCopy[] = [];
   let weightSum = 0;
-  const copyBudget = COPY_ALPHA_SUM - (echoBase ? ECHO_ALPHA : 0);
+  const copyBudget = COPY_ALPHA_SUM - (echoBase ? ECHO_SHARE : 0);
   for (let i = 0; i < nCopies; i++) weightSum += Math.pow(COPY_FALLOFF, i);
   for (let i = 1; i <= nCopies; i++) {
     offsetCopies.push({

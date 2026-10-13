@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { placeGhost } from '../../ghostV0/placement';
 import { regionFromRgba } from '../../ghostV0/regionFromPixels';
 import { mulberry32 } from '../../../engine';
-import { OCC_GRID_BLUR, OCC_RAMP } from '../blend';
-import { motionCopies, ghostBlurSigma, MAX_COPIES, MIN_COPIES, SMEAR_PX, smearFor } from '../motion';
-import { cellsUnderFigure, cutShare, OCC_CUT_MIN, OCC_RAMP_MIN, reference, unionBox } from '../reference';
+import { bandVisibility, OCC_GRID_BLUR, OCC_RAMP } from '../blend';
+import { layerCopies, motionCopies, ghostBlurSigma, MAX_COPIES, MIN_COPIES, SMEAR_PX, smearFor } from '../motion';
+import { BAND_BOTTOM, BAND_H, bandCut, cellsUnderFigure, cutShare, FLAT_GRADIENT, gradientEnergy, OCC_CUT_MIN, OCC_RAMP_MIN, reference, unionBox } from '../reference';
 import { estimateP80, halvingSteps, lumaUnder, occlusionGrid, REGION_GRID, statsFromRgba } from '../regionStats';
 
 const W = 192;
@@ -89,10 +89,68 @@ describe('reference', () => {
     expect(r.mean).toBeCloseTo(Math.max(stats.meanLuma, local.mean), 9);
     // Never above the area's own 80th percentile; lowered only as far as the cut rule needs.
     expect(r.occ).toBeLessThanOrEqual(Math.max(stats.p80Luma, local.p80) + 1e-9);
-    expect(cutShare(cellsUnderFigure(occlusionGrid(stats.grid, OCC_GRID_BLUR), placement, photoRect), r.occ, r.ramp)).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+    expect(r.cut!).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+    if (!r.band) expect(cutShare(cellsUnderFigure(occlusionGrid(stats.grid, OCC_GRID_BLUR), placement, photoRect), r.occ, r.ramp)).toBeGreaterThanOrEqual(OCC_CUT_MIN);
   });
 
-  it('cuts at least 10% of the figure on a dark, nearly flat scene (D-017)', () => {
+  it('keeps the scene-edge occlusion (no band) where the scene has edges under the figure', () => {
+    // Vertical stripes 12 cells wide, 40 luma apart: plenty of gradient everywhere.
+    const width = 72;
+    const height = 96;
+    const luma = Uint8Array.from({ length: width * height }, (_, i) => (Math.floor((i % width) / 6) % 2 ? 60 : 20));
+    const grid = { luma, width, height };
+    for (let seed = 1; seed < 20; seed++) {
+      const p = placeGhost(null, { w: 318, h: 424 }, seed, { tier: 'active' });
+      expect(gradientEnergy(grid, p, photoRect)).toBeGreaterThan(FLAT_GRADIENT);
+      const r = reference({ meanLuma: 40, p80Luma: 60, region: null, grid, placement: p, photoRect, seed });
+      expect(r.band).toBeNull();
+      expect(r.cut!).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+    }
+  });
+
+  it('on a flat scene (black or bright) a synthetic foreground band cuts at least 10% of the figure (D-022)', () => {
+    const rnd = mulberry32(11);
+    for (const base of [0, 2, 128, 221, 250]) {
+      const width = 72;
+      const height = 96;
+      const luma = Uint8Array.from({ length: width * height }, () => Math.min(255, base + Math.floor(rnd() * 2)));
+      const grid = { luma, width, height };
+      for (let seed = 1; seed < 40; seed++) {
+        for (const tier of ['active', 'strong', 'critical'] as const) {
+          const p = placeGhost(null, { w: 318, h: 424 }, seed, { tier });
+          const r = reference({ meanLuma: base, p80Luma: base + 1, region: null, grid, placement: p, photoRect, seed });
+          const band = r.band!;
+          expect(band, `base ${base} seed ${seed}`).not.toBeNull();
+          expect(r.gradient!).toBeLessThan(FLAT_GRADIENT);
+          // Height 15 to 30% of the figure, centred in its lower third.
+          const h = (band.y1 - band.y0) / p.h;
+          expect(h).toBeGreaterThanOrEqual(BAND_H[0] - 1e-9);
+          expect(h).toBeLessThanOrEqual(BAND_H[1] + 1e-9);
+          const c = ((band.y0 + band.y1) / 2 - p.y) / p.h;
+          expect(c).toBeGreaterThanOrEqual(2 / 3 - 1e-9);
+          expect(c).toBeLessThanOrEqual(1);
+          // Its bottom at or past the end of the hem dissolve: nothing of the figure under it.
+          expect((band.y1 - p.y) / p.h).toBeGreaterThanOrEqual(BAND_BOTTOM[0] - 1e-9);
+          // At least 10% of the figure is hidden, by the band alone.
+          expect(bandCut(band, p), `base ${base} seed ${seed} ${tier}`).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+          expect(r.cut!).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+          // Inside it the ghost is gone; well above it untouched; its edge is ragged, not a line.
+          const mid = (band.y0 + band.y1) / 2 + band.slope * (p.x + p.w / 2 - band.cx);
+          expect(bandVisibility(p.x + p.w / 2, mid, band)).toBeLessThan(0.01);
+          expect(bandVisibility(p.x + p.w / 2, p.y + p.h * 0.2, band)).toBe(1);
+          const edgeAt = (x: number) => {
+            let y = p.y;
+            while (bandVisibility(x, y, band) > 0.5 && y < p.y + 2 * p.h) y += 0.25;
+            return y - band.slope * (x - band.cx);
+          };
+          const ys = Array.from({ length: 20 }, (_, i) => edgeAt(p.x + (p.w * i) / 19));
+          expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(band.rag / 2);
+        }
+      }
+    }
+  });
+
+  it('cuts at least 10% of the figure on a dark, nearly flat scene (D-017, D-022)', () => {
     const rnd = mulberry32(5);
     for (const base of [2, 8, 20]) {
       const width = 72;
@@ -102,11 +160,10 @@ describe('reference', () => {
       const grid = { luma, width, height };
       for (let seed = 1; seed < 40; seed++) {
         const p = placeGhost(null, { w: 318, h: 424 }, seed, { tier: 'active' });
-        const r = reference({ meanLuma: base + 2, p80Luma: base + 4, region: null, grid, placement: p, photoRect });
+        const r = reference({ meanLuma: base + 2, p80Luma: base + 4, region: null, grid, placement: p, photoRect, seed });
+        expect(r.cut!, `base ${base} seed ${seed}`).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+        // A patchy or banded cut, not an even dimming: some cells stay fully visible.
         const cells = cellsUnderFigure(occlusionGrid(grid, OCC_GRID_BLUR), p, photoRect);
-        const cut = cutShare(cells, r.occ, r.ramp);
-        expect(cut, `base ${base} seed ${seed}`).toBeGreaterThanOrEqual(OCC_CUT_MIN);
-        // A patchy cut, not an even dimming: some cells stay fully visible.
         expect(cells.some((v) => v <= r.occ)).toBe(true);
         expect(r.ramp).toBeGreaterThanOrEqual(OCC_RAMP_MIN);
       }
@@ -115,7 +172,7 @@ describe('reference', () => {
 
   it('falls back to the region statistics without a grid', () => {
     const r = reference({ meanLuma: 12, p80Luma: 20, p90Luma: 30, region: null, placement, photoRect });
-    expect(r).toEqual({ mean: 12, occ: 30, ramp: OCC_RAMP, source: 'region' });
+    expect(r).toEqual({ mean: 12, occ: 30, ramp: OCC_RAMP, source: 'region', band: null });
     expect(reference({ meanLuma: 12, p80Luma: 20, placement, photoRect }).occ).toBe(20);
   });
 
@@ -143,6 +200,29 @@ describe('motion copies and blur', () => {
         const reach = (cs: { dx: number; dy: number }[]) => Math.max(...cs.map((c) => Math.hypot(c.dx, c.dy)));
         expect(reach(m)).toBeCloseTo(reach(p.offsetCopies), 9);
       }
+    }
+  });
+
+  it('draws one visible second copy on CRITICAL: 8 to 12 px off, 45% of the main alpha (D-022)', () => {
+    for (let seed = 1; seed < 400; seed++) {
+      const crit = placeGhost(null, { w: 318, h: 303 }, seed, { tier: 'critical' });
+      const layers = layerCopies(crit);
+      const m = motionCopies(crit.offsetCopies);
+      // Echo + motion copies + the figure.
+      expect(layers.length).toBe(m.length + 2);
+      expect(layers.at(-1)).toEqual({ dx: 0, dy: 0, alpha: 1 });
+      const echo = layers[0]!;
+      expect(echo.alpha / layers.at(-1)!.alpha).toBeCloseTo(0.45, 9);
+      const d = Math.hypot(echo.dx, echo.dy);
+      expect(d).toBeGreaterThanOrEqual(8);
+      expect(d).toBeLessThanOrEqual(12);
+      // It is the strongest copy after the figure, so it reads as a second exposure, not a smear step.
+      for (const c of layers.slice(1, -1)) expect(c.alpha).toBeLessThan(echo.alpha / 2);
+      // Union box (figure, copies and echo) within 15% of the panel.
+      const u = unionBox(crit);
+      expect((u.w * u.h) / (318 * 303)).toBeLessThanOrEqual(0.15);
+      const active = layerCopies(placeGhost(null, { w: 318, h: 303 }, seed, { tier: 'active' }));
+      expect(active.length).toBe(motionCopies(placeGhost(null, { w: 318, h: 303 }, seed, { tier: 'active' }).offsetCopies).length + 1);
     }
   });
 

@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
+import { Rect as SkRect, Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
@@ -667,16 +667,20 @@ function PhotoPanel({
 // The data strip: case, SPI, ΔT and time in VT323 p3, bottom-left of the photo. Compositor v1 has no
 // `stamp` prop, so it is a Skia text canvas over the panel. The photo's own 4% grain sits under it
 // and the glass grain and scanlines (the overlay over the whole window) sit over it, so it reads as
-// burned into the picture. A 1 px n0 copy under the text keeps it legible on a bright frame.
+// burned into the picture. A 40% n0 scrim band behind the line and a 1 px n0 copy under the text
+// keep it legible on a bright frame (D-022).
 const STRIP_H = 24;
 const STRIP_X = 8;
+const STRIP_SCRIM = 0.4;
 function DataStrip({ text, width, height, font }: { text: string; width: number; height: number; font: SkFont | null }) {
   const base = STRIP_H - 8;
+  const scrimW = font ? Math.min(width, font.measureText(text).width + 2 * STRIP_X) : 0;
   return (
     <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null}>
       <SnapshotCanvas style={{ width, height: STRIP_H }} pointerEvents="none">
         {font ? (
           <>
+            <SkRect x={0} y={4} width={scrimW} height={STRIP_H - 6} color={color.n0} opacity={STRIP_SCRIM} />
             <SkText font={font} text={text} x={STRIP_X + 1} y={base + 1} color={color.n0} />
             <SkText font={font} text={text} x={STRIP_X} y={base} color={color.p3} />
           </>

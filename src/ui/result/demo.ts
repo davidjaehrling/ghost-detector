@@ -29,6 +29,13 @@ const FIXTURE_ACTIVE_SEEDS: Partial<Record<FixtureName, number>> = { bright: 311
 // variant 2, far in, shallow crop.
 export const DEMO_CASES = { quiet: '0001', active: '0007', strong: '0003', critical: '0004' } as const satisfies Record<DemoName, string>;
 export const SCARE_CASE = '0008';
+// The scare frame has its own seed (D-022), so its SPI, readings and profile differ from the
+// CRITICAL demo's: the first seed from 1 whose drawOutcome(seed, 'standard', freshHistory(0)) is
+// CRITICAL with a figure, an SPI other than 94 and the engine's own scare roll set, with a variant
+// (caseSeed(seed, '0008') % 6) no other demo uses and a spot that passes the stamp test's
+// separation rule (43, the scan spec's scare seed, lands on the CRITICAL demo's spot).
+// 763 -> CRITICAL 92, variant 2, far in, shallow crop.
+export const SCARE_SEED = 763;
 // A fixed capture time for the demo records (local time), so the data strip reads the same on every run.
 export const DEMO_CREATED_AT = new Date(2026, 9, 13, 22, 48).getTime();
 
@@ -37,7 +44,7 @@ export function isDemoName(v: unknown): v is DemoName {
 }
 
 export function demoRecord(name: DemoName, photoUri: string, id = '0001', fixture?: FixtureName | null, seedOverride?: number): ScanRecord {
-  const seed = seedOverride ?? (name === 'active' && fixture ? FIXTURE_ACTIVE_SEEDS[fixture] : undefined) ?? DEMO_SEEDS[name];
+  const seed = seedOverride ?? (name === 'active' && fixture ? FIXTURE_ACTIVE_SEEDS[fixture] : name === 'critical' && id === SCARE_CASE ? SCARE_SEED : undefined) ?? DEMO_SEEDS[name];
   const outcome = drawOutcome(seed, 'standard', freshHistory(0));
   const profile = generateProfile((seed ^ 0x9e3779b9) >>> 0, outcome.tier, { names: [], lines: [] });
   return { id, createdAt: DEMO_CREATED_AT, photoUri, seed, outcome, profile };
