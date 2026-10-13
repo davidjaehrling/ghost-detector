@@ -96,3 +96,88 @@ screen passes `tier: outcome.tier`; the shipped screen does not pass it yet.
 - Baked noise in the matte -> live FractalNoise mask for feathering, displacement per photo.
 - No grain today -> one grain pass applied after compositing, over photo and ghost together.
 - JPEG round trip in `regionFromImage` -> Skia raster image read back on the device.
+
+## Thermal
+P3-05. `src/fx/thermal/`: a seeded temperature field from the photo's luma, drawn in the Bible's
+phosphor white-hot palette (`PH-WHT`, one hue, D-003) at sensor resolution and upscaled in hard
+blocks, with the cold spot's ΔT readout and a FLIR-style scale bar.
+
+### API (`import { ... } from '../src/fx/thermal'`)
+- `lumaFromImage(uri)` -> `Promise<{ grid, region } | null>`. One pixel read gives both the 96 px
+  luma grid (`downsampleLuma`) and the engine's dark region (ghostV0's `regionFromRgba`), so the
+  cold spot and the figure use the same region. Web: 2D canvas at 384 px. Native: the ghostV0
+  route (expo-image-manipulator, base64 JPEG, jpeg-js).
+- `buildThermalField(grid, region | null, { seed, tier, deltaC? })` -> `ThermalField`. Pure,
+  seeded, tested (`__tests__/thermalField.test.ts`).
+  - Size 160 x 120, or 120 x 160 for a portrait photo (digest section 5).
+  - `T = ambient + base(luma) + noise - dip`. Ambient seeded 17 to 23 °C. Base: smoothed luma
+    around its median over its own 5 to 95% spread, bright = warm, soft-clamped to ±4 °C.
+    Noise: two octaves of seeded value noise, never beyond ±0.4 °C.
+  - Cold spot: Gaussian dip (sigma 0.6 of the radius), radius 8 to 14% of the short side, centred
+    on the region centroid with up to 15% seeded jitter and kept inside the region box. No region
+    (bright frames): the darkest smoothed point inside a 15% margin. Depth by tier
+    (`TIER_DEPTH`): quiet 0 (no spot), trace 1.5, active 3, strong 6, critical 9 °C.
+  - The dip uses its own random stream, so QUIET and CRITICAL on one seed are the same room with
+    and without it; the test measures the dip at the centre against that room (within 0.3 °C).
+  - `deltaC` pins the ΔT to a reading the screen already shows (clamped -12..0; 0 or above means
+    no spot; ignored on QUIET).
+  - Fields: `width, height, data` (°C, row-major), `ambientC, minC, maxC`,
+    `coldSpot { x, y, radius, depthC } | null` (normalised to the frame), and
+    **`coldSpotC`**: the signed ΔT rounded to 0.1 °C (for example `-9.0`), null on QUIET.
+- `<ThermalView field width height top? static? testID? />` (default testID `thermal-view`).
+  - Draws the field at the panel width and the photo's aspect, offset by `top` (the same `top`
+    the photo panel uses, so the thermal frame covers the photo pixel for pixel; default: centred
+    on the cold spot with the result screen's crop rule).
+  - Offscreen pass (`render.ts`): field -> grey RGBA bytes -> runtime shader (SkSL, `PH_WHT_SKSL`)
+    on a 160 x 120 CPU raster surface -> image, drawn with `FilterMode.Nearest` so each sensor
+    pixel is a hard block (2.65 px at 318 wide).
+  - `PH-WHT`: six even stops `p0, p1, p2, p3, p4, p5` (Bible section 3: coldest `p0`). The view
+    sits on an `n0` ground. Display scale: FLIR-style half-strength histogram equalisation (half
+    linear in °C, half rank), otherwise a 9 °C spot squeezes the room into the top two stops. The
+    scale bar ticks use the same mapping (`displayPos`), so their labels stay true.
+  - Reticle: 15 px crosshair on the cold spot, 1 px `p4` over a 3 px `n0` outline. Spot readout
+    box top-left `SP1 ΔT -9.0 °C` in VT323 16 `p4` (Skia text, `useFont` on the bundled TTF; falls
+    back to `dT` if the font has no `Δ` glyph). Palette name `PH-WHT` bottom-left, B612 Mono 10 `p3`.
+  - Scale bar (Bible section 3): 10 x 220 px at the right on an `n0` plate, PH-WHT gradient warm
+    at the top, 1 px `n4` keyline; max at the top and min at the bottom in VT323 16 `p4`; ambient
+    tick and label at its left in VT323 16 `p3`; a 6 px `p4` triangle marks the cold-spot value.
+  - Live (no `static`): 9 Hz refresh with ±0.12 °C per-pixel sensor shimmer. `static` freezes it
+    (L2 goldens; pass it under reduced motion too).
+  - The wrapper is `role="img"` with the readout in its label (`Thermal view PH-WHT, SP1 ΔT -9.0 °C`).
+
+### Result screen toggle (Builder A integrates)
+- A `THERM` key in the result row swaps the photo panel's contents for `<ThermalView>` over the
+  same frame: same `width`, `height` and `top` as the photo, ghost layer hidden while it shows.
+  Pressing it again returns to the photo. Static under `?static=1` and reduced motion.
+- Build the field once per record: `lumaFromImage(record.photoUri)` (or reuse its region for the
+  ghost), then `buildThermalField(grid, region, { seed: record.seed, tier: outcome.tier, deltaC })`.
+- One reading on screen: the ΔT in the view must equal the THERM line. Either pass
+  `deltaC: reading.thermalC` so the view prints exactly the existing line, or print
+  `field.coldSpotC` in the THERM row. Do not show two different numbers. On QUIET the view has
+  no spot and no readout box. The `COLD SPOT dT` line (STRONG and CRITICAL) uses
+  `reading.coldSpotC`; if it should be the view's reading, pass that as `deltaC` instead and
+  keep THERM as the room reading.
+
+### Performance (L2 web harness, headless Chromium, software GL, 390 x 844)
+`/thermal-probe?fixture=<f>&tier=critical&bench=1` times 60 runs each:
+
+| fixture | `buildThermalField` | offscreen pass (encode + shader + snapshot) |
+|---|---|---|
+| cellar | 5.95 to 6.08 ms | 7.9 to 10.4 ms |
+| bright | 4.75 to 6.33 ms | 7.2 to 8.5 ms |
+
+rAF intervals over 5 s after mount (quick evaluate script), static and live views on both
+fixtures: 300 to 301 frames, mean 16.67 ms, p95 16.8 ms, max 16.8 ms, no frame over 33 ms. The
+build runs once per record; only the pass repeats (9 Hz live, never when static), about 7% of
+the main thread at 9 x 8 ms. `encodeField` alone is about 1.1 ms in Node after the rank lookup
+moved to a 1024-bin histogram (3.8 ms with a binary search per pixel).
+
+### Unverified
+- Native: nothing here has run on a device. The CPU raster surface, runtime shader and
+  `useFont` on the bundled TTFs are the same Skia calls on both backends, but L3 has not seen them;
+  native `lumaFromImage` is the untested ghostV0 route plus the luma grid. No Android frame-time
+  numbers yet.
+- VT323 `Δ`: renders on CanvasKit in the goldens; the `dT` fallback path is untested.
+- Shareability of one-hue thermal (D-003 says the panel may revisit at P3).
+- The block look at 2.65 px per sensor pixel is subtle at 1x; it is visible zoomed in.
+- Goldens only at 390 (`thermal-cellar.png`, `thermal-bright.png`, critical tier).
