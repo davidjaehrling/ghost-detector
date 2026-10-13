@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { BAR_BLOCKS, HOLD_MS, PHASE_LINES, barBlocks, elapsedForPhase, frameAt, logBefore, readingAt, scanLeds } from '../timeline';
+import {
+  BAR_BLOCKS,
+  FAULT_MS,
+  HOLD_MS,
+  PHASE_LINES,
+  RATE_CAP,
+  barBlocks,
+  elapsedForPhase,
+  faultFor,
+  faultOn,
+  frameAt,
+  liveAt,
+  logBefore,
+  rateAt,
+  readingAt,
+  scanLeds,
+} from '../timeline';
 
 const T = 8000;
 
@@ -63,5 +79,68 @@ describe('scan timeline', () => {
     }
     expect(logBefore(4)).toEqual([PHASE_LINES[1], PHASE_LINES[2], PHASE_LINES[3]]);
     expect(logBefore(0)).toEqual([]);
+  });
+});
+
+describe('scan round 2', () => {
+  it('LED 4 goes dark for the hold on STRONG and CRITICAL only', () => {
+    const hold = frameAt(T - HOLD_MS / 2, T);
+    expect(hold.kind).toBe('hold');
+    expect(scanLeds(hold, 'strong')).toBe(3);
+    expect(scanLeds(hold, 'critical')).toBe(3);
+    expect(scanLeds(hold, 'active')).toBe(4);
+    expect(scanLeds(frameAt(T - HOLD_MS - 10, T), 'critical')).toBe(4);
+  });
+
+  it('sweep runs twice as fast in the last 1.5 s and freezes in the hold', () => {
+    const active = T - HOLD_MS;
+    const slow = frameAt(1000, T).sweep - frameAt(900, T).sweep;
+    const fast = frameAt(active - 200, T).sweep - frameAt(active - 300, T).sweep;
+    expect(fast).toBeCloseTo(slow * 2, 5);
+    expect(frameAt(active - 1, T).final).toBe(true);
+    expect(frameAt(active - 1501, T).final).toBe(false);
+    expect(frameAt(active + 100, T).sweep).toBe(frameAt(active + 900, T).sweep);
+  });
+
+  it('the fault beat adds 1.5 s, freezes the scan inside it and resumes after', () => {
+    const at = elapsedForPhase('fault', T);
+    const f = frameAt(at, T, true);
+    expect(f.kind).toBe('fault');
+    expect(frameAt(at + 600, T, true).t).toBe(f.t);
+    expect(frameAt(at - 100 + FAULT_MS, T, true).kind).toBe('phase');
+    expect(frameAt(T + FAULT_MS - 1, T, true).kind).toBe('hold');
+    expect(frameAt(T + FAULT_MS, T, true).kind).toBe('done');
+    expect(frameAt(T, T, false).kind).toBe('done');
+  });
+
+  it('the fault code blinks at 2 Hz for three cycles', () => {
+    expect(faultOn(0)).toBe(true);
+    expect(faultOn(249)).toBe(true);
+    expect(faultOn(250)).toBe(false);
+    expect(faultOn(500)).toBe(true);
+  });
+
+  it('about 1 scan in 15 has a fault, decided by the seed alone', () => {
+    let n = 0;
+    for (let seed = 1; seed <= 3000; seed++) if (faultFor(seed)) n++;
+    expect(n / 3000).toBeGreaterThan(1 / 15 - 0.02);
+    expect(n / 3000).toBeLessThan(1 / 15 + 0.02);
+    expect(faultFor(417)).toBe(faultFor(417));
+  });
+
+  it('the rate climbs toward the intensity cap and never passes it', () => {
+    for (const cap of Object.values(RATE_CAP)) {
+      const early = rateAt(417, 3, 0.05, cap);
+      const late = rateAt(417, 60, 0.99, cap);
+      expect(late).toBeGreaterThan(early);
+      for (let tick = 0; tick < 200; tick++) expect(rateAt(417, tick, tick / 200, cap)).toBeLessThanOrEqual(cap);
+    }
+    expect(RATE_CAP).toEqual({ calm: 6, standard: 14, brave: 22 });
+  });
+
+  it('live readings carry label, value and unit', () => {
+    expect(liveAt(417, 1, 10)).toMatchObject({ label: 'FLUX', unit: 'mG' });
+    expect(liveAt(417, 2, 10)).toMatchObject({ label: 'ΔT', unit: '°C' });
+    expect(readingAt(417, 3, 5)).toMatch(/^LVL -\d+ dBFS$/);
   });
 });

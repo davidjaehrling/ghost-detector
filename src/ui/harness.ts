@@ -4,8 +4,9 @@ import { type FixtureName, isFixtureName } from './fixtureNames';
 //   static=1       freeze jitter and animation (sticky for the page lifetime)
 //   fixture=<name> photo shown on web and when the camera is unavailable (sticky)
 //   speed=<n>      run the scan theatre n times faster (sticky)
-//   phase=<n|hold> freeze the scan theatre at phase n (0 to 4) or the hold (this URL only)
-export type Harness = { isStatic: boolean; fixture: FixtureName | null; speed: number; phase: number | 'hold' | null };
+//   phase=<n|hold|fault> freeze the scan theatre at phase n (0 to 4), the hold, or the
+//                  E-07 fault beat, which it forces on (this URL only)
+export type Harness = { isStatic: boolean; fixture: FixtureName | null; speed: number; phase: number | 'hold' | 'fault' | null };
 
 type Sticky = { isStatic: boolean; fixture: FixtureName | null; speed: number };
 type Params = Record<string, string | string[] | undefined>;
@@ -14,8 +15,8 @@ const sticky: Sticky = { isStatic: false, fixture: null, speed: 1 };
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-export function parsePhase(v: string | undefined): number | 'hold' | null {
-  if (v === 'hold') return 'hold';
+export function parsePhase(v: string | undefined): number | 'hold' | 'fault' | null {
+  if (v === 'hold' || v === 'fault') return v;
   if (v === undefined || !/^[0-4]$/.test(v)) return null;
   return Number(v);
 }

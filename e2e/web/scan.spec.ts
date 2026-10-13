@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 // ?static=1&phase=<n|hold> freezes the theatre inside phase n (0 to 4) or the
-// hold; ?seed fixes the outcome. ?speed=<n> runs the real timeline faster.
+// hold or the E-07 fault beat (forced on); ?seed fixes the outcome. ?speed=<n> runs the real timeline faster.
 const SEED = 20261013;
 
 function watch(page: import('@playwright/test').Page) {
@@ -20,6 +20,7 @@ function watch(page: import('@playwright/test').Page) {
 for (const [name, phase] of [
   ['scan-phase2', '2'],
   ['scan-hold', 'hold'],
+  ['scan-fault', 'fault'],
 ] as const) {
   test(`scan theatre ${name}`, async ({ page }, testInfo) => {
     const check = watch(page);
@@ -29,9 +30,17 @@ for (const [name, phase] of [
     await expect(page.getByTestId('key-cancel')).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     if (phase === 'hold') {
+      // The hold blanks only the live row and the percentage; the last telemetry stays.
       await expect(page.getByTestId('scan-percent')).toHaveText('');
+      await expect(page.getByTestId('scan-live')).toHaveText('');
+      await expect(page.getByTestId('scan-rate')).toHaveText('');
+      await expect(page.getByTestId('scan-status')).toHaveText('Decoding signature. Reading blocks.');
+    } else if (phase === 'fault') {
+      await expect(page.getByTestId('scan-status')).toHaveText('E-07 SENSOR DRIFT. RECALIBRATING.');
+      await expect(page.getByTestId('scan-live')).toHaveText('');
     } else {
       await expect(page.getByTestId('scan-readout')).toContainText('Thermal pass.');
+      await expect(page.getByTestId('scan-rate')).toContainText('RATE');
     }
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/${name}.png` });
     await expect(page).toHaveScreenshot(`${name}.png`, { maxDiffPixels: 150 });
