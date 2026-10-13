@@ -1,5 +1,5 @@
 import { Canvas, Circle, FractalNoise, Group, LinearGradient, Path, Rect, Shader, Skia, vec } from '@shopify/react-native-skia';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { color, fx } from '../../ui/tokens';
 import { hexToRgb, withAlpha } from './color';
@@ -164,8 +164,10 @@ export type GlassOverlayProps = Omit<GlassLayersProps, 'width' | 'height'> & {
 // A pointer-transparent canvas that fills its parent and lays the glass over whatever React
 // Native views sit beneath it. Put it last among the window's children. The static layers
 // (scanlines, vignette, dust, shadow) sit in one canvas that draws once; grain has its own
-// canvas, so a grain tick redraws only the grain.
-export function GlassOverlay({ radius = 0, style, testID, ...layers }: GlassOverlayProps) {
+// canvas, so a grain tick redraws only the grain. Memoised: a parent that re-renders at 10 to 20 Hz
+// (the viewfinder's flux, the scan clock) must not redraw the window-sized canvas each time (on web
+// every Skia canvas redraw is a WebGL flush, the main cost measured on SwiftShader).
+export const GlassOverlay = memo(function GlassOverlay({ radius = 0, style, testID, ...layers }: GlassOverlayProps) {
   const isStatic = useStaticDefault(layers.static);
   const intensity = Math.max(0, layers.intensity ?? 1);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -200,4 +202,4 @@ export function GlassOverlay({ radius = 0, style, testID, ...layers }: GlassOver
       ) : null}
     </View>
   );
-}
+});

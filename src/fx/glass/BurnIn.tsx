@@ -1,5 +1,5 @@
 import { Canvas, Group, Path, Skia, Text } from '@shopify/react-native-skia';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { color, fx } from '../../ui/tokens';
 import { useVT323 } from './Phosphor';
@@ -77,7 +77,7 @@ export function BurnInLayer({ width, height, cx = 0.62, cy = 0.66, radius = 150,
 }
 
 // The same as a pointer-transparent overlay that fills its parent.
-export function BurnIn(props: Omit<BurnInLayerProps, 'width' | 'height'> & { testID?: string }) {
+export const BurnIn = memo(function BurnIn(props: Omit<BurnInLayerProps, 'width' | 'height'> & { testID?: string }) {
   const { testID, ...rest } = props;
   const [box, setBox] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
@@ -93,4 +93,4 @@ export function BurnIn(props: Omit<BurnInLayerProps, 'width' | 'height'> & { tes
       ) : null}
     </View>
   );
-}
+});
