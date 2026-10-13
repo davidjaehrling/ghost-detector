@@ -522,6 +522,78 @@
       "evidence": [],
       "passes": false,
       "blocked_by": "Gate 1 (owner picks name and icon)"
+    },
+    {
+      "id": "P3-01",
+      "phase": "P3",
+      "description": "Skia installed and rendering in L2",
+      "acceptance": "@shopify/react-native-skia 2.14 with react-native-reanimated 4 and worklets per the Expo SDK 57 bundled versions; web CanvasKit loads in the static export; a Skia canvas renders in a committed golden; CI green; bundle size delta reported",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-02",
+      "phase": "P3",
+      "description": "Glass FX stack",
+      "acceptance": "src/fx/glass: SkSL shaders for scanlines (2 px, 6%), grain (4%), vignette (18%), barrel (1.5%), phosphor bloom and persistence (tau 180/450 ms), warm-up roll (900 ms), dust and scratch layer; applied to the four screens behind one <Glass> component; deterministic under ?static=1; goldens regenerated",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-03",
+      "phase": "P3",
+      "description": "Procedural apparition library",
+      "acceptance": "src/fx/apparition: at least 6 seeded figure variants from Skia paths plus FractalNoise displacement (no bitmap mattes required; PNG mattes kept as fallback), asymmetric, no features, partial occlusion; unit tests on silhouette metrics (asymmetry, no enclosed holes, area)",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-04",
+      "phase": "P3",
+      "description": "Compositor v1",
+      "acceptance": "src/fx/compositor: Screen or Plus blend, ghost blurred more than the scene, directional motion blur, noise-mask feathering, partial occlusion by a scene edge, per-pixel brightness clamp just above the region mean (shader), grain applied after compositing; native pixel access via makeRasterImage with the jpeg-js path as fallback; measured lift 8 to 20 luma and ≤15% of the visible panel on all five fixtures",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-05",
+      "phase": "P3",
+      "description": "Thermal view",
+      "acceptance": "phosphor white-hot look-up table per the Bible (one hue), rendered at 160x120 and upscaled, cold spot at the dark region with ΔT readout, FLIR-style scale bar; a toggle on the result screen; goldens for cellar and bright",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-06",
+      "phase": "P3",
+      "description": "Jump-scare",
+      "acceptance": "visual only (audio in P4): within psych-brief limits (CRITICAL only, 400 to 600 ms, ≤2 flashes per second, never in the first 3 scans, caps per day and session), Settings toggle, reduced-motion respected; unit tests on the caps; a golden of the peak frame under ?static=1&scare=1",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-07",
+      "phase": "P3",
+      "description": "Believability on the fixture set",
+      "acceptance": "judges score the apparition on result goldens for cellar, attic, bright, black and outdoors at ≥8 mean (hint not show, adds light, off-centre, ≤15%, no symmetry, no features, grain unifies); Refuter holds on the measured lifts",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-08",
+      "phase": "P3",
+      "description": "Four screens re-enter the design loop",
+      "acceptance": "boot, viewfinder, scan, result with the glass stack and the D-011 leftovers applied; exit ≥8 mean with no dimension <7, or leftovers logged after 5 rounds",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P3-09",
+      "phase": "P3",
+      "description": "Performance budget",
+      "acceptance": "scan theatre and result render under 16.7 ms median frame time on the web harness at 390 as a proxy (measured via requestAnimationFrame timings in a Playwright run), bundle size delta from Skia reported, device numbers deferred to Phone check 2",
+      "evidence": [],
+      "passes": false
     }
   ]
 }
