@@ -8,6 +8,7 @@ Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what i
 P0 merged as PR #1, P1 as PR #2 (2026-10-13). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P1-08 boot screen loop at 6.05 (continues as P2-08).
 
 ## Last thing done
+- P2 rounds: engine v0 verified (P2-01..03 pass), viewfinder and scan theatre verified (P2-05, 06 pass), v0 ghost adds light and native region detection exists (P2-07 pending round-3 check). Design loop round 2 means: boot 7.24, viewfinder 7.0, scan 7.43, result 6.9; ghost believability 5. Round 3 running (last plain-view round; Skia in P3). Decisions D-007 to D-010.
 - P2 wave 1 merged into the branch: engine v0 (dark-region finder, seeded outcome matching the psych-brief tables within 0.7 points, profile generator; 55 engine tests), navigation skeleton with flow spec, boot screen round 3 (seeded install identity with Luhn serial, contrast test, key row, graticule per §3). 71 unit tests, 15 goldens.
 - Wave 2 running: viewfinder + scan theatre + state store (Builder A), v0 ghost compositor (FX Engineer).
 - P1 complete except P1-08 (boot screen loop at 6.05, carried over). Panel D-004, rounds D-005, Refuter D-006. PR #2 open, CI green.
@@ -19,9 +20,9 @@ P0 merged as PR #1, P1 as PR #2 (2026-10-13). Carried forward: P0-06, P0-09 (exp
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Wave 2 (running): viewfinder, scan theatre, state store (P2-05, 06); v0 ghost compositor in src/fx.
-2. Result screen with the v0 ghost (P2-07); then the design loop on four screens (P2-09) and the Refuter sweep; PR.
-3. When Gate 1 closes: apply identity (P2-11). When expo.dev and the Play items are cleared: first AAB and Maestro video (P2-10), then Phone check 1.
+1. Round 3 (running): Builder A on the D-009 screen list and Refuter defects; FX Engineer on placement margins, matte edges and tier opacity caps. Then re-score and a light Refuter pass.
+2. Flip P2-04, 07, 08, 09 as verified; open the P2 PR; squash merge when CI is green.
+3. When Gate 1 closes: apply identity (P2-11). When expo.dev and the Play items are cleared: first AAB and Maestro video (P2-10), then Phone check 1. P3 starts with the Skia FX stack, which the loop needs to pass 8.
 
 ## Blockers (owner)
 - **Gate 1**: name (panel recommends option 1 "Velden FS-4 Field Probe", alternative option 5), icon (panel recommends concept 3 nameplate), Android package ID (permanent; must not contain "detector" if option 2 is chosen).

@@ -422,8 +422,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
-      "refuter": "HOLDS; Refuter sweep 2026-10-13 at e0d75da (D-008)"
+      "passes": true,
+      "refuter": "HOLDS in both P2 passes (D-008, D-010); native camera unverified until a phone build"
     },
     {
       "id": "P2-06",
@@ -439,8 +439,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
-      "refuter": "HOLDS; Refuter sweep 2026-10-13 at e0d75da (D-008)"
+      "passes": true,
+      "refuter": "HOLDS in both P2 passes (D-008, D-010); native camera unverified until a phone build"
     },
     {
       "id": "P2-07",
