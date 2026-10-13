@@ -96,8 +96,8 @@ test('the block after the held ΔT blinks', async ({ page }) => {
   const block = page.getByTestId('scan-held-block');
   await expect(block).toHaveCount(1, { timeout: 25_000 });
   const seen = new Set<string>();
-  const until = Date.now() + 1000;
-  while (Date.now() < until && seen.size < 2) {
+  const until = Date.now() + 1200;
+  while (Date.now() < until && !(seen.has('0') && seen.has('1'))) {
     // Read the DOM directly: the block goes with the hold, and a locator would wait for it to return.
     seen.add(await page.evaluate(() => { const e = document.querySelector('[data-testid="scan-held-block"]'); return e ? getComputedStyle(e).opacity : 'gone'; }));
     await page.waitForTimeout(40);

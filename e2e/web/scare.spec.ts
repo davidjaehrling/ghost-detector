@@ -49,9 +49,11 @@ test('a flagged CRITICAL reveal flashes twice and calls the engine and the hapti
   const at = await flashes(page);
   expect(at).toHaveLength(2);
   // The 260 ms cadence is unit-tested (scare.test.ts). Headless frames are slow and a flash is only
-  // seen once committed, so here the two flashes just have to be distinct and in the same second.
+  // seen once committed, so here the two flashes just have to be distinct and close together. A late
+  // frame stretches the sequence (nextSegment holds each picture for a painted frame), and three
+  // browsers share the CPU in a full run, so the ceiling is 2 s, not the 1 s of the real cadence.
   expect(at[1]! - at[0]!).toBeGreaterThan(80);
-  expect(at[1]! - at[0]!).toBeLessThan(1000);
+  expect(at[1]! - at[0]!).toBeLessThan(2000);
   expect((await cues(page)).filter((c) => c === 'scare')).toHaveLength(1);
   const haptic = await page.evaluate(() => (window as unknown as { __hapticLog: () => { event: string; args: unknown[] }[] }).__hapticLog().filter((e) => e.event === 'fire').map((e) => e.args[0]));
   expect(haptic.filter((h) => h === 'scare')).toHaveLength(1);
