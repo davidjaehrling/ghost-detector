@@ -14,6 +14,8 @@ export type Readings = {
   coldSpotC: number;
   /** EVP fragment carrier, 180 to 420 Hz (CRITICAL line). */
   evpHz: number;
+  /** Carrier drift in kHz, 1.0 to 4.0 (STRONG line, next to the cold spot). */
+  driftKhz: number;
 };
 
 type Band = { flux: [number, number]; dt: [number, number]; db: [number, number] };
@@ -38,7 +40,9 @@ export function readingsFor(seed: number, tier: Tier): Readings {
   // Drawn after the three readings so those keep their values for a given seed.
   const coldSpotC = Math.max(-12, Math.round((thermalC - between(r(), [0.6, 1.8])) * 10) / 10);
   const evpHz = Math.round(between(r(), [180, 420]));
-  return { fluxMg, thermalC, levelDb, coldSpotC, evpHz };
+  // Drawn last so every earlier reading keeps its value for a given seed.
+  const driftKhz = Math.round(between(r(), [1, 4]) * 10) / 10;
+  return { fluxMg, thermalC, levelDb, coldSpotC, evpHz, driftKhz };
 }
 
 export function formatReadings({ fluxMg, thermalC, levelDb }: Pick<Readings, 'fluxMg' | 'thermalC' | 'levelDb'>) {

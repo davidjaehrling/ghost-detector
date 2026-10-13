@@ -43,7 +43,7 @@ const copy = {
     strong: 'Strong. Signature resolving.',
     critical: (hz: number) => `EVP fragment logged. CH2 ${hz} Hz.`,
   },
-  coldSpot: (dt: string) => `COLD SPOT ΔT ${dt} °C`,
+  coldSpot: (dt: string, khz: string) => `COLD SPOT ΔT ${dt} °C · DRIFT ${khz} kHz`,
   flux: 'FLUX',
   thermal: 'THERM',
   acoustic: 'ACOUST',
@@ -103,18 +103,18 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
-    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : '0001');
+    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : '0001', harness.fixture, /^\d{1,6}$/.test(params.seed ?? '') ? Number(params.seed) : undefined);
     return getScan(String(params.id ?? ''));
-  }, [harness, params.demo, params.id, params.case]);
+  }, [harness, params.demo, params.id, params.case, params.seed]);
 
   // Jump-scare (psych brief section 3): the flag is the engine's roll (the first-3-scans, 24 h and
   // per-session caps are in drawOutcome); the switch and reduced motion are the user's. It plays
@@ -364,7 +364,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
           </Text>
           {tier === 'strong' ? (
             <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
-              {copy.coldSpot(reading.coldSpotC.toFixed(1))}
+              {copy.coldSpot(reading.coldSpotC.toFixed(1), reading.driftKhz.toFixed(1))}
             </Text>
           ) : null}
         </View>
@@ -394,7 +394,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
           ) : (
             <>
               <ProfileRow label={copy.classLabel} value={profile.class} />
-              <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '')} />
+              <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '').toUpperCase()} valueTestID="profile-era" />
               {copy.hidden.map((l, i) => (
                 <ProfileRow key={l} label={l} maskW={Math.min(maskMax, Math.round(hiddenLen[i]! * CHAR_XS))} />
               ))}
@@ -435,11 +435,11 @@ const LABEL_W = 88;
 const SPI_PAD = 12; // canvas margin around the digit so the bloom is not clipped
 const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
-function ProfileRow({ label, value, maskW }: { label: string; value?: string; maskW?: number }) {
+function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value?: string; maskW?: number; valueTestID?: string }) {
   return (
     <View style={s.profRow}>
       <Text style={s.profLabel}>{label}</Text>
-      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={s.profileValue}>{value}</Text>}
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={s.profileValue} testID={valueTestID}>{value}</Text>}
     </View>
   );
 }
@@ -688,6 +688,7 @@ const s = StyleSheet.create({
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },
-  best: { flex: 1, borderWidth: 1, borderColor: color.p1, alignItems: 'center', justifyContent: 'center', marginTop: BODY.gap, paddingHorizontal: 4 },
-  bestText: { ...type.rdXS, color: color.p4, textAlign: 'center' },
+  // Glass text under a p1 rule, left aligned: no box, no card.
+  best: { flex: 1, borderTopWidth: 1, borderTopColor: color.p1, marginTop: BODY.gap, paddingTop: 6 },
+  bestText: { ...type.rdXS, color: color.p4 },
 });
