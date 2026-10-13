@@ -95,6 +95,8 @@ function Viewfinder({
   const router = useRouter();
   const { width: windowW } = useWindowDimensions();
   const { isStatic } = harness;
+  // Under 380 px the dial plate leaves 126 px beside GEO: the thermal digit drops its spaces to fit.
+  const narrow = windowW < 380;
   const fixture = harness.fixture ?? DEFAULT_FIXTURE;
   const source = sourceFor(permission, Platform.OS === 'web');
 
@@ -258,16 +260,16 @@ function Viewfinder({
                   <Text style={s.geo} testID="hud-geo">
                     {formatGeo(sample.mg)}
                   </Text>
-                  <Text style={s.dt} testID="hud-dt" accessibilityLabel={formatThermal(dT)}>
-                    <Text style={s.dtLabel}>{'ΔT '}</Text>
-                    {`${dT.toFixed(1)} °C`}
+                  <Text style={[s.dt, narrow && s.dtNarrow]} testID="hud-dt" accessibilityLabel={formatThermal(dT)}>
+                    <Text style={s.dtLabel}>{narrow ? 'ΔT' : 'ΔT '}</Text>
+                    {`${dT.toFixed(1)}${narrow ? '' : ' '}°C`}
                   </Text>
                 </View>
                 <Text style={s.state} testID="hud-state">
                   {state}
                 </Text>
               </View>
-              <View style={s.dialPlate}>
+              <View style={s.dialPlate} testID="hud-dial">
                 <View style={[s.plateDot, { left: 5 }]} />
                 <View style={[s.plateDot, { right: 5 }]} />
                 <EmfDial angle={angle} frozen={isStatic} reduceMotion={reduceMotion} />
@@ -341,6 +343,7 @@ const s = StyleSheet.create({
   geoRow: { flexDirection: 'row', alignItems: 'center' },
   geo: { ...type.rdXS, color: color.p3, height: 18 },
   dt: { ...type.rdXS, color: color.p4, height: 18, marginLeft: 12 },
+  dtNarrow: { marginLeft: 6 },
   dtLabel: { color: color.p3 },
   state: { ...type.lbS, color: color.p3 },
   dialPlate: {

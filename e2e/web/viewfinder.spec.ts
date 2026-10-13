@@ -147,13 +147,17 @@ test('the live ΔT sits with FLUX, frozen under static and moving live', async (
   test.setTimeout(60_000);
   await page.goto('/viewfinder?static=1&fixture=cellar');
   const dt = page.getByTestId('hud-dt');
-  await expect(dt).toHaveText(/^ΔT\s*-?\d+\.\d °C$/);
+  await expect(dt).toHaveText(/^ΔT\s*-?\d+\.\d\s?°C$/);
   await expect(page.getByTestId('hud-top')).not.toContainText('ΔT');
   const flux = (await page.getByTestId('hud-flux').boundingBox())!;
   const geo = (await page.getByTestId('hud-geo').boundingBox())!;
   const box = (await dt.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(flux.y + flux.height - 2);
   expect(box.x).toBeGreaterThan(geo.x + geo.width);
+  // Never under the gauge plate, at any width (360 px used to clip the C).
+  const dial = (await page.getByTestId('hud-dial').boundingBox())!;
+  expect(box.x + box.width).toBeLessThanOrEqual(dial.x + 1);
+  await expect(dt).toHaveText(/°C$/);
   const first = await dt.innerText();
   await page.waitForTimeout(1300);
   expect(await dt.innerText()).toBe(first);
