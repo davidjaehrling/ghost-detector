@@ -142,3 +142,7 @@ Weighted means (Hollow x2, Art): boot 7.38 (min 5.0 shareability), viewfinder 7.
 - Ruling, tier extent: the plan §6 cap of 15% of the frame wins over the judges' 17% ask; STRONG 13%, CRITICAL 14.5% with a second faint copy are accepted.
 - Ruling, clamp and band: clamp ceiling reference + 34 luma (was 24) and a default opacity floor of 0.17 are accepted; both stay inside plan §6 (8 to 25% opacity, peak just above the region mean) and the measured lifts remain 8.2 to 11.5 on the result route with 0 darkened pixels. The old clamp curve produced the hard edge the judges called a cut-out; the new curve keeps gradients.
 - Result cellar and attic sit at 8.2 and 8.5 lift, just above the floor; noted for the judges.
+
+## 2026-10-13 · D-020 · Premature round-2 scoring (void)
+- The Director launched the P3 round-2 scoring at fc9053e before Builder A had regenerated the screen goldens; both judges found the screen goldens dated from 1d3f40f (round 1) and scored stale images. Their screen and believability numbers from that run are void and not recorded. Round 2 is re-scored after the golden commit lands. Cost of the void run: 182k subagent tokens.
+- Process rule from this: a scoring run waits for the builder's report that says the goldens were regenerated and `pnpm e2e:web` passed twice; a clean working tree is not enough evidence.
