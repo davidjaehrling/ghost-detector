@@ -24,3 +24,24 @@ Append-only log of panel decisions (plan §3). Format: date, topic, options, sco
 - Instrument Bible (Art Director) defines the device: Velden Messtechnik GmbH, Wetzlar; model FS-4/87-P; serial `FS4-YYWW-NNNNN-C` with Luhn check; firmware `FW 3.1.7 · ROM C2-8811`; one yellow-green phosphor in six steps (p0 `#0F2416` to p5 `#D4FFDC`), tinted neutrals n0..n6, red `#FF4A3A` for CRITICAL only; VT323 readouts, B612 Mono labels (both OFL). Thermal view uses a phosphor white-hot palette instead of ironbow to keep one hue; panel may revisit at P3 if shareability suffers.
 - Two disclosure stickers were proposed. Director ruling: use the Bible §11 wording, "SIMULATION UNIT · ENTERTAINMENT USE ONLY. All readings are generated in software. This unit detects nothing." (plain, no joke, fits the §7 red line). The voice guide is aligned to it. Compliance reviews the final string with the names in the P1 panel.
 - Wave 1 delivered: instrument-bible.md, competitor-teardown.md (32 [U] tags; Play store unreachable from the container), voice-guide.md, sound-palette.md. Costs: roughly 96k, 66k, 64k, 66k subagent tokens.
+
+## 2026-10-13 · D-004 · P1 panel: names, icons, disclosure, boot screen round 1
+Workflow run with six agents: Dr. Hollow x2 instances and Art Director x2 instances (orders swapped to cancel position bias), Compliance, Refuter. Weighted score = (2·Hollow + Art) / 3.
+
+| Item | Hollow | Art | Weighted | Compliance |
+|---|---|---|---|---|
+| Name 1 Velden FS-4 Field Probe | 7.0 | 7.5 | **7.17** | PASS (phone-check "Velden" trademark [U]) |
+| Name 2 Ghost Detector: FS-4 Simulator | 5.0 | 5.5 | 5.17 | conditional PASS, highest risk |
+| Name 3 Residual Field | 6.5 | 5.0 | 6.0 | PASS with subtitle change ("generated in software") |
+| Name 4 SPI-87 Presence Index | 4.0 | 5.0 | 4.33 | **VETO** as titled; retitled "SPI-87 Index Simulator" |
+| Name 5 Velden Ghost Meter Simulator | 6.5 | 7.0 | 6.67 | PASS, lowest risk |
+| Icon 1 device face | 5.5 | 5.5 | 5.5 | PASS |
+| Icon 2 LED ladder | 5.5 | 5.0 | 5.33 | PASS |
+| Icon 3 nameplate | 8.0 | 7.0 | **7.67** | PASS |
+| Disclosure sticker wording | 8.5 | 6.0 | 7.67 | PASS |
+
+- Panel recommendation for Gate 1: name option 1, with option 5 as the findable alternative; icon concept 3. The owner decides.
+- Boot screen round 1: weighted mean 4.6 (equipment 4.7, tension 3, next action 2, shareability 3, craft 5, no AI tells 6.2, ad intrusiveness 8.5). Fails the loop. Consolidated fixes sent to Builder A for round 2: ACKNOWLEDGE key band, housing with nameplate and screws, graticule and burn-in ghost filling the glass, typed self-test replacing the ΔT readout, activity index line on boot, LED ladder with only LED 1 lit and moved onto the housing, sticker on two controlled headline lines with the full §11 metadata.
+- Director ruling: Skia glass effects (scanlines, grain, vignette, barrel, warm-up roll, bloom) are P3 FX scope. P1 runs at most 2 rounds with plain views; if the mean stays under 8 for lack of FX, the leftovers are logged and this screen re-enters the loop in P3.
+- Refuter: all identity claims hold except two literal ones. (a) `concept-3-nameplate-mono.svg` uses #fff/#000 inside a `<mask>`; those are alpha values, never painted, accepted as is. (b) the `Claude-Session:` trailer contains the word "Claude"; ruling: the rule bans model names (Opus, Sonnet, Fable, Haiku and version strings), not the session link; unchanged. Accepted fixes: tokens test must compare to the Bible table (round 2), sticker metadata line must follow §11 (round 2), voice-guide firmware string aligned to the Bible (Copy).
+- Cost: 509k subagent tokens for the panel run.
