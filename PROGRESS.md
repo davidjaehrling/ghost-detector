@@ -8,16 +8,17 @@ Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what i
 P0 merged 2026-10-13 as PR #1. Open P0 items carried forward: P0-06 (`eas workflow:validate`) and P0-09 (first L3 screenshot) wait on the expo.dev allowlist and EXPO_TOKEN.
 
 ## Last thing done
-- Refuter sweep: 7 of 9 P0 claims hold and are flipped to passes:true; P0-06 unverified and P0-09 blocked (both need expo.dev and EXPO_TOKEN). Defects it found are fixed (Maestro selector, screenshot diff, copy linter stems and framing, init.sh pnpm pin).
+- P1 wave 1 committed: docs/instrument-bible.md (Velden FS-4/87-P), docs/competitor-teardown.md, docs/voice-guide.md, docs/sound-palette.md. Decisions D-002, D-003 logged.
+- P0: Refuter sweep: 7 of 9 P0 claims hold and are flipped to passes:true; P0-06 unverified and P0-09 blocked (both need expo.dev and EXPO_TOKEN). Defects it found are fixed (Maestro selector, screenshot diff, copy linter stems and framing, init.sh pnpm pin).
 - CI green on PR #1 first run (checks and web-screenshots, artifact uploaded). `docs/psych-brief.md` written by Dr. Hollow.
 - Scaffold committed (Builder A): expo 57.0.28, expo-router 57.0.26, react-native 0.86.3, TypeScript strict, pnpm hoisted, ESLint 0 warnings, banned-copy linter with fixture test, Vitest with `src/engine/rng.ts`, `init.sh` runs clean, `pnpm web:export` produces `dist/`.
 - EAS files committed (Release Manager): `eas.json` profiles incl. `e2e-test`, `.eas/workflows/e2e-android.yml`, `e2e/maestro/boot.yml`, `docs/release-runbook.md`. `eas workflow:validate` not run (expo.dev blocked).
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Wave 1 (parallel): Instrument Bible (Art Director), competitor teardown (Dr. Hollow), voice guide (Copy), sound palette (Sound & Haptics).
-2. Wave 2: tokens, type and the boot screen per the Bible (Builder A); 5 names (Copy); 3 icon concepts (Art Director). Design loop on the boot screen.
-3. Panel vote (Workflow) on names and icons; Refuter sweep; PR; Gate 1 message to David.
+1. Wave 2 (in progress): tokens, fonts and the boot screen per the Bible (Builder A); 5 names in docs/identity-names.md (Copy); 3 icon concepts in assets/icon-concepts/ and docs/identity-icons.md (Art Director).
+2. Design loop round 1 on the boot screen (Art Director and Dr. Hollow score the L2 goldens; Refuter checks); panel vote (Workflow, ≤10 agents) on names, icons and the disclosure string.
+3. Refuter sweep over P1 claims; PR; squash merge; Gate 1 message to David.
 
 ## Blockers (owner)
 - `expo.dev` and `*.expo.dev` are blocked by the environment network policy. Needed for EAS (L3). Flagged to David.
