@@ -594,6 +594,63 @@
       "acceptance": "scan theatre and result render under 16.7 ms median frame time on the web harness at 390 as a proxy (measured via requestAnimationFrame timings in a Playwright run), bundle size delta from Skia reported, device numbers deferred to Phone check 2",
       "evidence": [],
       "passes": false
+    },
+    {
+      "id": "P4-01",
+      "phase": "P4",
+      "description": "Audio config and scheduler",
+      "acceptance": "src/audio/config.ts typed config from docs/sound-palette.md §9 with clamps; src/audio/scheduler.ts pure Poisson click scheduling, rate ramps and phase cues; tests: click counts over 10 s per tier and intensity within ±15%, refractory 12 ms, CRITICAL caps 6/14/22 c/s, determinism",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P4-02",
+      "phase": "P4",
+      "description": "Audio engine",
+      "acceptance": "src/audio/engine.ts on react-native-audio-api: limiter at -6 dBFS, Geiger, hum 50/60 Hz with harmonics, filtered static, scene and scare buses, duck gain for the hold; engine.web.ts no-op with a call log for L2; native unverified until Phone check 2",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P4-03",
+      "phase": "P4",
+      "description": "Haptic grammar",
+      "acceptance": "src/audio/haptics.ts on expo-haptics: event → pattern per palette §7, every pattern ≤120 ms (tested), off switch, web no-op",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P4-04",
+      "phase": "P4",
+      "description": "Scan theatre and result wired to audio and haptics",
+      "acceptance": "scan phases, hold, reveal and CRITICAL cues call the engine; L2 asserts the cue order from __audioLog; Settings has sound and haptics toggles",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P4-05",
+      "phase": "P4",
+      "description": "EMF needle on the real magnetometer",
+      "acceptance": "expo-sensors Magnetometer with HIGH_SAMPLING_RATE_SENSORS if under 200 ms; needle with mass, overshoot and damping per Bible §6 springs; jitter 0.6%; web uses the seeded walk; unit tests on the spring and the mG mapping",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P4-06",
+      "phase": "P4",
+      "description": "Live radar sweep",
+      "acceptance": "viewfinder sweep with persistence tail driven by flux and tier; deterministic under ?static=1; golden",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P4-07",
+      "phase": "P4",
+      "description": "Phone check 2",
+      "acceptance": "L3 Maestro video of a full scan with audio cues logged; David's phone check; blocked by expo.dev, EXPO_TOKEN and the Play internal track (owner)",
+      "evidence": [],
+      "passes": false,
+      "blocked_by": "owner: expo.dev allowlist, EXPO_TOKEN, Play Console"
     }
   ]
 }

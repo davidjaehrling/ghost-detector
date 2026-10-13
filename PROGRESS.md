@@ -38,3 +38,4 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-0
 | P1 | ~1.6M | Subagents ~1.45M (wave 1 ~290k, wave 2 ~260k, panel 509k, round 2 105k + re-score 125k, Refuter ~100k, fixes ~90k); Director context ~0.1M |
 | P2 | ~3.6M | Subagents: engine 89k+74k, nav/boot 144k, viewfinder/scan 192k, result 128k, FX 108k+152k+136k, rounds 2 and 3 of screens 297k+266k, loop scoring 203k+170k+160k, Refuter 141k+115k+99k, misc; Director context ~0.25M |
 | P3 | in progress | |
+| P4 | in progress (parallel with P3) | |
