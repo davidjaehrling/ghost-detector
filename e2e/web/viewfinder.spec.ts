@@ -30,3 +30,25 @@ for (const [name, query] of [
     expect(pageErrors).toEqual([]);
   });
 }
+
+test('location tag key steps through the tags and the lore note shows once per tag', async ({ page }) => {
+  await page.goto('/viewfinder?static=1&fixture=cellar');
+  await expect(page.getByTestId('key-tag')).toHaveText('CELLAR');
+  await expect(page.getByTestId('hud-lore')).toContainText('Cellars hold cold air.');
+  await page.getByTestId('key-tag').click();
+  await expect(page.getByTestId('key-tag')).toHaveText('ATTIC');
+  await expect(page.getByTestId('hud-lore')).toContainText('Attic timber settles after dusk.');
+  for (const name of ['BEDROOM', 'HALLWAY', 'OUTDOORS', 'CELLAR']) {
+    await page.getByTestId('key-tag').click();
+    await expect(page.getByTestId('key-tag')).toHaveText(name);
+  }
+  // A scan with the tag marks it seen: the note does not come back for that tag.
+  await page.getByTestId('key-capture').click();
+  await expect(page.getByTestId('screen-scan')).toBeVisible();
+  await page.getByTestId('key-cancel').click();
+  await expect(page.getByTestId('screen-viewfinder')).toBeVisible();
+  await expect(page.getByTestId('key-tag')).toHaveText('CELLAR');
+  await expect(page.getByTestId('hud-lore')).toHaveCount(0);
+  const seen = await page.evaluate(() => localStorage.getItem('fs4.tags-seen.v1'));
+  expect(seen).toBe('["cellar"]');
+});

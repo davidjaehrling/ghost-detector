@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { captureSeed, photoHash } from '../../capture';
 import { parsePhase, resolveHarness } from '../../harness';
-import { createFluxWalk, fluxAngle, formatFlux, liveLeds } from '../flux';
+import { createFluxWalk, fluxAngle, formatFlux, liveLeds, liveThermal } from '../flux';
 
 describe('flux walk', () => {
   it('is deterministic per seed and bounded', () => {
@@ -30,14 +30,26 @@ describe('flux walk', () => {
     expect(formatFlux(1010)).toBe('FLUX 1010 mG');
   });
 
-  it('ladder: power LED inside the GEO band, climbs outside, never LED 5', () => {
-    expect(liveLeds(250)).toBe(1);
-    expect(liveLeds(650)).toBe(1);
-    expect(liveLeds(800)).toBe(2);
-    expect(liveLeds(1100)).toBe(3);
+  it('ladder: power LED at the GEO centre, LED 2 and 3 at 15% and 40% off it, never LED 5', () => {
+    expect(liveLeds(400)).toBe(1);
+    expect(liveLeds(345)).toBe(1);
+    expect(liveLeds(459)).toBe(1);
+    expect(liveLeds(460)).toBe(2);
+    expect(liveLeds(340)).toBe(2);
+    expect(liveLeds(560)).toBe(3);
+    expect(liveLeds(240)).toBe(3);
+    expect(liveLeds(700)).toBe(4);
     expect(liveLeds(2000)).toBe(4);
-    expect(liveLeds(40)).toBe(4);
     for (let mg = 10; mg <= 2000; mg += 10) expect(liveLeds(mg)).toBeLessThanOrEqual(4);
+  });
+
+  it('thermal stays in range and dips with the field', () => {
+    expect(liveThermal(400)).toBe(-0.3);
+    expect(liveThermal(2000)).toBeLessThan(liveThermal(800));
+    for (let mg = 10; mg <= 2000; mg += 10) {
+      expect(liveThermal(mg)).toBeGreaterThanOrEqual(-12);
+      expect(liveThermal(mg)).toBeLessThanOrEqual(6);
+    }
   });
 });
 

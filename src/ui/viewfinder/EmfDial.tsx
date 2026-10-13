@@ -15,12 +15,13 @@ const PX = DIAL_W / 2;
 const PY = 88;
 
 const MAJORS = [10, 20, 50, 100, 200, 500, 1000, 2000];
-// Labels sit outside the arc; the two top decades are nudged apart.
+// Labels sit outside the arc; the two top decades are nudged apart and 2000
+// is inset so it stays inside the plate.
 const LABELS: { mg: number; dx: number; dy: number }[] = [
   { mg: 10, dx: 0, dy: 0 },
   { mg: 100, dx: 0, dy: 0 },
   { mg: 1000, dx: -6, dy: -1 },
-  { mg: 2000, dx: 9, dy: 7 },
+  { mg: 2000, dx: 0, dy: 9 },
 ];
 const TICKS: number[] = [];
 for (const dec of [10, 100]) for (let k = 1; k <= 9; k++) TICKS.push(dec * k);

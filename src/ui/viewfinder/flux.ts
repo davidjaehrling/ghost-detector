@@ -44,12 +44,20 @@ export function formatFlux(mg: number): string {
   return `FLUX ${String(mg).padStart(4, ' ')} mG`;
 }
 
-// Live-mode ladder (Bible section 3): LED 1 is power, the rest follow the
-// distance from the GEO band. LED 5 never lights here.
+// Live-mode ladder (Bible section 3, D-007): LED 1 is power; LED 2 and 3 light
+// at 15% and 40% away from the GEO centre, LED 4 at 75%. LED 5 never lights here.
+export const GEO_CENTRE = 400;
+export const LED_STEPS = [0.15, 0.4, 0.75] as const;
+
 export function liveLeds(mg: number): number {
-  const r = mg > GEO_HIGH ? mg / GEO_HIGH : mg < GEO_LOW ? GEO_LOW / mg : 1;
-  if (r <= 1) return 1;
-  if (r < 1.4) return 2;
-  if (r < 2) return 3;
-  return 4;
+  const dev = Math.abs(mg - GEO_CENTRE) / GEO_CENTRE;
+  return 1 + LED_STEPS.filter((s) => dev >= s).length;
+}
+
+// Cold-spot style gradient shown next to the flux: it dips as the field leaves
+// the GEO centre, so the two readouts move together. dT stays in -12.0 to +6.0.
+export function liveThermal(mg: number): number {
+  const dev = (mg - GEO_CENTRE) / GEO_CENTRE;
+  const dt = -0.3 - Math.max(0, dev) * 3.2 - Math.max(0, -dev) * 0.8;
+  return Math.round(Math.min(6, Math.max(-12, dt)) * 10) / 10;
 }
