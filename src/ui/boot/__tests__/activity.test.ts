@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityIndex, daysToFullMoon, formatWindowCountdown } from '../activity';
+import { activityIndex, daysToFullMoon, formatWindowCountdown, msToNextMinute } from '../activity';
 import { parseBootParams } from '../params';
 
 describe('activityIndex', () => {
@@ -43,7 +43,24 @@ describe('parseBootParams', () => {
 
   it('defaults to now and animated', () => {
     const now = new Date(2026, 0, 1);
-    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now, dated: false, calib: false });
+    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now, dated: false, calib: false, spike: false });
+  });
+});
+
+describe('static clock', () => {
+  it('an undated static run reads the harness time, the same for every screen', () => {
+    const p = parseBootParams('?static=1', new Date(2030, 5, 1, 3, 0));
+    expect(p.date).toEqual(new Date(2026, 9, 13, 12));
+    expect(activityIndex(p.date).index).toBe(2);
+    expect(parseBootParams('?static=1&date=2026-10-13&time=22:48').date.getHours()).toBe(22);
+  });
+});
+
+describe('minute clock', () => {
+  it('ticks on the minute boundary', () => {
+    expect(msToNextMinute(new Date(2026, 9, 13, 22, 48, 0, 0))).toBe(60_000);
+    expect(msToNextMinute(new Date(2026, 9, 13, 22, 48, 59, 500))).toBe(500);
+    expect(msToNextMinute(new Date(2026, 9, 13, 22, 48, 30, 0))).toBe(30_000);
   });
 });
 

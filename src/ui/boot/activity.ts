@@ -61,3 +61,8 @@ export function formatWindowCountdown(date: Date): string {
   if (c.open) return '03:00 WINDOW OPEN';
   return c.hours > 0 ? `03:00 WINDOW IN ${c.hours} H ${c.minutes} MIN` : `03:00 WINDOW IN ${c.minutes} MIN`;
 }
+
+// Milliseconds until the wall clock next reaches a whole minute (the countdown's tick).
+export function msToNextMinute(date: Date): number {
+  return 60_000 - (date.getSeconds() * 1000 + date.getMilliseconds());
+}
