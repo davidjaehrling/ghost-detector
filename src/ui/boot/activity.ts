@@ -37,3 +37,10 @@ export function activityIndex(date: Date): Activity {
   const index = Math.max(1, Math.min(5, score)) as Activity['index'];
   return { index, moonPct };
 }
+
+// Whole days from `date` until the next full moon (0 on the day itself).
+export function daysToFullMoon(date: Date): number {
+  const half = SYNODIC_DAYS / 2;
+  const d = (((half - moonAge(date)) % SYNODIC_DAYS) + SYNODIC_DAYS) % SYNODIC_DAYS;
+  return Math.round(d);
+}

@@ -1,22 +1,53 @@
-import { useState, useSyncExternalStore } from 'react';
-import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useMemo, useState, useSyncExternalStore } from 'react';
+import { type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { activityIndex } from '../src/ui/boot/activity';
+import { activityIndex, daysToFullMoon } from '../src/ui/boot/activity';
+import { FIXED_SEED, getInstallIdentity } from '../src/ui/boot/install';
 import { type BootParams, readBootParams } from '../src/ui/boot/params';
-import { Graticule, LedLadder, MiniSticker, Screw, Sticker, useTyped } from '../src/ui/boot/parts';
-import { color, font, radius, size, space, type } from '../src/ui/tokens';
+import {
+  BurnIn,
+  GRID_COLS,
+  GRID_ROWS,
+  GRID_TOP,
+  Graticule,
+  GridLabels,
+  IdleTrace,
+  Key,
+  KeyRow,
+  LedLadder,
+  MiniSticker,
+  Screw,
+  Sticker,
+  Wear,
+  gridDiv,
+  useTyped,
+} from '../src/ui/boot/parts';
+import { dayKey } from '../src/ui/boot/seed';
+import { formatSelfTest, selfTestReadings } from '../src/ui/boot/selftest';
+import { color, font, radius, space, type } from '../src/ui/tokens';
 
 const copy = {
   maker: 'VELDEN  FS-4/87-P',
-  serial: 'FS4-8711-00417-6',
-  ghost: 'VELDEN',
   firmware: 'FW 3.1.7 · ROM C2-8811',
+  trig: 'TRIG AUTO',
+  timebase: '50 ms/DIV',
+  selftestOk: 'SELFTEST OK',
+  actIdx: 'ACT IDX',
+  moon: 'MOON',
+  nextPeak: 'NEXT PEAK  FULL MOON',
+  gauge10: '10',
+  gauge100: '100',
+  gauge1000: '1000',
+  gaugeUnit: 'mG',
   key: 'ACKNOWLEDGE',
+  keyLabel: 'Acknowledge',
 };
 
-const SELFTEST = ['FLUX OK', 'THERM OK', 'ACOUST OK', 'SELFTEST OK'];
-const TOTAL = SELFTEST.reduce((n, l) => n + l.length, 0);
 const TYPE_CPS = 40;
+// Per-launch variation for the seeded self-test readings.
+const BOOT_NONCE = Date.now() % 100_000;
+const STICKER_INSET = 8;
 
 let cached: BootParams | null = null;
 const clientParams = () => (cached ??= readBootParams());
@@ -30,30 +61,48 @@ export default function BootScreen() {
   return params ? <Boot params={params} /> : <View testID="boot-screen" style={s.housing} />;
 }
 
-function Boot({ params: { isStatic, date } }: { params: BootParams }) {
+function Boot({ params: { isStatic, date, dated } }: { params: BootParams }) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { index, moonPct } = activityIndex(date);
-  const typed = useTyped(TOTAL, TYPE_CPS, isStatic);
+  const peakDays = daysToFullMoon(date);
+  const fixed = isStatic || dated;
+  const identity = useMemo(() => (fixed ? getInstallIdentity(date, FIXED_SEED) : getInstallIdentity(date)), [fixed, date]);
+  const lines = useMemo(() => {
+    const seed = fixed ? dayKey(date) : dayKey(date) ^ BOOT_NONCE;
+    return [...selfTestReadings(seed).map(formatSelfTest), copy.selftestOk];
+  }, [fixed, date]);
+  const total = lines.reduce((n, l) => n + l.length, 0);
+  const typed = useTyped(total, TYPE_CPS, isStatic);
   const [acknowledged, setAcknowledged] = useState(false);
   const [glassSize, setGlassSize] = useState({ w: 0, h: 0 });
   const onGlass = (e: LayoutChangeEvent) =>
     setGlassSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
 
-  const lines = SELFTEST.map((l, i) => {
-    const before = SELFTEST.slice(0, i).reduce((n, p) => n + p.length, 0);
+  const shown = lines.map((l, i) => {
+    const before = lines.slice(0, i).reduce((n, p) => n + p.length, 0);
     return l.slice(0, Math.max(0, Math.min(l.length, typed - before)));
   });
-  const typing = typed < TOTAL;
+  const typing = typed < total;
+
+  const div = gridDiv(glassSize.w);
+  const gridLeft = Math.round((glassSize.w - div * GRID_COLS) / 2);
+  const gridBottom = GRID_TOP + div * GRID_ROWS;
+
+  const onAcknowledge = () => {
+    setAcknowledged(true);
+    router.push('/viewfinder');
+  };
 
   return (
     <View testID="boot-screen" style={[s.housing, { paddingTop: insets.top + 12 }]}>
-      <View style={s.wearL} />
-      <View style={s.wearR} />
+      <Wear side="left" top="44%" length={58} />
+      <Wear side="right" top="62%" length={46} />
 
       <View style={s.nameplate}>
         <View style={[s.rivet, { left: 8 }]} />
         <Text style={s.plateText}>{copy.maker}</Text>
-        <Text style={s.plateText}>{copy.serial}</Text>
+        <Text style={s.plateText}>{identity.serial}</Text>
         <View style={[s.rivet, { right: 8 }]} />
         <View style={s.scuff} />
       </View>
@@ -61,30 +110,30 @@ function Boot({ params: { isStatic, date } }: { params: BootParams }) {
       <View style={s.windowRow}>
         <View style={s.windowWrap}>
           <View style={s.glass}>
-            <View style={StyleSheet.absoluteFill} onLayout={onGlass} pointerEvents="none">
-              <Graticule w={glassSize.w} h={glassSize.h} />
-            </View>
+            <View style={StyleSheet.absoluteFill} onLayout={onGlass} pointerEvents="none" />
+            <BurnIn
+              cx={Math.round(glassSize.w * 0.16)}
+              cy={GRID_TOP + Math.round(div * GRID_ROWS * 0.8)}
+              labels={{ l10: copy.gauge10, l100: copy.gauge100, l1000: copy.gauge1000, unit: copy.gaugeUnit }}
+            />
+            <Graticule w={glassSize.w} h={glassSize.h} />
+            <IdleTrace w={glassSize.w} seed={dayKey(date) + 1} />
+            <GridLabels w={glassSize.w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} />
 
-            <Text style={s.ghost} numberOfLines={1}>
-              {copy.ghost}
-            </Text>
-
-            <View style={[!acknowledged && s.readoutDim]} testID="readout">
-              <Text style={s.firmware}>{copy.firmware}</Text>
-              <View style={s.selftest}>
-                {lines.map((l, i) => (
-                  <Text key={SELFTEST[i]} style={i === SELFTEST.length - 1 ? s.stM : s.stS}>
-                    {l}
-                    {typing && l.length > 0 && l.length < SELFTEST[i].length ? '_' : ''}
-                  </Text>
-                ))}
-              </View>
-              <Text style={s.activity}>{`IDX ${index}/5 · MOON ${moonPct}%`}</Text>
+            <View style={[s.readout, { left: gridLeft, top: gridBottom + 28 }]} testID="readout">
+              {shown.map((l, i) => (
+                <Text key={lines[i]} style={i === lines.length - 1 ? s.stM : s.stS}>
+                  {l}
+                  {typing && l.length > 0 && l.length < lines[i].length ? '_' : ''}
+                </Text>
+              ))}
+              <Text style={s.activity}>{`${copy.actIdx} ${index}/5 · ${copy.moon} ${moonPct}%`}</Text>
+              <Text style={s.peak}>{`${copy.nextPeak}  +${peakDays} D`}</Text>
             </View>
 
             {acknowledged ? null : (
-              <View style={s.stickerSlot}>
-                <Sticker />
+              <View style={s.stickerSlot} testID="sticker">
+                <Sticker {...identity} />
               </View>
             )}
           </View>
@@ -101,20 +150,12 @@ function Boot({ params: { isStatic, date } }: { params: BootParams }) {
       <View style={s.keyBand}>
         {acknowledged ? (
           <View style={s.miniSlot}>
-            <MiniSticker />
+            <MiniSticker {...identity} />
           </View>
         ) : null}
-        <Pressable
-          testID="key-acknowledge"
-          accessibilityRole="button"
-          accessibilityLabel="Acknowledge"
-          onPress={() => setAcknowledged(true)}
-          style={({ pressed }) => [s.key, pressed && s.keyDown]}
-        >
-          <Text style={s.keyLegend} numberOfLines={1}>
-            {copy.key}
-          </Text>
-        </Pressable>
+        <KeyRow>
+          <Key testID="key-acknowledge" label={copy.keyLabel} legend={copy.key} onPress={onAcknowledge} />
+        </KeyRow>
       </View>
     </View>
   );
@@ -133,8 +174,6 @@ const s = StyleSheet.create({
     paddingHorizontal: GUTTER,
     overflow: 'hidden',
   },
-  wearL: { position: 'absolute', left: 0, top: '44%', width: 3, height: 58, backgroundColor: color.n4, opacity: 0.35 },
-  wearR: { position: 'absolute', right: 0, top: '30%', width: 3, height: 46, backgroundColor: color.n4, opacity: 0.3 },
 
   nameplate: {
     marginHorizontal: space.gutter - GUTTER,
@@ -155,9 +194,9 @@ const s = StyleSheet.create({
     textShadowRadius: 0,
   },
   rivet: { position: 'absolute', top: 12, width: 4, height: 4, borderRadius: 2, backgroundColor: color.n4 },
-  scuff: { position: 'absolute', right: 58, top: 8, width: 6, height: 2, backgroundColor: color.n4, opacity: 0.5 },
+  scuff: { position: 'absolute', left: '50%', top: 8, width: 6, height: 2, backgroundColor: color.n4, opacity: 0.5 },
 
-  windowRow: { flex: 1, flexDirection: 'row', marginTop: GUTTER, marginBottom: GUTTER },
+  windowRow: { flex: 1, flexDirection: 'row', marginTop: 18, marginBottom: 18 },
   windowWrap: { flex: 1 },
   glass: {
     flex: 1,
@@ -168,44 +207,17 @@ const s = StyleSheet.create({
     borderTopColor: color.n1,
     borderLeftColor: color.n1,
     overflow: 'hidden',
-    padding: space.gutter,
   },
-  ledWrap: { width: 28, marginLeft: 8, alignSelf: 'flex-start' },
+  ledWrap: { width: 28, marginLeft: 14, alignSelf: 'flex-start' },
 
-  ghost: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '47%',
-    textAlign: 'center',
-    fontFamily: font.readout,
-    fontSize: 96,
-    lineHeight: 88,
-    color: color.p0,
-  },
-  readoutDim: { opacity: 0.6 },
-  firmware: { ...type.rdS, color: color.p3 },
-  selftest: { marginTop: space.unit * 2, height: 22 * 3 + 28 },
+  readout: { position: 'absolute' },
   stS: { ...type.rdS, color: color.p4, height: 22 },
   stM: { ...type.rdM, color: color.p4, height: 28, marginTop: space.unit },
-  activity: { ...type.rdM, color: color.p3, marginTop: space.unit * 3 },
+  activity: { ...type.rdM, color: color.p3, marginTop: space.unit * 2 },
+  peak: { ...type.rdS, color: color.p3 },
 
-  stickerSlot: { position: 'absolute', left: 0, right: 0, bottom: 40 },
+  stickerSlot: { position: 'absolute', left: STICKER_INSET + 2, right: STICKER_INSET + 2, bottom: STICKER_INSET + 5 },
 
-  keyBand: { height: 88, alignItems: 'center', justifyContent: 'center' },
-  miniSlot: { position: 'absolute', left: 2, bottom: 20 },
-  key: {
-    width: 72,
-    height: size.keyH,
-    borderRadius: radius.key,
-    backgroundColor: color.n3,
-    borderWidth: 1,
-    borderColor: color.n4,
-    borderBottomWidth: 3,
-    borderBottomColor: color.n1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyDown: { backgroundColor: color.n2, borderBottomWidth: 1, borderTopWidth: 3, borderTopColor: color.n1 },
-  keyLegend: { fontFamily: font.labelBold, fontSize: 9, lineHeight: 12, letterSpacing: 0, color: color.n6 },
+  keyBand: { height: 88, justifyContent: 'flex-end' },
+  miniSlot: { position: 'absolute', left: 2, top: 0 },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityIndex } from '../activity';
+import { activityIndex, daysToFullMoon } from '../activity';
 import { parseBootParams } from '../params';
 
 describe('activityIndex', () => {
@@ -16,6 +16,13 @@ describe('activityIndex', () => {
   });
 });
 
+describe('daysToFullMoon', () => {
+  it('counts whole days to the next full moon', () => {
+    expect(daysToFullMoon(new Date(2026, 9, 13, 12, 0))).toBe(13);
+    expect(daysToFullMoon(new Date(2026, 9, 26, 3, 30))).toBe(0);
+  });
+});
+
 describe('parseBootParams', () => {
   it('reads static and date', () => {
     const p = parseBootParams('?static=1&date=2026-10-13');
@@ -24,10 +31,11 @@ describe('parseBootParams', () => {
     expect(p.date.getMonth()).toBe(9);
     expect(p.date.getDate()).toBe(13);
     expect(p.date.getHours()).toBe(12);
+    expect(p.dated).toBe(true);
   });
 
   it('defaults to now and animated', () => {
     const now = new Date(2026, 0, 1);
-    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now });
+    expect(parseBootParams('', now)).toEqual({ isStatic: false, date: now, dated: false });
   });
 });

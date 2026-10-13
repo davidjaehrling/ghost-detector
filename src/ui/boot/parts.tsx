@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
+import { mulberry32 } from './seed';
 
 // ---------- typed self-test ----------
 
@@ -25,6 +26,8 @@ export function useTyped(total: number, cps: number, instant: boolean): number {
 
 const screwAngles = [0, 38, 14, 62];
 
+// 10 px bezel screw. Placed by the parent in the bezel margin so it clears the
+// glass and the nameplate.
 export function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burred?: boolean }) {
   const a = burred ? 24 : screwAngles[corner];
   return (
@@ -38,7 +41,9 @@ export function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burre
   );
 }
 
-export function TinyScrew({ style }: { style: object }) {
+const PLATE_SCREW = 6;
+
+export function PlateScrew({ style }: { style: object }) {
   return (
     <View style={[st.tiny, style]}>
       <View style={st.tinySlot} />
@@ -46,25 +51,154 @@ export function TinyScrew({ style }: { style: object }) {
   );
 }
 
+// ---------- thumb wear ----------
+
+// Paint rubbed through to n4 where thumbs grip: a tapered 1 to 2 px streak,
+// low alpha. `side` picks the housing edge.
+export function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${number}%`; length: number }) {
+  const end = Math.round(length * 0.25);
+  const mid = length - end * 2;
+  return (
+    <View pointerEvents="none" style={[st.wear, side === 'left' ? { left: 0 } : { right: 0 }, { top }]}>
+      <View style={[st.wearSeg, { height: end, width: 1, opacity: 0.12 }]} />
+      <View style={[st.wearSeg, { height: mid, width: 2, opacity: 0.24 }]} />
+      <View style={[st.wearSeg, { height: end, width: 1, opacity: 0.12 }]} />
+    </View>
+  );
+}
+
 // ---------- graticule ----------
 
-// Thin p1 lines on a space.div grid, centred, filling the whole glass.
+// Bible section 3: 10 x 8 divisions, centred horizontally, top-aligned 24 px
+// under the glass edge. Grid lines are solid p1 at 40% (a 1-on-3 dash would need
+// more than 600 views). Centre axes are solid with 4 px minor ticks.
+export const GRID_COLS = 10;
+export const GRID_ROWS = 8;
+export const GRID_TOP = 24;
+
+export function gridDiv(glassW: number): number {
+  if (glassW <= 0) return space.div;
+  return Math.min(space.div, Math.floor(glassW / GRID_COLS));
+}
+
 export function Graticule({ w, h }: { w: number; h: number }) {
   if (w <= 0 || h <= 0) return null;
-  const cx = w / 2;
-  const cy = h / 2;
-  const xs: number[] = [];
-  const ys: number[] = [];
-  for (let k = -Math.floor(cx / space.div); k <= Math.floor(cx / space.div); k++) xs.push(cx + k * space.div);
-  for (let k = -Math.floor(cy / space.div); k <= Math.floor(cy / space.div); k++) ys.push(cy + k * space.div);
+  const div = gridDiv(w);
+  const gw = div * GRID_COLS;
+  const gh = div * GRID_ROWS;
+  const left = Math.round((w - gw) / 2);
+  const cx = gw / 2;
+  const cy = gh / 2;
+  const cols = Array.from({ length: GRID_COLS + 1 }, (_, k) => k * div);
+  const rows = Array.from({ length: GRID_ROWS + 1 }, (_, k) => k * div);
+  const step = div / 5;
+  const hTicks: number[] = [];
+  const vTicks: number[] = [];
+  for (let k = 0; k < GRID_COLS * 5; k++) if (k % 5 !== 0) hTicks.push(k * step);
+  for (let k = 0; k < GRID_ROWS * 5; k++) if (k % 5 !== 0) vTicks.push(k * step);
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {xs.map((x) => (
+    <View pointerEvents="none" style={[st.grid, { left, top: GRID_TOP, width: gw, height: gh }]}>
+      {cols.map((x) => (
         <View key={`x${x}`} style={[st.gridV, { left: x }, x === cx && st.axis]} />
       ))}
-      {ys.map((y) => (
+      {rows.map((y) => (
         <View key={`y${y}`} style={[st.gridH, { top: y }, y === cy && st.axis]} />
       ))}
+      {hTicks.map((x) => (
+        <View key={`hx${x}`} style={[st.tickH, { left: Math.round(x), top: cy - 2 }]} />
+      ))}
+      {vTicks.map((y) => (
+        <View key={`vy${y}`} style={[st.tickV, { top: Math.round(y), left: cx - 2 }]} />
+      ))}
+    </View>
+  );
+}
+
+// Flat idle trace on the horizontal centre axis, p4, with seeded 1 to 2 px jitter.
+export function IdleTrace({ w, seed }: { w: number; seed: number }) {
+  if (w <= 0) return null;
+  const div = gridDiv(w);
+  const gw = div * GRID_COLS;
+  const left = Math.round((w - gw) / 2);
+  const cy = GRID_TOP + (div * GRID_ROWS) / 2;
+  const r = mulberry32(seed);
+  const seg = 6;
+  const n = Math.ceil(gw / seg);
+  const segs = Array.from({ length: n }, (_, i) => ({
+    x: i * seg,
+    dy: Math.round((r() * 2 - 1) * 1.5 * 2) / 2,
+  }));
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {segs.map(({ x, dy }) => (
+        <View key={x} style={[st.trace, { left: left + x, top: cy - 0.75 + dy, width: Math.min(seg, gw - x) }]} />
+      ))}
+    </View>
+  );
+}
+
+// Text outside the grid: firmware line and trigger label above it, timebase below.
+export function GridLabels({ w, fw, trig, tb }: { w: number; fw: string; trig: string; tb: string }) {
+  const div = gridDiv(w);
+  const gw = div * GRID_COLS;
+  const left = Math.round((w - gw) / 2);
+  return (
+    <>
+      <Text style={[st.cornerText, { left, top: 3 }]}>{fw}</Text>
+      <Text style={[st.cornerText, { right: left, top: 3 }]}>{trig}</Text>
+      <Text style={[st.cornerText, { left, top: GRID_TOP + div * GRID_ROWS + 3 }]}>{tb}</Text>
+    </>
+  );
+}
+
+// ---------- burn-in ----------
+
+// Off-centre burn-in of the flux gauge: a log arc of 100 degrees from 10 to
+// 1000 mG, drawn with thin rotated views at p0 (70%), clipped by the glass edge.
+const BURN_R = 150;
+const BURN_A0 = -140;
+
+function logAngle(mg: number): number {
+  return BURN_A0 + (Math.log10(mg / 10) / 2) * 100;
+}
+
+export function BurnIn({ cx, cy, labels }: { cx: number; cy: number; labels: { l10: string; l100: string; l1000: string; unit: string } }) {
+  const arc = Array.from({ length: 13 }, (_, i) => BURN_A0 + 100 * (i / 12) - 100 / 24);
+  const minors: number[] = [];
+  for (const dec of [10, 100]) for (let k = 2; k <= 9; k++) minors.push(logAngle(dec * k));
+  const majors = [10, 100, 1000].map(logAngle);
+  const at = (deg: number, r: number) => ({
+    x: cx + r * Math.cos((deg * Math.PI) / 180),
+    y: cy + r * Math.sin((deg * Math.PI) / 180),
+  });
+  const lab = [
+    { t: labels.l10, p: at(majors[0], BURN_R - 22) },
+    { t: labels.l100, p: at(majors[1], BURN_R - 22) },
+    { t: labels.l1000, p: at(majors[2], BURN_R - 22) },
+  ];
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, st.burn]}>
+      {arc.map((a) => (
+        <View key={`a${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
+          <View style={st.arcSeg} />
+        </View>
+      ))}
+      {minors.map((a) => (
+        <View key={`m${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
+          <View style={st.minor} />
+        </View>
+      ))}
+      {majors.map((a) => (
+        <View key={`M${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
+          <View style={st.major} />
+        </View>
+      ))}
+      {lab.map(({ t, p }) => (
+        <Text key={t} style={[st.burnText, { left: p.x - 20, top: p.y - 9 }]}>
+          {t}
+        </Text>
+      ))}
+      <Text style={[st.burnText, { left: cx - 20, top: cy - 46 }]}>{labels.unit}</Text>
     </View>
   );
 }
@@ -76,7 +210,7 @@ export function LedLadder() {
   const leds = [0, 1, 2, 3, 4];
   return (
     <View style={st.plate}>
-      <TinyScrew style={{ top: 3 }} />
+      <PlateScrew style={{ top: 2 }} />
       <View style={st.ledCol}>
         {leds.map((i) => {
           const lit = i === 0;
@@ -90,7 +224,7 @@ export function LedLadder() {
           );
         })}
       </View>
-      <TinyScrew style={{ bottom: 3 }} />
+      <PlateScrew style={{ bottom: 2 }} />
     </View>
   );
 }
@@ -101,38 +235,105 @@ const copy = {
   head1: 'SIMULATION UNIT ·',
   head2: 'ENTERTAINMENT USE ONLY.',
   body: 'All readings are generated in software. This unit detects nothing.',
-  meta1: 'VELDEN FS-4/87-P · FS4-8711-00417-6',
-  meta2: 'CAL 2026-10-13 · DUE 2027-10 · PRÜF',
-  stamp: '07',
+  model: 'VELDEN FS-4/87-P',
 };
 
-export function Sticker({ style }: { style?: object }) {
+const FOLD = 16;
+
+// Bible section 11. `meta` data comes from the install identity. The lower
+// right corner is lifted: the corner is cut away over `bg`, the folded flap
+// shows the darker underside, and a 2 px shadow line lies along the crease.
+export function Sticker({
+  serial,
+  cal,
+  pruef,
+  bg = color.n0,
+  style,
+}: {
+  serial: string;
+  cal: string;
+  pruef: string;
+  bg?: string;
+  style?: object;
+}) {
+  // One line; the segments wrap whole when the glass is too narrow for it.
+  const parts = [copy.model, serial, `CAL ${cal}`, `PRÜF ${pruef}`];
+  const line = parts.join(' · ');
+  const segments = parts.map((t, i) => (i < parts.length - 1 ? `${t} · ` : t));
   return (
     <View style={[st.sticker, style]}>
       <Text style={st.head}>{copy.head1}</Text>
       <Text style={st.head}>{copy.head2}</Text>
       <Text style={st.body}>{copy.body}</Text>
-      <Text style={st.meta}>{copy.meta1}</Text>
-      <View style={st.metaRow}>
-        <Text style={st.meta}>{copy.meta2}</Text>
-        <View style={st.stampRing}>
-          <Text style={st.stamp}>{copy.stamp}</Text>
-        </View>
+      <View style={st.meta} accessibilityLabel={line}>
+        {segments.map((t) => (
+          <Text key={t} style={st.metaText}>
+            {t}
+          </Text>
+        ))}
       </View>
-      <View style={st.liftShadow} />
-      <View style={st.liftFlap} />
+      <View style={[st.cut, { borderBottomColor: bg }]} />
+      <View style={st.flap} />
+      <View style={st.crease} />
     </View>
   );
 }
 
 // The same sticker shrunk to 64 x 30 for the housing.
-export function MiniSticker() {
+export function MiniSticker(props: { serial: string; cal: string; pruef: string }) {
   return (
     <View testID="sticker-mini" style={st.mini} accessibilityLabel="Calibration sticker. Simulation unit, entertainment use only.">
       <View style={st.miniInner} pointerEvents="none">
-        <Sticker style={{ width: 290 }} />
+        <Sticker {...props} bg={color.n3} style={{ width: 290 }} />
       </View>
     </View>
+  );
+}
+
+// ---------- key row ----------
+
+// Recessed plate with two blank dummy caps on the left and the live key right
+// of centre. The live key is passed in as children.
+export function KeyRow({ children, dummies = 2 }: { children: React.ReactNode; dummies?: number }) {
+  return (
+    <View style={st.keyPlate}>
+      <View style={st.dummyGroup}>
+        {Array.from({ length: dummies }, (_, i) => (
+          <View key={i} style={st.dummy} />
+        ))}
+      </View>
+      <View style={st.liveGroup}>{children}</View>
+    </View>
+  );
+}
+
+// Rubber key: darker n2 face, 1 px n4 top highlight. Legend is lbM (Bible
+// section 5 sets key legends at 13 px), 15% fainter on the most-used key.
+export function Key({
+  testID,
+  label,
+  legend,
+  onPress,
+  width = 120,
+}: {
+  testID: string;
+  label: string;
+  legend: string;
+  onPress: () => void;
+  width?: number;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [st.key, { width }, pressed && st.keyDown]}
+    >
+      <Text style={st.keyLegend} numberOfLines={1}>
+        {legend}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -146,28 +347,44 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tl: { left: -12, top: -12 },
-  tr: { right: -12, top: -12 },
-  bl: { left: -12, bottom: -12 },
-  br: { right: -12, bottom: -12 },
-  slotWrap: { width: 6, height: 6, alignItems: 'center', justifyContent: 'center' },
-  slotH: { position: 'absolute', width: 6, height: 1, backgroundColor: color.n2 },
-  slotV: { position: 'absolute', width: 1, height: 6, backgroundColor: color.n2 },
+  tl: { left: -12, top: -14 },
+  tr: { right: -12, top: -14 },
+  bl: { left: -12, bottom: -14 },
+  br: { right: -12, bottom: -14 },
+  slotWrap: { width: 8, height: 8, alignItems: 'center', justifyContent: 'center' },
+  slotH: { position: 'absolute', width: 8, height: 1, backgroundColor: color.n2 },
+  slotV: { position: 'absolute', width: 1, height: 8, backgroundColor: color.n2 },
   notch: { position: 'absolute', top: 1, left: 2, width: 3, height: 1, backgroundColor: color.n5 },
   tiny: {
     position: 'absolute',
     alignSelf: 'center',
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: PLATE_SCREW,
+    height: PLATE_SCREW,
+    borderRadius: PLATE_SCREW / 2,
     backgroundColor: color.n4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tinySlot: { width: 3, height: 1, backgroundColor: color.n2 },
-  gridV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: color.p1, opacity: 0.6 },
-  gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: color.p1, opacity: 0.6 },
+  tinySlot: { width: 4, height: 1, backgroundColor: color.n2, transform: [{ rotate: '35deg' }] },
+  wear: { position: 'absolute', alignItems: 'flex-start' },
+  wearSeg: { backgroundColor: color.n4 },
+
+  grid: { position: 'absolute' },
+  gridV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: color.p1, opacity: 0.4 },
+  gridH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: color.p1, opacity: 0.4 },
   axis: { opacity: 1 },
+  tickH: { position: 'absolute', width: 1, height: 4, backgroundColor: color.p1 },
+  tickV: { position: 'absolute', height: 1, width: 4, backgroundColor: color.p1 },
+  trace: { position: 'absolute', height: 1.5, backgroundColor: color.p4 },
+  cornerText: { ...type.rdXS, position: 'absolute', color: color.p3 },
+
+  burn: { opacity: 0.7 },
+  pivot: { position: 'absolute', width: 0, height: 0 },
+  arcSeg: { position: 'absolute', left: BURN_R - 0.75, top: -9, width: 1.5, height: 18, backgroundColor: color.p0 },
+  minor: { position: 'absolute', left: BURN_R - 5, top: -0.5, width: 5, height: 1, backgroundColor: color.p0 },
+  major: { position: 'absolute', left: BURN_R - 9, top: -0.75, width: 9, height: 1.5, backgroundColor: color.p0 },
+  burnText: { ...type.rdXS, position: 'absolute', width: 40, textAlign: 'center', color: color.p0 },
+
   plate: {
     width: 28,
     height: 132,
@@ -191,50 +408,87 @@ const st = StyleSheet.create({
   },
   led: { width: size.led, height: size.led, borderRadius: size.led / 2 },
   spec: { position: 'absolute', left: 2, top: 2, width: 2, height: 2, borderRadius: 1, backgroundColor: color.n4 },
+
   sticker: {
     backgroundColor: color.paper,
     paddingHorizontal: 10,
     paddingVertical: 10,
     transform: [{ rotate: '-1.5deg' }],
   },
-  head: { fontFamily: font.labelBold, fontSize: 14, lineHeight: 18, letterSpacing: 0, color: color.ink },
+  head: { ...type.body, fontFamily: font.labelBold, lineHeight: 18, color: color.ink },
   body: { ...type.lbS, letterSpacing: 0.3, color: color.ink, marginTop: space.unit },
-  meta: { ...type.lbXS, letterSpacing: 0.6, color: color.ink, marginTop: space.unit * 2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center' },
-  stampRing: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: color.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 3,
-    marginTop: space.unit * 2,
-  },
-  stamp: { fontFamily: font.labelBold, fontSize: 6, lineHeight: 8, letterSpacing: 0, color: color.ink },
-  liftShadow: {
+  meta: { flexDirection: 'row', flexWrap: 'wrap', marginTop: space.unit * 2, paddingRight: FOLD },
+  metaText: { ...type.lbXS, letterSpacing: 0.3, color: color.ink },
+  cut: {
     position: 'absolute',
     right: 0,
     bottom: 0,
     width: 0,
     height: 0,
-    borderLeftWidth: 16,
-    borderBottomWidth: 16,
+    borderLeftWidth: FOLD,
+    borderBottomWidth: FOLD,
     borderLeftColor: 'transparent',
-    borderBottomColor: color.n1,
   },
-  liftFlap: {
+  flap: {
     position: 'absolute',
     right: 0,
     bottom: 0,
     width: 0,
     height: 0,
-    borderLeftWidth: 14,
-    borderBottomWidth: 14,
-    borderLeftColor: 'transparent',
-    borderBottomColor: color.paper,
+    borderTopWidth: FOLD,
+    borderRightWidth: FOLD,
+    borderRightColor: 'transparent',
+    borderTopColor: color.n6,
+  },
+  crease: {
+    position: 'absolute',
+    right: -4,
+    bottom: 7,
+    width: Math.round(FOLD * 1.414) + 2,
+    height: 2,
+    backgroundColor: color.ink,
+    opacity: 0.45,
+    transform: [{ rotate: '-45deg' }],
   },
   mini: { width: 64, height: 30, alignItems: 'center', justifyContent: 'center' },
   miniInner: { width: 290, alignItems: 'center', transform: [{ scale: 64 / 290 }] },
+
+  keyPlate: {
+    height: size.keyH + 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    backgroundColor: color.n1,
+    borderRadius: radius.key,
+    borderTopWidth: 1,
+    borderTopColor: color.n0,
+    borderBottomWidth: 1,
+    borderBottomColor: color.n4,
+  },
+  dummyGroup: { flexDirection: 'row', gap: 8 },
+  liveGroup: { flexDirection: 'row', gap: 8 },
+  key: {
+    height: size.keyH,
+    borderRadius: radius.key,
+    backgroundColor: color.n2,
+    borderTopWidth: 1,
+    borderTopColor: color.n4,
+    borderBottomWidth: 3,
+    borderBottomColor: color.n0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keyDown: { borderBottomWidth: 1, borderTopWidth: 3, borderTopColor: color.n0 },
+  keyLegend: { ...type.lbM, color: color.n6, opacity: 0.85 },
+  dummy: {
+    width: 72,
+    height: size.keyH,
+    borderRadius: radius.key,
+    backgroundColor: color.n2,
+    borderTopWidth: 1,
+    borderTopColor: color.n4,
+    borderBottomWidth: 3,
+    borderBottomColor: color.n0,
+  },
 });
