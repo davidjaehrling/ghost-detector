@@ -36,14 +36,22 @@ for (const { demo, tier } of DEMOS) {
     await settle(page);
     await expect(page.getByTestId('result-tier')).toHaveText(tier);
     await expect(page.getByTestId('key-share')).toBeVisible();
-    await expect(page.getByTestId('key-deepscan')).toBeVisible();
     if (demo === 'quiet') {
+      // DEEP SCAN is a dummy cap on QUIET and TRACE: nothing to decode, no offer.
+      await expect(page.getByTestId('key-deepscan')).toHaveCount(0);
+      await expect(page.getByTestId('result-offer')).toHaveCount(0);
       await expect(page.getByTestId('result-profile').getByText('NO SIGNATURE')).toBeVisible();
       await expect(page.getByTestId('ghost-v0')).toHaveCount(0);
     } else {
+      await expect(page.getByTestId('key-deepscan')).toBeVisible();
+      await expect(page.getByTestId('result-offer')).toHaveText('Run DEEP SCAN to resolve designation, behaviour and EVP.');
       await expect(page.getByTestId('result-decoded')).toContainText('SIGNATURE PARTIALLY DECODED:');
+      await expect(page.getByTestId('profile-mask')).toHaveCount(3);
       await expect(page.getByTestId('ghost-v0')).toHaveCount(1);
     }
+    // The key row is one fixed grid: four 72 px slots at the same x on every screen.
+    const xs = await page.locator('[data-testid^="key-"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
+    expect(new Set(xs).size).toBe(xs.length);
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-${demo}.png` });
     await expect(page).toHaveScreenshot(`result-${demo}.png`, { maxDiffPixels: 150 });
     check();

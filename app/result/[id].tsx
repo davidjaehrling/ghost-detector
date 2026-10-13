@@ -3,13 +3,17 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
 import { GhostV0, placeGhost, regionFromImage, type Placement, type RegionResult } from '../../src/fx/ghostV0';
+import { BELIEF_PROFILE, getBelief } from '../../src/state/belief';
 import { getScan, type ScanRecord } from '../../src/state/scans';
+import { mulberry32 } from '../../src/ui/boot/seed';
 import type { KeySlot } from '../../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
 import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
 import { demoRecord, isDemoName } from '../../src/ui/result/demo';
-import { formatReadings, readingsFor } from '../../src/ui/result/readings';
+import { panelRegion, panelTop } from '../../src/ui/result/panel';
+import { readingsFor } from '../../src/ui/result/readings';
+import { Readout } from '../../src/ui/Readout';
 import { SpiDial } from '../../src/ui/result/SpiDial';
 import { type GlassSize, Housing } from '../../src/ui/screens/Housing';
 import { color, needle, type } from '../../src/ui/tokens';
@@ -27,15 +31,16 @@ const copy = {
     strong: 'Strong. Signature resolving.',
     critical: 'EVP fragment logged.',
   } satisfies Record<Tier, string>,
+  coldSpot: (dt: string) => ` Cold spot ${dt} ΔT °C.`,
   flux: 'FLUX',
-  thermal: 'THERMAL',
-  acoustic: 'ACOUSTIC',
+  thermal: 'THERM',
+  acoustic: 'ACOUST',
   profile: 'ENTITY PROFILE',
+  offer: 'Run DEEP SCAN to resolve designation, behaviour and EVP.',
   none: 'NO SIGNATURE',
   decoded: 'SIGNATURE PARTIALLY DECODED:',
   classLabel: 'CLASS',
   eraLabel: 'ERA',
-  mask: '▒▒▒',
   hidden: ['DESIGNATION', 'BEHAVIOUR', 'EVP'],
   notFitted: 'NOT FITTED IN THIS UNIT',
   share: 'SHARE',
@@ -50,6 +55,12 @@ const copy = {
 };
 
 const NOT_FITTED_MS = 1500;
+const FADE_MS = 1500;
+const PANEL_FRACTION = 0.46; // ACTIVE and up
+const PANEL_FRACTION_LOW = 0.34;
+const CHAR_XS = 6.9; // VT323 16 px: 0.4 em advance plus 0.5 tracking
+const FLUX_HOT = 1000; // mG, p5 above
+const THERMAL_COLD = -5; // °C, p5 below
 const PHOTO_ASPECT = 4 / 3; // fixtures and camera captures are 3:4 portrait
 const DEFAULT_MEAN_LUMA = 40; // native, until Skia reads pixels (P3)
 // TRACE smudge: matte copies at the bottom of the opacity band, 70% scale.
@@ -146,16 +157,21 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
-  const photoH = Math.round(size.h * 0.34);
-  const reading = formatReadings(readingsFor(record.seed, tier));
+  const wide = tier === 'active' || tier === 'strong' || tier === 'critical';
+  const photoH = Math.round(size.h * (wide ? PANEL_FRACTION : PANEL_FRACTION_LOW));
+  const reading = readingsFor(record.seed, tier);
 
-  // Needle reveal spring (Bible section 3). The number is derived from the same value.
+  // Needle reveal spring (Bible section 3). Only the needle springs: the number
+  // is blank (--) while it travels and lands in one frame at its first crossing
+  // of the target. The figure fades in once the needle has settled.
   const [value] = useState(() => new Animated.Value(isStatic ? outcome.spi : 0));
-  const [shown, setShown] = useState(isStatic ? outcome.spi : 0);
+  const [landed, setLanded] = useState(isStatic);
   const [settled, setSettled] = useState(isStatic);
   useEffect(() => {
     if (isStatic) return;
-    const id = value.addListener(({ value: v }) => setShown(Math.round(Math.min(100, Math.max(0, v)))));
+    const id = value.addListener(({ value: v }) => {
+      if (v >= outcome.spi - 0.25) setLanded(true);
+    });
     let anim: Animated.CompositeAnimation | null = null;
     let alive = true;
     AccessibilityInfo.isReduceMotionEnabled()
@@ -164,9 +180,11 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
         if (!alive) return;
         if (reduce) {
           value.setValue(outcome.spi);
+          setLanded(true);
           setSettled(true);
           return;
         }
+        if (outcome.spi <= 0) setLanded(true);
         anim = Animated.spring(value, {
           toValue: outcome.spi,
           mass: needle.reveal.mass,
@@ -176,7 +194,7 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
         });
         anim.start(() => {
           if (!alive) return;
-          setShown(outcome.spi);
+          setLanded(true);
           setSettled(true);
         });
       });
@@ -188,30 +206,56 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
   }, [isStatic, outcome.spi, value]);
 
   const quiet = tier === 'quiet';
+  const cold = tier === 'strong' || tier === 'critical' ? copy.coldSpot(reading.thermalC.toFixed(1)) : '';
+  const resultLine = notice ? copy.notFitted : `${copy.line[tier]}${cold}`;
+  const pct = profile.signatureDecodedPct;
+  const innerW = size.w - 24;
+
+  // Hidden strings for the redaction bars: the real name, the first trait line
+  // and an EVP line of seeded length. Bars match their width, never a block glyph.
+  const evpLen = 16 + Math.floor(mulberry32((record.seed ^ 0xe7e7) >>> 0)() * 15);
+  const hiddenLen = [profile.name.length, profile.traits?.[0]?.length ?? 28, evpLen];
+  const maskMax = innerW - LABEL_W;
+
   return (
     <View style={s.glass}>
-      <PhotoPanel size={size} height={photoH} record={record} />
+      <PhotoPanel size={size} height={photoH} record={record} settled={settled} isStatic={isStatic} />
       <View style={s.body}>
         <View style={s.revealRow}>
           <View style={s.revealLeft}>
-            <Text style={[type.rdM, s.tier, { color: tint, opacity: settled ? 1 : 0 }]} testID="result-tier">
+            <Text style={[type.rdM, s.tier, { color: tint, opacity: landed ? 1 : 0 }]} testID="result-tier">
               {copy.tierWord[tier]}
             </Text>
-            <Text style={[type.rdXL, { color: tint }]} testID="result-spi">
-              {shown}
+            <Text style={[type.rdXL, s.spi, { color: tint }]} testID="result-spi">
+              {landed ? String(outcome.spi) : '--'}
             </Text>
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
         </View>
-        <Text style={s.caseLine}>{`${copy.caseLabel} ${record.id}`}</Text>
-        <View style={s.readings}>
-          <ReadingRow label={copy.flux} value={reading.flux} />
-          <ReadingRow label={copy.thermal} value={reading.thermal} />
-          <ReadingRow label={copy.acoustic} value={reading.level} />
+        <View style={s.readRow2}>
+          <View style={s.readings}>
+            <Readout
+              size="rdXS"
+              label={copy.flux}
+              value={String(reading.fluxMg)}
+              unit="mG"
+              labelCh={6}
+              valueColor={reading.fluxMg > FLUX_HOT ? color.p5 : color.p4}
+            />
+            <Readout
+              size="rdXS"
+              label={copy.thermal}
+              value={reading.thermalC.toFixed(1)}
+              unit="°C"
+              labelCh={6}
+              valueColor={reading.thermalC < THERMAL_COLD ? color.p5 : color.p4}
+            />
+            <Readout size="rdXS" label={copy.acoustic} value={String(reading.levelDb)} unit="dBFS" labelCh={6} />
+          </View>
+          <Text style={s.resultLine} testID="result-line">
+            {resultLine}
+          </Text>
         </View>
-        <Text style={s.resultLine} numberOfLines={2} testID="result-line">
-          {notice ? copy.notFitted : copy.line[tier]}
-        </Text>
         <View style={s.profile} testID="result-profile">
           <Text style={s.profileHead}>{copy.profile}</Text>
           {quiet ? (
@@ -220,43 +264,60 @@ function ResultGlass({ size, record, isStatic, notice }: { size: GlassSize; reco
             <>
               <ProfileRow label={copy.classLabel} value={profile.class} />
               <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '')} />
-              {copy.hidden.map((l) => (
-                <ProfileRow key={l} label={l} value={copy.mask} masked />
+              {copy.hidden.map((l, i) => (
+                <ProfileRow key={l} label={l} maskW={Math.min(maskMax, Math.round(hiddenLen[i]! * CHAR_XS))} />
               ))}
-              <Text style={s.decoded} testID="result-decoded">{`${copy.decoded} ${profile.signatureDecodedPct}%`}</Text>
             </>
           )}
         </View>
+        <View style={s.spacer} />
+        {quiet ? null : (
+          <View style={s.bottom}>
+            {wide ? (
+              <Text style={s.offer} testID="result-offer">
+                {copy.offer}
+              </Text>
+            ) : null}
+            <Text style={s.decoded} testID="result-decoded">{`${copy.decoded} ${pct}%`}</Text>
+            <DecodeBar pct={pct} />
+          </View>
+        )}
       </View>
     </View>
   );
 }
 
-function ReadingRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={s.readRow}>
-      <Text style={s.readLabel}>{label}</Text>
-      <Text style={s.readValue}>{value}</Text>
-    </View>
-  );
-}
+const LABEL_W = 88;
 
-function ProfileRow({ label, value, masked = false }: { label: string; value: string; masked?: boolean }) {
+function ProfileRow({ label, value, maskW }: { label: string; value?: string; maskW?: number }) {
   return (
     <View style={s.profRow}>
       <Text style={s.profLabel}>{label}</Text>
-      <Text style={[s.profileValue, masked && s.masked]}>{value}</Text>
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={s.profileValue}>{value}</Text>}
     </View>
   );
 }
 
-type Composite = { placement: Placement; meanLuma: number } | null;
+// 20 blocks, lit in whole blocks for the decoded share.
+function DecodeBar({ pct }: { pct: number }) {
+  const lit = Math.round((pct / 100) * 20);
+  return (
+    <View style={s.decodeBar} testID="decode-bar" accessibilityLabel={`Decoded ${pct} percent`}>
+      {Array.from({ length: 20 }, (_, i) => (
+        <View key={i} style={[s.block, { backgroundColor: i < lit ? color.p4 : color.p1 }]} />
+      ))}
+    </View>
+  );
+}
+
+type Composite = { placement: Placement; meanLuma: number; p90: number | undefined; top: number } | null;
 
 // The captured photo with the v0 apparition over it. The image is laid out at its
-// natural 3:4 shape and cropped by the panel; the crop is centred on the figure so a
-// short panel never cuts it off. The panel mounts once the region read is done (and the
-// image has loaded), so a screenshot never catches a half-built picture.
-function PhotoPanel({ size, height, record }: { size: GlassSize; height: number; record: ScanRecord }) {
+// natural 3:4 shape and cropped by the panel, centred on the dark region. The ghost
+// is placed against the visible panel (frame = panel size), so the 15% cap applies to
+// what is seen. The panel mounts once the region read is done (and the image has
+// loaded), so a screenshot never catches a half-built picture.
+function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSize; height: number; record: ScanRecord; settled: boolean; isStatic: boolean }) {
   const { outcome, photoUri, seed } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
   const [read, setRead] = useState<{ done: boolean; result: RegionResult | null }>({ done: !wantsFigure, result: null });
@@ -279,7 +340,10 @@ function PhotoPanel({ size, height, record }: { size: GlassSize; height: number;
     if (!wantsFigure || !read.done) return null;
     const region = read.result?.region ?? null;
     const meanLuma = read.result?.meanLuma ?? DEFAULT_MEAN_LUMA;
-    let placement = placeGhost(region, { w: W, h: imgH }, seed, outcome.smudge ? { opacityRange: SMUDGE_OPACITY } : {});
+    const top = panelTop(height, imgH, region ? region.cy : null);
+    const belief = getBelief();
+    const opacityRange = outcome.smudge ? SMUDGE_OPACITY : belief ? BELIEF_PROFILE[belief].opacityRange : undefined;
+    let placement = placeGhost(panelRegion(region, imgH, height, top), { w: W, h: height }, seed, opacityRange ? { opacityRange } : {});
     if (outcome.smudge) {
       const w = placement.w * SMUDGE_SCALE;
       const h = placement.h * SMUDGE_SCALE;
@@ -292,25 +356,36 @@ function PhotoPanel({ size, height, record }: { size: GlassSize; height: number;
         offsetCopies: placement.offsetCopies.map((c) => ({ ...c, dx: c.dx * SMUDGE_SCALE, dy: c.dy * SMUDGE_SCALE })),
       };
     }
-    return { placement, meanLuma };
-  }, [wantsFigure, read, W, imgH, seed, outcome.smudge]);
+    return { placement, meanLuma, p90: read.result?.p90Luma, top };
+  }, [wantsFigure, read, W, imgH, height, seed, outcome.smudge]);
 
   const ready = read.done && loaded;
-  const centreY = composite ? composite.placement.y + composite.placement.h / 2 : imgH / 2;
-  const top = Math.min(0, Math.max(height - imgH, Math.round(height / 2 - centreY)));
+  const top = composite ? composite.top : panelTop(height, imgH, null);
 
   return (
     <View style={[s.photo, { height }]} testID={read.done ? 'result-photo' : undefined}>
-      <View style={{ position: 'absolute', left: 0, top, width: W, height: imgH, opacity: ready ? 1 : 0 }}>
-        <Image
-          source={{ uri: photoUri }}
-          resizeMode="cover"
-          style={{ width: W, height: imgH }}
-          accessibilityLabel={copy.photoLabel}
-          onLoad={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
-        />
-        {composite ? <GhostV0 placement={composite.placement} regionMeanLuma={composite.meanLuma} /> : null}
+      <Image
+        source={{ uri: photoUri }}
+        resizeMode="cover"
+        style={{ position: 'absolute', left: 0, top, width: W, height: imgH, opacity: ready ? 1 : 0 }}
+        accessibilityLabel={copy.photoLabel}
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+      />
+      {composite && ready && settled ? (
+        // Mounted at needle settle; GhostV0 fades its layers linearly (its own blend
+        // mode needs the layers to stay in the photo's stacking context, so no wrapper).
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <GhostV0
+            placement={composite.placement}
+            regionMeanLuma={composite.meanLuma}
+            regionP90Luma={composite.p90}
+            fadeInMs={isStatic ? 0 : FADE_MS}
+          />
+        </View>
+      ) : null}
+      <View style={s.caseBand} pointerEvents="none">
+        <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
       </View>
     </View>
   );
@@ -321,21 +396,27 @@ const s = StyleSheet.create({
   glass: { flex: 1 },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
   photo: { width: '100%', overflow: 'hidden', backgroundColor: color.n0, borderBottomWidth: 1, borderBottomColor: color.p1 },
-  body: { flex: 1, paddingHorizontal: 12, paddingTop: 8, gap: 6 },
+  // Hard-edged n0 band over the top of the photo carries the case number.
+  caseBand: { position: 'absolute', left: 0, right: 0, top: 0, height: 20, backgroundColor: 'rgba(10, 15, 11, 0.64)', justifyContent: 'center', paddingHorizontal: 12 },
+  caseText: { ...type.rdXS, color: color.p3 },
+  body: { flex: 1, paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6 },
   revealRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   revealLeft: { flexShrink: 1 },
   tier: { letterSpacing: 1 },
-  caseLine: { ...type.lbXS, color: color.n5 },
-  readings: { gap: 0 },
-  readRow: { flexDirection: 'row' },
-  readLabel: { ...type.rdS, width: 96, color: color.p3 },
-  readValue: { ...type.rdS, width: 110, textAlign: 'right', color: color.p4 },
-  resultLine: { ...type.rdS, color: color.p4, minHeight: 22 },
-  profile: { gap: 2, borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 6 },
-  profileHead: { ...type.lbXS, color: color.n5, marginBottom: 2 },
-  profRow: { flexDirection: 'row', alignItems: 'baseline' },
-  profLabel: { ...type.lbS, width: 96, color: color.p3 },
+  spi: { height: 64, minWidth: 88 },
+  readRow2: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 4 },
+  readings: { width: 17 * CHAR_XS + 2 },
+  resultLine: { ...type.rdXS, flex: 1, color: color.p4 },
+  profile: { borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 4, marginTop: 4 },
+  profileHead: { ...type.lbXS, color: color.p3, height: 12 },
+  profRow: { flexDirection: 'row', alignItems: 'center', height: 16 },
+  profLabel: { ...type.lbXS, width: LABEL_W, color: color.p3 },
   profileValue: { ...type.rdXS, color: color.p4 },
-  masked: { color: color.p2 },
-  decoded: { ...type.rdXS, color: color.p4, marginTop: 4 },
+  mask: { height: 8, backgroundColor: color.p2 },
+  spacer: { flex: 1 },
+  bottom: { gap: 2 },
+  offer: { ...type.rdXS, color: color.p4 },
+  decoded: { ...type.rdXS, color: color.p4 },
+  decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
+  block: { flex: 1, height: 8 },
 });

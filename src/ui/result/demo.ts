@@ -16,6 +16,6 @@ export function isDemoName(v: unknown): v is DemoName {
 export function demoRecord(name: DemoName, photoUri: string): ScanRecord {
   const seed = DEMO_SEEDS[name];
   const outcome = drawOutcome(seed, 'standard', freshHistory(0));
-  const profile = generateProfile((seed ^ 0x9e3779b9) >>> 0, outcome.tier, []);
+  const profile = generateProfile((seed ^ 0x9e3779b9) >>> 0, outcome.tier, { names: [], lines: [] });
   return { id: '0001', createdAt: 0, photoUri, seed, outcome, profile };
 }
