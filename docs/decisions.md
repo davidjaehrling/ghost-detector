@@ -93,3 +93,9 @@ Weighted means (Hollow x2, Art): boot 7.19 (min 5.33 shareability), viewfinder 7
 - Judge misread, no action: the dark jagged shapes at the top of result-active-outdoors are the synthetic outdoors fixture's tree line (scripts/gen-fixtures.mjs), not a matte artefact.
 - Deferred to P3 FX (both judges, all screens): phosphor bloom and afterglow, persistence on traces and needle, warm-up roll, barrel, scanlines, grain and dust after compositing, cast-metal housing, sticker paper texture, the fault beat as a real glitch, needle mass driven by the magnetometer (P4).
 - Cost: round 3 build 266k (Builder A) + 136k (FX); re-score 160k.
+
+## 2026-10-13 · D-012 · P2 Refuter final pass and merge
+- At 8fed917: P2-04 (app level), P2-07 (web), P2-08/09 evidence, the D-010 defects, red lines and commit messages all HOLD. The NO RECORD flake did not reproduce in 15 repeats. Native blend and region detection stay UNVERIFIED until a phone build.
+- Defect fixed before merge: ten goldens at 360 were stale after the short-serial rule, hidden by the per-pixel threshold; all goldens regenerated from the current build (c98ba22).
+- Noted for later: duplicated gutter constant in Housing and Placeholder (P3 cleanup); the offer line "Short video plays." must be true or removed before any public build (P5); the `/ad/i` test-ID pattern is brittle (P8); the faint dial arc behind the boot graticule is the intended burn-in ghost.
+- P2 passes: 01 to 07. Open: 08 and 09 (loop re-entered in P3 with Skia), 10 (EAS, owner), 11 (Gate 1, owner). Merge on CI green, Refuter holds, no Compliance veto (no ads, no store copy in P2).

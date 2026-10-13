@@ -405,8 +405,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
-      "refuter": "Engine HOLDS; app passed only 40 lines (fixed in round 3: last 20 records); Refuter second pass 2026-10-13 at e501bb1 (D-010)"
+      "passes": true,
+      "refuter": "HOLDS engine and app; Refuter final pass at 8fed917 (D-012)"
     },
     {
       "id": "P2-05",
@@ -454,10 +454,17 @@
           "output": "active: mean lift 13.0, max 58, 0 darkened px, box 13.5% of panel; critical: 9.0, max 30, 0 darkened, 13.6%",
           "by": "refuter",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "luma difference with/without ghost at 390, cellar, round 3",
+          "output": "ACTIVE: mean lift 10.99, max 58, 0 darkened, 13.9% union box, centre x 0.294; CRITICAL: 10.64, 44, 0, 13.6%, 0.305",
+          "by": "refuter",
+          "date": "2026-10-13"
         }
       ],
-      "passes": false,
-      "refuter": "HOLDS on web; native path unit-tested, device unverified; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
+      "passes": true,
+      "refuter": "HOLDS on web (lift 11.0/10.6 luma, 0 darkened px, 13.9%/13.6% of panel, centre at 0.29/0.31); native path unit-tested, device unverified (P2-10); D-012"
     },
     {
       "id": "P2-08",
