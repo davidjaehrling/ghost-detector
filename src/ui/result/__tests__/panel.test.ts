@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_AREA_FRACTION, placeGhost } from '../../../fx/ghostV0/placement';
-import { cropOnFigure, panelRegion, panelTop } from '../panel';
+import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../panel';
 
 const W = 320;
 const IMG_H = Math.round(W * (4 / 3));
@@ -64,5 +64,33 @@ describe('result photo panel', () => {
       }
     }
     expect(checked).toBe(200);
+  });
+});
+
+describe('per-case seed and tier opacity', () => {
+  it('mixes the case number into the seed, deterministically', () => {
+    expect(caseSeed(95, '0001')).toBe(caseSeed(95, '0001'));
+    expect(caseSeed(95, '0001')).not.toBe(caseSeed(95, '0002'));
+    expect(caseSeed(95, '0001')).not.toBe(caseSeed(41, '0001'));
+  });
+
+  it('opacity rises with tier inside the band for every seed', () => {
+    for (const band of [[0.08, 0.14], [0.11, 0.18], [0.14, 0.22], [0.13, 0.25]] as const) {
+      for (let seed = 1; seed < 80; seed++) {
+        const o = (tier: 'active' | 'strong' | 'critical') => {
+          const t = tierOpacity(tier, band);
+          return placeGhost(null, { w: 320, h: 300 }, seed, { tier, ...t }).opacity;
+        };
+        expect(o('active')).toBeLessThan(o('strong'));
+        expect(o('strong')).toBeLessThan(o('critical'));
+        expect(o('critical')).toBeLessThanOrEqual(Math.min(band[1], 0.25) + 1e-9);
+        expect(o('active')).toBeGreaterThanOrEqual(Math.max(band[0], 0.08) - 1e-9);
+      }
+    }
+  });
+
+  it('leaves the smudge tiers to the caller', () => {
+    expect(tierOpacity('quiet')).toEqual({});
+    expect(tierOpacity('trace')).toEqual({});
   });
 });

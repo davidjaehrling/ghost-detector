@@ -1,8 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useImage } from '@shopify/react-native-skia';
+import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
-import { GhostV0, placeGhost, regionFromImage, type Placement, type RegionResult } from '../../src/fx/ghostV0';
+import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
+import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
+import { useSkiaReady } from '../../src/fx/useSkiaReady';
 import { BELIEF_PROFILE, getBelief } from '../../src/state/belief';
 import { getScan, listScans, type ScanRecord } from '../../src/state/scans';
 import { consumeReveal } from '../../src/state/session';
@@ -14,7 +18,7 @@ import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
 import { demoRecord, isDemoName } from '../../src/ui/result/demo';
 import { bestSoFar, NO_PRIOR } from '../../src/ui/result/best';
-import { cropOnFigure, panelRegion, panelTop } from '../../src/ui/result/panel';
+import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
 import { Readout } from '../../src/ui/Readout';
 import { scareEligible } from '../../src/ui/result/scare';
@@ -115,6 +119,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
         ? 'armed'
         : 'off';
 
+
   const toViewfinder = () => router.navigate('/viewfinder');
   const [notice, setNotice] = useState(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,7 +188,16 @@ function bodyHeight(tier: Tier): number {
   return h + BODY.bottom;
 }
 
-function ResultGlass({ size, record, isStatic, speed, notice, scare }: { size: GlassSize; record: ScanRecord; isStatic: boolean; speed: number; notice: boolean; scare: ScareMode }) {
+type GlassProps = {
+  size: GlassSize;
+  record: ScanRecord;
+  isStatic: boolean;
+  speed: number;
+  notice: boolean;
+  scare: ScareMode;
+};
+
+function ResultGlass({ size, record, isStatic, speed, notice, scare }: GlassProps) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -258,7 +272,14 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare }: { size: G
 
   return (
     <View style={s.glass}>
-      <PhotoPanel size={size} height={photoH} record={record} settled={settled} isStatic={isStatic} pop={scareView.pop} />
+      <PhotoPanel
+        size={size}
+        height={photoH}
+        record={record}
+        settled={settled}
+        isStatic={isStatic}
+        pop={scareView.pop}
+      />
       <View style={s.body}>
         <View style={s.revealRow}>
           <View style={s.revealLeft}>
@@ -367,18 +388,52 @@ function DecodeBar({ pct }: { pct: number }) {
   );
 }
 
-type Composite = { placement: Placement; meanLuma: number; p90: number | undefined; top: number } | null;
+type Layout = { placement: Placement; region: ReturnType<typeof panelRegion>; meanLuma: number; top: number } | null;
 
-// The captured photo with the v0 apparition over it. The image is laid out at its
-// natural 3:4 shape and cropped by the panel, centred on the dark region. The ghost
-// is placed against the visible panel (frame = panel size), so the 15% cap applies to
-// what is seen. The panel mounts once the region read is done (and the image has
-// loaded), so a screenshot never catches a half-built picture.
-function PhotoPanel({ size, height, record, settled, isStatic, pop }: { size: GlassSize; height: number; record: ScanRecord; settled: boolean; isStatic: boolean; pop: number | null }) {
-  const { outcome, photoUri, seed } = record;
+// Catches a compositor that cannot start (shader compile) and hands the panel to the v0 path.
+class V1Boundary extends Component<{ onFail: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onFail();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+// The captured photo with the apparition over it. The photo is laid out at its natural 3:4 shape
+// and cropped by the panel, centred on the figure. The ghost is placed against the visible panel
+// (frame = panel size), so the 15% cap applies to what is seen. The panel mounts once the region
+// read is done (and the photo has decoded), so a screenshot never catches a half-built picture.
+// Compositor v1 (Skia) draws photo, figure and grain on one canvas; the RN image with GhostV0
+// stays as the fallback when Skia is not ready or the shader cannot compile.
+function PhotoPanel({
+  size,
+  height,
+  record,
+  settled,
+  isStatic,
+  pop,
+}: {
+  size: GlassSize;
+  height: number;
+  record: ScanRecord;
+  settled: boolean;
+  isStatic: boolean;
+  pop: number | null;
+}) {
+  const { outcome, photoUri, seed, id } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
-  const [read, setRead] = useState<{ done: boolean; result: RegionResult | null }>({ done: !wantsFigure, result: null });
+  const skia = useSkiaReady();
+  const [v1Failed, setV1Failed] = useState(false);
+  const v1 = skia && !v1Failed && wantsFigure;
+  const [read, setRead] = useState<{ done: boolean; result: RegionStats | null }>({ done: !wantsFigure, result: null });
   const [loaded, setLoaded] = useState(false);
+  const image = useImage(v1 ? photoUri : null);
+  const photoReady = v1 ? image !== null : loaded;
 
   useEffect(() => {
     if (!wantsFigure) return;
@@ -393,14 +448,23 @@ function PhotoPanel({ size, height, record, settled, isStatic, pop }: { size: Gl
 
   const W = size.w;
   const imgH = Math.round(W * PHOTO_ASPECT);
-  const composite = useMemo<Composite>(() => {
+  const placementSeed = caseSeed(seed, id);
+  const layout = useMemo<Layout>(() => {
     if (!wantsFigure || !read.done) return null;
     const region = read.result?.region ?? null;
     const meanLuma = read.result?.meanLuma ?? DEFAULT_MEAN_LUMA;
     const top0 = panelTop(height, imgH, region ? region.cy : null);
     const belief = getBelief();
-    const opacityRange = outcome.smudge ? SMUDGE_OPACITY : belief ? BELIEF_PROFILE[belief].opacityRange : undefined;
-    let placement = placeGhost(panelRegion(region, imgH, height, top0), { w: W, h: height }, seed, { tier: outcome.tier, ...(opacityRange ? { opacityRange } : {}) });
+    const band = belief ? BELIEF_PROFILE[belief].opacityRange : undefined;
+    // Opacity rises with tier inside the belief band; the smudge tiers keep their own faint band.
+    const ladder = outcome.smudge ? {} : tierOpacity(outcome.tier, band);
+    const opacityRange = outcome.smudge ? SMUDGE_OPACITY : (ladder.opacityRange ?? band);
+    const panel = panelRegion(region, imgH, height, top0);
+    let placement = placeGhost(panel, { w: W, h: height }, placementSeed, {
+      tier: outcome.tier,
+      ...(opacityRange ? { opacityRange } : {}),
+      ...(ladder.tierCap ? { tierCap: ladder.tierCap } : {}),
+    });
     if (outcome.smudge) {
       const w = placement.w * SMUDGE_SCALE;
       const h = placement.h * SMUDGE_SCALE;
@@ -416,41 +480,66 @@ function PhotoPanel({ size, height, record, settled, isStatic, pop }: { size: Gl
     // Second pass: slide the photo so the figure, not the dark region, is what the crop centres on.
     const crop = cropOnFigure(height, imgH, top0, placement);
     placement = { ...placement, y: placement.y + crop.dy };
-    return { placement, meanLuma, p90: read.result?.p90Luma, top: crop.top };
-  }, [wantsFigure, read, W, imgH, height, seed, outcome.smudge, outcome.tier]);
+    return { placement, region: panel, meanLuma, top: crop.top };
+  }, [wantsFigure, read, W, imgH, height, placementSeed, outcome.smudge, outcome.tier]);
 
-  const ready = read.done && loaded;
-  const top = composite ? composite.top : panelTop(height, imgH, null);
+  const ready = read.done && photoReady;
+  const top = layout ? layout.top : panelTop(height, imgH, null);
+  const showGhost = layout !== null && ready && settled;
+  const legacyFigure = layout !== null && ready && !v1;
 
   return (
     <View style={[s.photo, { height }]} testID={read.done ? 'result-photo' : undefined}>
-      <Image
-        source={{ uri: photoUri }}
-        resizeMode="cover"
-        style={{ position: 'absolute', left: 0, top, width: W, height: imgH, opacity: ready ? 1 : 0 }}
-        accessibilityLabel={copy.photoLabel}
-        onLoad={() => setLoaded(true)}
-        onError={() => setLoaded(true)}
-      />
-      {composite && ready && settled ? (
-        // Mounted at needle settle; GhostV0 fades its layers linearly (its own blend
-        // mode needs the layers to stay in the photo's stacking context, so no wrapper).
+      {v1 ? (
+        layout && image && ready ? (
+          <V1Boundary onFail={() => setV1Failed(true)}>
+            {/* Before the needle settles the photo shows alone (disabled draws photo and grain); the
+                figure's fade starts when the composite is mounted again at settle. */}
+            <Composite
+              key={showGhost ? 'figure' : 'photo'}
+              photo={image}
+              width={W}
+              height={height}
+              photoRect={{ x: 0, y: top, width: W, height: imgH }}
+              region={layout.region}
+              meanLuma={layout.meanLuma}
+              p80Luma={read.result?.p80Luma}
+              p90Luma={read.result?.p90Luma}
+              grid={read.result?.grid}
+              placement={layout.placement}
+              tier={outcome.tier}
+              seed={placementSeed}
+              static={isStatic}
+              fadeInMs={FADE_MS}
+              disabled={!showGhost}
+            />
+          </V1Boundary>
+        ) : null
+      ) : (
+        <Image
+          source={{ uri: photoUri }}
+          resizeMode="cover"
+          style={{ position: 'absolute', left: 0, top, width: W, height: imgH, opacity: ready ? 1 : 0 }}
+          accessibilityLabel={copy.photoLabel}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(true)}
+        />
+      )}
+      {legacyFigure && settled && layout ? (
+        // Fallback: GhostV0 fades its layers linearly (its own blend mode needs the layers to
+        // stay in the photo's stacking context, so no wrapper).
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <GhostV0
-            placement={composite.placement}
-            regionMeanLuma={composite.meanLuma}
-            regionP90Luma={composite.p90}
-            fadeInMs={isStatic ? 0 : FADE_MS}
-          />
+          <GhostV0 placement={layout.placement} regionMeanLuma={layout.meanLuma} regionP90Luma={read.result?.p90Luma} fadeInMs={isStatic ? 0 : FADE_MS} />
         </View>
       ) : null}
-      {composite && ready && pop !== null ? (
-        // Jump-scare: a second figure layer at the matte's full opacity for one frame (0 until then).
+      {layout && ready && pop !== null ? (
+        // Jump-scare: the compositor has no pop prop, so a GhostV0 layer above the canvas carries it:
+        // a second figure layer at the matte's full opacity for one frame (0 until then).
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           <GhostV0
-            placement={{ ...composite.placement, opacity: pop }}
-            regionMeanLuma={composite.meanLuma}
-            regionP90Luma={composite.p90}
+            placement={{ ...layout.placement, opacity: pop }}
+            regionMeanLuma={layout.meanLuma}
+            regionP90Luma={read.result?.p90Luma}
             fadeInMs={0}
           />
         </View>
