@@ -347,7 +347,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
     },
     {
       "id": "P2-02",
@@ -361,26 +362,51 @@
           "output": "5 fixtures assert region choice; determinism; thin edge line accepted (fixed in round 2 with a thickness/aspect filter)",
           "by": "refuter",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "mutation: minThickness=0, maxAspect=Infinity",
+          "output": "4 edge-line tests fail, 11 pass; reverted",
+          "by": "refuter",
+          "date": "2026-10-13"
         }
       ],
-      "passes": false,
-      "refuter": "HOLDS; Refuter sweep 2026-10-13 at e0d75da (D-008)"
+      "passes": true,
+      "refuter": "HOLDS incl. thin-region filter mutation check; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
     },
     {
       "id": "P2-03",
       "phase": "P2",
       "description": "Engine v0: seeded scan outcome",
       "acceptance": "src/engine/outcome.ts: seed from photo hash + timestamp; tier distribution per intensity from docs/psych-brief.md §3 (Calm 30/40/22/7/1, Standard 20/35/28/13/4, Brave 12/28/32/20/8); first-session rules (scan 1 ACTIVE or STRONG, no CRITICAL before scan 4, CRITICAL ≥5 scans apart, forced STRONG after 12/16/8 dry scans); distribution test over 10,000 seeds within ±1.5 points per tier; rule tests",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test -- outcome (10,000 seeds)",
+          "output": "calm 30.45/40.27/21.91/6.38/0.99; standard 20.30/35.07/28.00/12.77/3.86; brave 12.11/28.00/32.69/19.83/7.37; targets hard-coded",
+          "by": "builder-b",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; hard-coded BRIEF_TARGETS; two mutations fail; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
     },
     {
       "id": "P2-04",
       "phase": "P2",
       "description": "Engine v0: entity profile generator",
       "acceptance": "src/engine/profile.ts: seeded Barnum-style profile (class, era, trait lines) from a word bank with no repeats within 20 results; EN only; tests for determinism and the no-repeat window",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "25-profile sequences on 5 seed bases with the 20-result window",
+          "output": "0 repeated names, 0 repeated lines in the engine; app store cap of 40 lines disproved and fixed",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "refuter": "Engine HOLDS; app passed only 40 lines (fixed in round 3: last 20 records); Refuter second pass 2026-10-13 at e501bb1 (D-010)"
     },
     {
       "id": "P2-05",
@@ -421,15 +447,32 @@
       "phase": "P2",
       "description": "Result screen with v0 ghost",
       "acceptance": "photo with a v0 apparition composited into the darkest region at 8..25% opacity (plain Image/Skia-free v0: a blurred procedural matte), tier word and SPI number via the needle spring, entity profile preview with the curiosity-gap line; share and Deep Scan keys present but inert; L2 goldens for QUIET, ACTIVE and CRITICAL fixtures",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "luma difference with and without ghost, 390x844, cellar fixture",
+          "output": "active: mean lift 13.0, max 58, 0 darkened px, box 13.5% of panel; critical: 9.0, max 30, 0 darkened, 13.6%",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "refuter": "HOLDS on web; native path unit-tested, device unverified; Refuter second pass 2026-10-13 at e501bb1 (D-010)"
     },
     {
       "id": "P2-08",
       "phase": "P2",
       "description": "Boot screen round 3",
       "acceptance": "the D-005 and D-006 carry-over list applied; contrast of every text on n0 ≥4.5:1 checked by a unit test over tokens; loop score ≥8 with no dimension <7 OR leftovers logged as FX-only",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/*/boot.png, boot-calib.png",
+          "output": "round 4: ACK inert until typing done; belief card maps per psych-brief §2.9; stored once; loop round 2 mean 7.24",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
