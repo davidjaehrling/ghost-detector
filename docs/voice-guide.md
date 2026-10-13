@@ -74,7 +74,7 @@ Key form is `surface.key`. All are EN.
 
 | Key | String |
 |---|---|
-| `sticker.disclosure` | SIMULATION UNIT. Readings are generated for entertainment. Magnetometer data is real. Spirits are not included. |
+| `sticker.disclosure` | SIMULATION UNIT · ENTERTAINMENT USE ONLY. All readings are generated in software. This unit detects nothing. |
 | `boot.firmware` | FW 2.31 / CAL 2026-03-14 / SELF-TEST OK |
 | `onboarding.question` | Have you ever experienced something you couldn't explain? |
 | `onboarding.intensitySet` | Intensity set to STANDARD. Change any time in Settings. |
