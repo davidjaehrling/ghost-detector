@@ -8,6 +8,7 @@ Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what i
 P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P1-08 boot screen loop at 6.05 (continues as P2-08).
 
 ## Last thing done
+- P3: Skia 2.14 installed (P3-01), glass stack (P3-02), thermal view (P3-05) committed; P4 audio engine (P4-01..03) committed. Compositor v1 (P3-03/04) and Builder A's three-screen integration running. Decisions D-013, D-014.
 - P2 merged as PR #3: 7 of 11 claims pass; 08/09 re-enter the loop in P3; 10/11 wait on the owner. Decisions D-007 to D-012.
 - P2 rounds: engine v0 verified (P2-01..03 pass), viewfinder and scan theatre verified (P2-05, 06 pass), v0 ghost adds light and native region detection exists (P2-07 pending round-3 check). Design loop round 2 means: boot 7.24, viewfinder 7.0, scan 7.43, result 6.9; ghost believability 5. Round 3 running (last plain-view round; Skia in P3). Decisions D-007 to D-010.
 - P2 wave 1 merged into the branch: engine v0 (dark-region finder, seeded outcome matching the psych-brief tables within 0.7 points, profile generator; 55 engine tests), navigation skeleton with flow spec, boot screen round 3 (seeded install identity with Luhn serial, contrast test, key row, graticule per §3). 71 unit tests, 15 goldens.
@@ -21,9 +22,9 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-0
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. P3-01: install Skia 2.14 with reanimated and worklets, CanvasKit on web, first Skia golden, CI green (FX Engineer).
-2. P3-02 glass stack and P3-03/04 apparitions and compositor (FX Engineer), thermal (P3-05), jump-scare (P3-06), then Builder A applies <Glass> and the D-011 leftovers to the four screens.
-3. Believability and design-loop scoring (P3-07, 08), Refuter, PR. P4 sound engine (src/audio) can start in parallel after P3-01.
+1. Compositor v1 (running) and Builder A's integration of glass, leftovers, magnetometer needle, sweep, audio and jump-scare on boot, viewfinder and scan (running).
+2. Result screen: compositor v1, thermal toggle, warp (Builder A, second task). Then believability scoring on the five fixtures (P3-07) and the four-screen loop (P3-08), Refuter, PR.
+3. Still open on the owner: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console.
 
 ## Blockers (owner)
 - **Gate 1**: name (panel recommends option 1 "Velden FS-4 Field Probe", alternative option 5), icon (panel recommends concept 3 nameplate), Android package ID (permanent; must not contain "detector" if option 2 is chosen).
