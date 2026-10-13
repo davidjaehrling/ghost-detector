@@ -5,6 +5,8 @@ import type { Tier } from '../../src/engine';
 import { GhostV0, placeGhost, regionFromImage, type Placement, type RegionResult } from '../../src/fx/ghostV0';
 import { BELIEF_PROFILE, getBelief } from '../../src/state/belief';
 import { getScan, listScans, type ScanRecord } from '../../src/state/scans';
+import { consumeReveal } from '../../src/state/session';
+import { useSettings } from '../../src/state/useSettings';
 import { mulberry32 } from '../../src/ui/boot/seed';
 import type { KeySlot } from '../../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
@@ -15,6 +17,9 @@ import { bestSoFar, NO_PRIOR } from '../../src/ui/result/best';
 import { cropOnFigure, panelRegion, panelTop } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
 import { Readout } from '../../src/ui/Readout';
+import { scareEligible } from '../../src/ui/result/scare';
+import { type ScareMode, useScare } from '../../src/ui/result/useScare';
+import { useReduceMotion } from '../../src/ui/useReduceMotion';
 import { SpiDial } from '../../src/ui/result/SpiDial';
 import { type GlassSize, Housing } from '../../src/ui/screens/Housing';
 import { color, motion, needle, type } from '../../src/ui/tokens';
@@ -84,18 +89,31 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
     if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : '0001');
     return getScan(String(params.id ?? ''));
   }, [harness, params.demo, params.id, params.case]);
+
+  // Jump-scare (psych brief section 3): the flag is the engine's roll (the first-3-scans, 24 h and
+  // per-session caps are in drawOutcome); the switch and reduced motion are the user's. It plays
+  // only on a result reached straight from a scan. ?static=1&scare=1 shows the peak frame.
+  const settings = useSettings();
+  const reduceMotion = useReduceMotion();
+  const [fresh] = useState(() => (record ? consumeReveal(record.id) : false));
+  const scareMode: ScareMode =
+    harness.isStatic && params.scare === '1'
+      ? 'peak'
+      : record && fresh && scareEligible({ jumpScare: record.outcome.jumpScare, enabled: settings.jumpScares, reduceMotion })
+        ? 'armed'
+        : 'off';
 
   const toViewfinder = () => router.navigate('/viewfinder');
   const [notice, setNotice] = useState(false);
@@ -148,7 +166,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       glassLabel={copy.glass}
       keys={keySlots}
     >
-      {(size) => <ResultGlass size={size} record={record} isStatic={harness.isStatic} speed={harness.speed} notice={notice} />}
+      {(size) => <ResultGlass size={size} record={record} isStatic={harness.isStatic} speed={harness.speed} notice={notice} scare={scareMode} />}
     </Housing>
   );
 }
@@ -165,7 +183,7 @@ function bodyHeight(tier: Tier): number {
   return h + BODY.bottom;
 }
 
-function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSize; record: ScanRecord; isStatic: boolean; speed: number; notice: boolean }) {
+function ResultGlass({ size, record, isStatic, speed, notice, scare }: { size: GlassSize; record: ScanRecord; isStatic: boolean; speed: number; notice: boolean; scare: ScareMode }) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -223,6 +241,8 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
     };
   }, [isStatic, speed, outcome.spi, value]);
 
+  const scareView = useScare(scare, landed);
+
   const mainLine =
     tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
   const resultLine = notice ? copy.notFitted : mainLine;
@@ -238,7 +258,7 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
 
   return (
     <View style={s.glass}>
-      <PhotoPanel size={size} height={photoH} record={record} settled={settled} isStatic={isStatic} />
+      <PhotoPanel size={size} height={photoH} record={record} settled={settled} isStatic={isStatic} pop={scareView.pop} />
       <View style={s.body}>
         <View style={s.revealRow}>
           <View style={s.revealLeft}>
@@ -319,6 +339,7 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
           </View>
         ) : null}
       </View>
+      {scareView.flash > 0 ? <View pointerEvents="none" style={[s.flash, { opacity: scareView.flash }]} testID="scare-flash" /> : null}
     </View>
   );
 }
@@ -353,7 +374,7 @@ type Composite = { placement: Placement; meanLuma: number; p90: number | undefin
 // is placed against the visible panel (frame = panel size), so the 15% cap applies to
 // what is seen. The panel mounts once the region read is done (and the image has
 // loaded), so a screenshot never catches a half-built picture.
-function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSize; height: number; record: ScanRecord; settled: boolean; isStatic: boolean }) {
+function PhotoPanel({ size, height, record, settled, isStatic, pop }: { size: GlassSize; height: number; record: ScanRecord; settled: boolean; isStatic: boolean; pop: number | null }) {
   const { outcome, photoUri, seed } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
   const [read, setRead] = useState<{ done: boolean; result: RegionResult | null }>({ done: !wantsFigure, result: null });
@@ -423,6 +444,17 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
           />
         </View>
       ) : null}
+      {composite && ready && pop !== null ? (
+        // Jump-scare: a second figure layer at the matte's full opacity for one frame (0 until then).
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <GhostV0
+            placement={{ ...composite.placement, opacity: pop }}
+            regionMeanLuma={composite.meanLuma}
+            regionP90Luma={composite.p90}
+            fadeInMs={0}
+          />
+        </View>
+      ) : null}
       <View style={s.caseBand} pointerEvents="none">
         <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
       </View>
@@ -433,6 +465,7 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
 const s = StyleSheet.create({
   empty: { flex: 1, backgroundColor: color.n3 },
   glass: { flex: 1 },
+  flash: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: color.p5 },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
   photo: { width: '100%', overflow: 'hidden', backgroundColor: color.n0, borderBottomWidth: 1, borderBottomColor: color.p1 },
   // Hard-edged n0 band over the top of the photo carries the case number.

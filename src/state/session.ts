@@ -14,3 +14,17 @@ export function sessionActivity(now: Date = new Date()): Activity {
 export function resetSessionActivity(): void {
   current = null;
 }
+
+// The scan hands the result its reveal once: only a result reached straight from a scan plays the
+// reveal effects (the jump-scare). Opening the same case from history, or reloading, must not.
+let pendingReveal: string | null = null;
+
+export function markReveal(id: string): void {
+  pendingReveal = id;
+}
+
+export function consumeReveal(id: string): boolean {
+  if (pendingReveal !== id) return false;
+  pendingReveal = null;
+  return true;
+}

@@ -17,3 +17,14 @@ describe('session activity index', () => {
     expect(sessionActivity(new Date(2026, 9, 14, 3, 30)).index).toBe(4);
   });
 });
+
+describe('reveal hand-off', () => {
+  it('is consumed once, and only for the case the scan marked', async () => {
+    const { consumeReveal, markReveal } = await import('../session');
+    expect(consumeReveal('0001')).toBe(false);
+    markReveal('0002');
+    expect(consumeReveal('0001')).toBe(false);
+    expect(consumeReveal('0002')).toBe(true);
+    expect(consumeReveal('0002')).toBe(false);
+  });
+});

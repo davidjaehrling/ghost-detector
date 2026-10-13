@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { drawOutcome, generateProfile, seedFrom } from '../src/engine';
+import { markReveal } from '../src/state/session';
 import { getHistory, getIntensity, getRecentLines, getRecentNames, saveScan } from '../src/state/scans';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
 import { fixtureUri } from '../src/ui/fixtures';
@@ -107,6 +108,7 @@ function Scan({ params }: { params: ScanParams }) {
     toResult.current = true;
     sound.reveal(draw.outcome.tier);
     const id = saveScan({ createdAt: Date.now(), photoUri: draw.photoUri, tag: params.tag, seed: draw.seed, outcome: draw.outcome, profile: draw.profile });
+    markReveal(id);
     router.replace({ pathname: '/result/[id]', params: { id } });
   }, [isDone, frozen, draw, router, params.tag]);
 
