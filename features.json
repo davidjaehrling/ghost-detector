@@ -637,6 +637,13 @@
           "output": "round 1 believability: cellar 4.33, attic 6.67, bright 5.0, black 4.0, outdoors 4.67 (mean 4.9); round 2 fixes in progress",
           "by": "director",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-022, D-023",
+          "output": "believability rounds: 4.9 → 5.5 → 4.8 (round 3 regressions were defects, fixed before merge); loop stops at 3 of 5 rounds on synthetic fixtures; resumes in P8 on real photographs",
+          "by": "director",
+          "date": "2026-10-13"
         }
       ],
       "passes": false
@@ -651,6 +658,13 @@
           "kind": "artifact",
           "ref": "docs/decisions.md D-017",
           "output": "round 1 with glass: boot 7.38, viewfinder 7.24, scan 7.38, result 7.1",
+          "by": "director",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-022",
+          "output": "round 2 with glass: boot 7.43, viewfinder 7.29, scan 7.38, result 7.0; leftovers carried to P8",
           "by": "director",
           "date": "2026-10-13"
         }
@@ -669,10 +683,17 @@
           "output": "scan: 89 to 114 frames per 3 s (mean 26 to 34 ms), p95 50 to 67; result: median 16.7, p95 16.7 to 33.4; viewfinder live: median 100 ms; dist 19.7 MB, entry JS 2.73 MB (650 KB gzip), wasm 8.08 MB",
           "by": "refuter",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "Playwright rAF deltas, 390, live, 3 s x 3 runs (Refuter light pass at fc9053e)",
+          "output": "viewfinder median 16.7/16.7/16.7, p95 33.4/33.4/50; scan 16.7 x3, p95 16.8 to 33.4; result 16.7 x3; dist 19.7 MB, entry JS 2.77 MB",
+          "by": "refuter",
+          "date": "2026-10-13"
         }
       ],
-      "passes": false,
-      "refuter": "DISPROVED: scan theatre 26 to 34 ms mean frame on SwiftShader (result holds at 16.7 median); viewfinder live at 100 ms median; perf fix in round 2; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+      "passes": true,
+      "refuter": "HOLDS after the perf round: viewfinder, scan and result medians 16.7 ms on SwiftShader at 390 (p95 16.7 to 50 ms), bundle 20 MB with the 8 MB wasm; D-019, Refuter light pass"
     },
     {
       "id": "P4-01",
