@@ -80,14 +80,17 @@ export function elapsedForPhase(phase: number | 'hold' | 'fault', durationMs: nu
   return Math.round((active * (phase + 0.5)) / PHASE_COUNT);
 }
 
-// Fault code blinks at 2 Hz, 3 cycles over the beat: on for the first half of each 500 ms.
+// Fault code blinks at 500 ms (on, off, on over the 1.5 s beat).
 export const FAULT_LINE = 'E-07 SENSOR DRIFT. RECALIBRATING.';
-export const faultOn = (faultT: number) => faultT % 500 < 250;
+export const BLINK_MS = 500;
+export const faultOn = (faultT: number) => Math.floor(faultT / BLINK_MS) % 2 === 0;
 
 // Ladder climbs with the scan, LED 1 (power) up to LED 4. LED 5 is for a CRITICAL
 // result only. On STRONG and CRITICAL, LED 4 goes dark for the hold: the result
 // lights it (and LED 5) at the reveal.
 export function scanLeds(frame: ScanFrame, tier?: string): number {
+  // The fault beat drops the ladder to the power LED; the scan resumes after it.
+  if (frame.kind === 'fault') return 1;
   const lit = Math.min(4, 1 + Math.floor(frame.activeFrac * 4));
   if (frame.kind === 'hold' && (tier === 'strong' || tier === 'critical')) return Math.min(lit, 3);
   return lit;
@@ -98,13 +101,23 @@ export function barBlocks(progress: number): number {
   return Math.min(BAR_BLOCKS, Math.floor(progress * BAR_BLOCKS));
 }
 
-export const PHASE_LINES = [
-  'Sweeping band 2.',
-  'Sampling flux. Rate rising.',
-  'Thermal pass. Reading gradient.',
-  'Acoustic pass. Bands 1 to 4.',
-  'Decoding signature. Reading blocks.',
-] as const;
+// Telemetry lines, upper case with units, 3 to 6 words. The values are the phase's
+// seeded base value, so a line logged earlier reads the same as it did live.
+export function phaseLine(seed: number, phase: Phase): string {
+  const b1 = mulberry32((seed + phase * 7919) >>> 0)();
+  switch (phase) {
+    case 0:
+      return 'SWEEP BAND 2';
+    case 1:
+      return `FLUX SAMPLE ${Math.round(300 + b1 * 260)} mG`;
+    case 2:
+      return `THERMAL dT ${(-(0.4 + b1 * 3.2)).toFixed(1)} °C`;
+    case 3:
+      return `ACOUSTIC ${Math.round(-(30 + b1 * 20))} dBFS`;
+    default:
+      return 'DECODE 2048 BLOCKS';
+  }
+}
 
 // Seeded live value for the big readout row (rdL). A pure function of (seed,
 // phase, tick), so a frozen frame always shows the same numbers. Values step at 10 Hz.
@@ -121,7 +134,7 @@ export function liveAt(seed: number, phase: Phase, tick: number): Live {
     case 1:
       return { label: 'FLUX', value: String(Math.round((300 + b1 * 260) * wob)), unit: 'mG' };
     case 2:
-      return { label: 'ΔT', value: (-(0.4 + b1 * 3.2) * wob).toFixed(1), unit: '°C' };
+      return { label: 'dT', value: (-(0.4 + b1 * 3.2) * wob).toFixed(1), unit: '°C' };
     case 3:
       return { label: 'LVL', value: String(Math.round(-(30 + b1 * 20) * wob)), unit: 'dBFS' };
     default:
@@ -145,6 +158,9 @@ export function rateAt(seed: number, tick: number, activeFrac: number, cap: numb
 }
 
 // Telemetry lines already shown before `phase`, newest last, at most `max`.
-export function logBefore(phase: Phase, max = 3): string[] {
-  return PHASE_LINES.slice(0, phase).slice(-max);
+export function logBefore(seed: number, phase: Phase, max = 3): string[] {
+  return ([0, 1, 2, 3, 4] as const)
+    .slice(0, phase)
+    .map((p) => phaseLine(seed, p))
+    .slice(-max);
 }

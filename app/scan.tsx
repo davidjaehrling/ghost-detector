@@ -86,7 +86,7 @@ function Scan({ params }: { params: ScanParams }) {
       glassLabel={copy.glass}
       keys={[null, null, null, { testID: 'key-cancel', label: copy.cancelLabel, legend: copy.cancel, onPress: cancel }]}
     >
-      {(size) => <TheatreGlass size={size} seed={draw.seed} frame={frame} cap={RATE_CAP[intensity]} />}
+      {(size) => <TheatreGlass size={size} seed={draw.seed} frame={frame} cap={RATE_CAP[intensity]} still={frozen || isStatic} />}
     </Housing>
   );
 }

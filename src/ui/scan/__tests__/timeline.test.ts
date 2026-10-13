@@ -3,7 +3,8 @@ import {
   BAR_BLOCKS,
   FAULT_MS,
   HOLD_MS,
-  PHASE_LINES,
+  FAULT_LINE,
+  phaseLine,
   RATE_CAP,
   barBlocks,
   elapsedForPhase,
@@ -72,13 +73,18 @@ describe('scan timeline', () => {
   it('readings are deterministic and telemetry lines are 3 to 6 words', () => {
     expect(readingAt(417, 2, 10)).toBe(readingAt(417, 2, 10));
     expect(readingAt(417, 2, 10)).not.toBe(readingAt(418, 2, 10));
-    for (const l of PHASE_LINES) {
+    for (const p of [0, 1, 2, 3, 4] as const) {
+      const l = phaseLine(417, p);
       const words = l.split(' ').length;
       expect(words).toBeGreaterThanOrEqual(3);
       expect(words).toBeLessThanOrEqual(6);
+      // Upper case, apart from the SI units.
+      expect(l.replace(/mG|dBFS|dT|°C/g, '')).toBe(l.replace(/mG|dBFS|dT|°C/g, '').toUpperCase());
     }
-    expect(logBefore(4)).toEqual([PHASE_LINES[1], PHASE_LINES[2], PHASE_LINES[3]]);
-    expect(logBefore(0)).toEqual([]);
+    expect(phaseLine(417, 0)).toBe('SWEEP BAND 2');
+    expect(phaseLine(417, 1)).toMatch(/^FLUX SAMPLE \d{3} mG$/);
+    expect(logBefore(417, 4)).toEqual([phaseLine(417, 1), phaseLine(417, 2), phaseLine(417, 3)]);
+    expect(logBefore(417, 0)).toEqual([]);
   });
 });
 
@@ -113,11 +119,20 @@ describe('scan round 2', () => {
     expect(frameAt(T, T, false).kind).toBe('done');
   });
 
-  it('the fault code blinks at 2 Hz for three cycles', () => {
+  it('the fault code blinks at 500 ms: on, off, on over the beat', () => {
     expect(faultOn(0)).toBe(true);
-    expect(faultOn(249)).toBe(true);
-    expect(faultOn(250)).toBe(false);
-    expect(faultOn(500)).toBe(true);
+    expect(faultOn(499)).toBe(true);
+    expect(faultOn(500)).toBe(false);
+    expect(faultOn(999)).toBe(false);
+    expect(faultOn(1000)).toBe(true);
+    expect(FAULT_LINE).toBe('E-07 SENSOR DRIFT. RECALIBRATING.');
+  });
+
+  it('the fault beat drops the ladder to LED 1 and the scan then resumes', () => {
+    const f = frameAt(elapsedForPhase('fault', T), T, true);
+    expect(f.kind).toBe('fault');
+    expect(scanLeds(f, 'active')).toBe(1);
+    expect(scanLeds(frameAt(T / 2 + FAULT_MS + 400, T, true), 'active')).toBeGreaterThan(1);
   });
 
   it('about 1 scan in 15 has a fault, decided by the seed alone', () => {
@@ -140,7 +155,35 @@ describe('scan round 2', () => {
 
   it('live readings carry label, value and unit', () => {
     expect(liveAt(417, 1, 10)).toMatchObject({ label: 'FLUX', unit: 'mG' });
-    expect(liveAt(417, 2, 10)).toMatchObject({ label: 'ΔT', unit: '°C' });
+    expect(liveAt(417, 2, 10)).toMatchObject({ label: 'dT', unit: '°C' });
     expect(readingAt(417, 3, 5)).toMatch(/^LVL -\d+ dBFS$/);
+  });
+});
+
+describe('LED 4 in the hold (D-007 regression, D-009)', () => {
+  it('stays dark for the whole hold on STRONG and CRITICAL, for every duration and with or without a fault', () => {
+    for (const tier of ['strong', 'critical']) {
+      for (const d of [6000, 7000, 8000, 9000, 10000]) {
+        for (const fault of [false, true]) {
+          const start = d - HOLD_MS + (fault ? FAULT_MS : 0);
+          let seen = 0;
+          for (let e = start; e < d + (fault ? FAULT_MS : 0); e += 50) {
+            const f = frameAt(e, d, fault);
+            expect(f.kind).toBe('hold');
+            expect(scanLeds(f, tier)).toBeLessThanOrEqual(3);
+            seen++;
+          }
+          expect(seen).toBeGreaterThan(20);
+          // Just before the hold LED 4 is still lit, so the drop is the hold's doing.
+          expect(scanLeds(frameAt(start - 60, d, fault), tier)).toBe(4);
+        }
+      }
+    }
+  });
+
+  it('lights it in the hold on the quieter tiers', () => {
+    for (const tier of ['quiet', 'trace', 'active', undefined]) {
+      expect(scanLeds(frameAt(T - HOLD_MS / 2, T), tier)).toBe(4);
+    }
   });
 });
