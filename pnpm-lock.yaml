@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@expo-google-fonts/b612-mono':
+        specifier: ^0.4.1
+        version: 0.4.1
       '@expo-google-fonts/vt323':
         specifier: ^0.4.1
         version: 0.4.1
@@ -506,6 +509,9 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@expo-google-fonts/b612-mono@0.4.1':
+    resolution: {integrity: sha512-YPeU+4iNhajDteCubAdPqZVAbyOkbY2bnvW99/ePJ1xX8qWkfMNtRVZi66K6YfT3gw4acLiNAYn4GihKgYjb4A==}
 
   '@expo-google-fonts/material-symbols@0.4.50':
     resolution: {integrity: sha512-XNSgSfd+1p6wqRAzzhrckGngHJQ1/z+oCMdI5FN+x/VnDeMMFGkXsuRNPYcZTYYff1GwVwx4u6Gqnb30aALysw==}
@@ -4707,6 +4713,8 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@expo-google-fonts/b612-mono@0.4.1': {}
 
   '@expo-google-fonts/material-symbols@0.4.50': {}
 
