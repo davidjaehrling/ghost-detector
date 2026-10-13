@@ -7,7 +7,29 @@
       "phase": "P0",
       "description": "Expo SDK 57 scaffold with expo-router, expo-dev-client, TypeScript strict, pnpm",
       "acceptance": "pnpm install succeeds; expo@57 in package.json; tsconfig has strict:true; app/ uses expo-router; expo-dev-client is a dependency; pnpm typecheck exits 0",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm list --depth 0",
+          "output": "expo 57.0.28, expo-router 57.0.26, react-native 0.86.3, typescript 6.0.3; expo-dev-client present",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm typecheck",
+          "output": "tsc --noEmit, exit 0",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm web:export && ls dist",
+          "output": "+not-found.html _expo _sitemap.html assets index.html",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -15,7 +37,29 @@
       "phase": "P0",
       "description": "ESLint at 0 warnings plus banned-copy linter",
       "acceptance": "pnpm lint exits 0 with --max-warnings 0; pnpm lint:copy fails on a fixture containing a banned word and passes on the repo",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm lint",
+          "output": "eslint . --max-warnings 0, exit 0, no output",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "node scripts/lint-copy.mjs scripts/__fixtures__/banned.txt",
+          "output": "scripts/__fixtures__/banned.txt:1: banned word \"pivotal\" / lint-copy: 1 hit(s) / exit=1",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm lint:copy",
+          "output": "lint-copy: clean",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -23,7 +67,15 @@
       "phase": "P0",
       "description": "Unit test harness for the pure engine",
       "acceptance": "pnpm test runs Vitest over src/engine with at least one real test and exits 0",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test",
+          "output": "Test Files 2 passed (2) / Tests 5 passed (5); src/engine/__tests__/rng.test.ts included",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -78,7 +130,15 @@
       "phase": "P0",
       "description": "Agent roster and skills",
       "acceptance": "12 agent files in .claude/agents each with a pinned model; .claude/settings.json enables expo, frontend-design and impeccable plugins",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "grep -L '^model: claude-' .claude/agents/*.md; cat .claude/settings.json",
+          "output": "12 agent files, none without a pinned model; plugins enabled: expo, frontend-design, impeccable",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -86,7 +146,15 @@
       "phase": "P0",
       "description": "State files and init.sh",
       "acceptance": "CLAUDE.md, PROGRESS.md, features.json, docs/decisions.md, assets/LICENSES.md exist; ./init.sh installs and runs the smoke test from a clean clone and exits 0",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "./init.sh",
+          "output": "frozen-lockfile install then pnpm smoke, exit 0 (Builder A run from repo root)",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
