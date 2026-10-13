@@ -1,11 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Canvas, useImage } from '@shopify/react-native-skia';
+import { Canvas, Text as SkText, useImage } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
 import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
-import { PhosphorText } from '../../src/fx/glass';
+import { PhosphorText, useVT323 } from '../../src/fx/glass';
 import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
 import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
 import { useSkiaReady } from '../../src/fx/useSkiaReady';
@@ -18,10 +18,11 @@ import type { KeySlot } from '../../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
 import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
-import { demoRecord, isDemoName } from '../../src/ui/result/demo';
+import { DEMO_CASES, SCARE_CASE, demoRecord, isDemoName } from '../../src/ui/result/demo';
 import { bestSoFar, NO_PRIOR } from '../../src/ui/result/best';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
+import { PINNED_TIERS, stampText, thermalDelta } from '../../src/ui/result/stamp';
 import { Readout } from '../../src/ui/Readout';
 import { scareEligible } from '../../src/ui/result/scare';
 import { type ScareMode, useScare } from '../../src/ui/result/useScare';
@@ -112,9 +113,9 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
-    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : '0001', harness.fixture, /^\d{1,6}$/.test(params.seed ?? '') ? Number(params.seed) : undefined);
+    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : params.scare === '1' ? SCARE_CASE : DEMO_CASES[params.demo], harness.fixture, /^\d{1,6}$/.test(params.seed ?? '') ? Number(params.seed) : undefined);
     return getScan(String(params.id ?? ''));
-  }, [harness, params.demo, params.id, params.case, params.seed]);
+  }, [harness, params.demo, params.id, params.case, params.seed, params.scare]);
 
   // Jump-scare (psych brief section 3): the flag is the engine's roll (the first-3-scans, 24 h and
   // per-session caps are in drawOutcome); the switch and reduced motion are the user's. It plays
@@ -211,13 +212,19 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
 const BODY = { pad: 4, reveal: 92, line: 20, readings: 60, profile: 100, profileNone: 36, best: 84, decoded: 28, offer: 36, bottom: 12, gap: 4 };
 
 function bodyHeight(tier: Tier): number {
-  const lines = tier === 'strong' ? 2 : 1;
+  const lines = PINNED_TIERS.includes(tier) ? 2 : 1;
   let h = BODY.pad + BODY.reveal + BODY.gap + BODY.line * lines + BODY.gap + BODY.readings + BODY.gap + (tier === 'quiet' ? BODY.profileNone : BODY.profile);
   if (tier === 'quiet') h += BODY.gap + BODY.best;
   else h += BODY.gap + BODY.decoded;
   if (tier === 'active' || tier === 'strong' || tier === 'critical') h += BODY.offer + BODY.gap;
   return h + BODY.bottom;
 }
+
+// The photo window is the same height on every tier (the tiers must compare in review): it takes what
+// the tallest body leaves, and a lighter body keeps its spare height as air under its last block.
+const TIERS: readonly Tier[] = ['quiet', 'trace', 'active', 'strong', 'critical'];
+export const BODY_MAX = Math.max(...TIERS.map(bodyHeight));
+export const photoHeight = (glassH: number) => Math.round(Math.max(glassH * PHOTO_MIN, glassH - BODY_MAX));
 
 type GlassProps = {
   size: GlassSize;
@@ -237,8 +244,11 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
   const tint = TIER_COLOR[tier];
   const wide = tier === 'active' || tier === 'strong' || tier === 'critical';
   const quiet = tier === 'quiet';
-  const photoH = Math.round(Math.max(size.h * PHOTO_MIN, size.h - bodyHeight(tier)));
+  const photoH = photoHeight(size.h);
   const reading = readingsFor(record.seed, tier);
+  // One thermal number per result: the cold spot on STRONG and CRITICAL, the THERM reading below.
+  const deltaC = thermalDelta(tier, reading);
+  const stamp = stampText({ id: record.id, spi: outcome.spi, deltaC, createdAt: record.createdAt });
 
   // Reveal (psych brief 2.6): 1.2 s of silence with the number blank, the needle at
   // rest and the photo up; then the needle springs and the number lands in one frame at
@@ -329,7 +339,8 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
         isStatic={isStatic}
         pop={scareView.pop}
         therm={therm}
-        thermalC={reading.thermalC}
+        thermalC={deltaC}
+        stamp={stamp}
         onPhotoLoaded={onPhotoLoaded}
       />
       <View style={s.body}>
@@ -362,9 +373,9 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
           <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
             {resultLine}
           </Text>
-          {tier === 'strong' ? (
+          {PINNED_TIERS.includes(tier) ? (
             <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
-              {copy.coldSpot(reading.coldSpotC.toFixed(1), reading.driftKhz.toFixed(1))}
+              {copy.coldSpot(deltaC.toFixed(1), reading.driftKhz.toFixed(1))}
             </Text>
           ) : null}
         </View>
@@ -491,6 +502,7 @@ function PhotoPanel({
   pop,
   therm,
   thermalC,
+  stamp,
   onPhotoLoaded,
 }: {
   size: GlassSize;
@@ -501,6 +513,7 @@ function PhotoPanel({
   pop: number | null;
   therm: boolean;
   thermalC: number;
+  stamp: string;
   onPhotoLoaded: (loaded: boolean) => void;
 }) {
   const { outcome, photoUri, seed, id } = record;
@@ -647,12 +660,36 @@ function PhotoPanel({
           <ThermalView field={field} width={W} height={height} top={top} static={isStatic || reduceMotion} />
         </View>
       ) : null}
+      {therm || !ready ? null : <DataStrip text={stamp} width={W} height={height} />}
       {therm ? null : (
         // The thermal view has its own readout box in the same corner.
         <View style={s.caseBand} pointerEvents="none">
           <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+// The data strip: case, SPI, ΔT and time in VT323 p3, bottom-left of the photo. Compositor v1 has no
+// `stamp` prop, so it is a Skia text canvas over the panel. The photo's own 4% grain sits under it
+// and the glass grain and scanlines (the overlay over the whole window) sit over it, so it reads as
+// burned into the picture. A 1 px n0 copy under the text keeps it legible on a bright frame.
+const STRIP_H = 24;
+const STRIP_X = 8;
+function DataStrip({ text, width, height }: { text: string; width: number; height: number }) {
+  const font = useVT323(16);
+  const base = STRIP_H - 8;
+  return (
+    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null}>
+      <Canvas style={{ width, height: STRIP_H }} pointerEvents="none">
+        {font ? (
+          <>
+            <SkText font={font} text={text} x={STRIP_X + 1} y={base + 1} color={color.n0} />
+            <SkText font={font} text={text} x={STRIP_X} y={base} color={color.p3} />
+          </>
+        ) : null}
+      </Canvas>
     </View>
   );
 }
@@ -666,6 +703,7 @@ const s = StyleSheet.create({
   // Hard-edged n0 band over the top of the photo carries the case number.
   caseBand: { position: 'absolute', left: 0, right: 0, top: 0, height: 20, backgroundColor: 'rgba(10, 15, 11, 0.64)', justifyContent: 'center', paddingHorizontal: 12 },
   caseText: { ...type.rdXS, color: color.p3 },
+  strip: { position: 'absolute', left: 0, height: STRIP_H },
   body: { flex: 1, paddingHorizontal: 12, paddingTop: BODY.pad, paddingBottom: BODY.bottom },
   revealRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: BODY.reveal },
   revealLeft: { flexShrink: 1 },

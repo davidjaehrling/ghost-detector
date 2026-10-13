@@ -35,6 +35,8 @@ async function settle(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('result-photo')).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0));
+  // The data strip's font has loaded (its canvas is drawn once aria-busy clears).
+  await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-busy', 'false');
   // The photo and digit canvases have drawn.
   await frames(page);
 }
@@ -64,14 +66,15 @@ for (const { demo, tier } of DEMOS) {
     }
     await expect(page.getByTestId('key-back')).toHaveText('NEW SCAN');
     const line = page.getByTestId('result-line');
-    if (demo === 'strong') {
-      await expect(line).toHaveText('Strong. Signature resolving.');
+    if (demo === 'strong' || demo === 'critical') {
+      if (demo === 'strong') await expect(line).toHaveText('Strong. Signature resolving.');
       await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT ΔT -\d+\.\d °C · DRIFT \d\.\d kHz$/);
       const cold = (await page.getByTestId('result-coldspot').innerText()).split(' · ')[0]!;
       const therm = await page.getByText(/^THERM\s+-?\d/).first().innerText();
       expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD SPOT ΔT ', ''));
     } else {
       await expect(page.getByTestId('result-coldspot')).toHaveCount(0);
+      if (demo === 'active') await expect(line).toHaveText('Activity logged.');
     }
     if (demo === 'critical') {
       const text = await line.innerText();
@@ -132,9 +135,9 @@ test('THERM swaps the photo for the thermal view of the same frame and PHOTO swa
   expect(Math.abs(view.width - photo.width)).toBeLessThan(1.5);
   expect(view.y).toBeGreaterThanOrEqual(photo.y - 1.5);
   expect(view.y + view.height).toBeLessThanOrEqual(photo.y + photo.height + 1.5);
-  // The view prints the reading the THERM line shows.
-  const therm = (await page.getByText(/^THERM\s+-?\d/).first().innerText()).replace(/\s+/g, ' ');
-  const dt = /(-\d+\.\d)/.exec(therm)?.[1];
+  // One number on screen: on CRITICAL the view prints the COLD SPOT line's ΔT (not the THERM reading).
+  const cold = (await page.getByTestId('result-coldspot').innerText()).replace(/\s+/g, ' ');
+  const dt = /ΔT (-\d+\.\d) °C/.exec(cold)?.[1];
   expect(dt).toBeDefined();
   await expect(page.getByTestId('thermal-view')).toHaveAttribute('aria-label', new RegExp(`ΔT ${dt!} `));
   await page.getByTestId('key-therm').click();
@@ -236,3 +239,50 @@ test('a missing case shows NO RECORD and a way back', async ({ page }) => {
   await expect(page.getByTestId('screen-viewfinder')).toBeVisible();
   check();
 });
+
+// The photo window is one height on every tier, and the demos of one photo differ tier to tier.
+test('the photo window is the same height on every tier and each cellar case has its own number', async ({ page }) => {
+  const heights: number[] = [];
+  const stamps: string[] = [];
+  for (const { demo } of DEMOS) {
+    await page.goto(`/result/demo?static=1&fixture=cellar&demo=${demo}`);
+    await settle(page);
+    heights.push(Math.round((await page.getByTestId('result-photo').boundingBox())!.height));
+    stamps.push((await page.getByTestId('result-stamp').getAttribute('aria-label'))!);
+  }
+  expect(new Set(heights).size).toBe(1);
+  expect(new Set(stamps.map((t) => /^CASE (\d{4})/.exec(t)![1])).size).toBe(4);
+  await page.goto('/result/demo?static=1&fixture=cellar&demo=critical&scare=1');
+  await settle(page);
+  expect(Math.round((await page.getByTestId('result-photo').boundingBox())!.height)).toBe(heights[0]);
+  expect(stamps.map((t) => /^CASE (\d{4})/.exec(t)![1])).not.toContain(/^CASE (\d{4})/.exec((await page.getByTestId('result-stamp').getAttribute('aria-label'))!)![1]);
+});
+
+// The data strip burned into the photo's lower left: case, SPI, ΔT, time (share crop).
+for (const { demo } of DEMOS) {
+  test(`the data strip on ${demo} carries case, SPI, ΔT and the time, bottom-left on the photo`, async ({ page }) => {
+    await page.goto(`/result/demo?static=1&fixture=cellar&demo=${demo}`);
+    await settle(page);
+    const strip = page.getByTestId('result-stamp');
+    const label = (await strip.getAttribute('aria-label'))!;
+    const m = /^CASE (\d{4}) · SPI (\d+) · ΔT (-?\d+\.\d) °C · (\d\d:\d\d)$/.exec(label);
+    expect(m, label).not.toBeNull();
+    expect(m![2]).toBe((await page.getByTestId('result-spi').innerText()).trim());
+    expect(m![4]).toBe('22:48');
+    // One thermal number: the cold spot on STRONG and CRITICAL, the THERM reading below.
+    if (demo === 'strong' || demo === 'critical') {
+      expect(await page.getByTestId('result-coldspot').innerText()).toContain(`ΔT ${m![3]} °C`);
+    } else {
+      expect((await page.getByText(/^THERM\s+-?\d/).first().innerText()).replace(/\s+/g, ' ')).toContain(m![3]);
+    }
+    const photo = (await page.getByTestId('result-photo').boundingBox())!;
+    const box = (await strip.boundingBox())!;
+    expect(box.x).toBeLessThan(photo.x + 4);
+    expect(box.y + box.height).toBeGreaterThan(photo.y + photo.height - 4);
+    expect(box.y).toBeGreaterThan(photo.y + photo.height / 2);
+    // Drawn into a canvas on the photo, under the glass overlay (the overlay comes later in the tree).
+    await expect(strip.locator('canvas')).toHaveCount(1);
+    await page.getByTestId('key-therm').click();
+    await expect(page.getByTestId('result-stamp')).toHaveCount(0);
+  });
+}
