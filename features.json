@@ -1,0 +1,194 @@
+{
+  "$schema": "./docs/features.schema.json",
+  "rules": "Agents may only add evidence entries. Only the Director flips passes, and only after the Refuter (a different model from the builder) failed to disprove the claim.",
+  "features": [
+    {
+      "id": "P0-01",
+      "phase": "P0",
+      "description": "Expo SDK 57 scaffold with expo-router, expo-dev-client, TypeScript strict, pnpm",
+      "acceptance": "pnpm install succeeds; expo@57 in package.json; tsconfig has strict:true; app/ uses expo-router; expo-dev-client is a dependency; pnpm typecheck exits 0",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm list --depth 0",
+          "output": "expo 57.0.28, expo-router 57.0.26, react-native 0.86.3, typescript 6.0.3; expo-dev-client present",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm typecheck",
+          "output": "tsc --noEmit, exit 0",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm web:export && ls dist",
+          "output": "+not-found.html _expo _sitemap.html assets index.html",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-02",
+      "phase": "P0",
+      "description": "ESLint at 0 warnings plus banned-copy linter",
+      "acceptance": "pnpm lint exits 0 with --max-warnings 0; pnpm lint:copy fails on a fixture containing a banned word and passes on the repo",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm lint",
+          "output": "eslint . --max-warnings 0, exit 0, no output",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "node scripts/lint-copy.mjs scripts/__fixtures__/banned.txt",
+          "output": "scripts/__fixtures__/banned.txt:1: banned word \"pivotal\" / lint-copy: 1 hit(s) / exit=1",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm lint:copy",
+          "output": "lint-copy: clean",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-03",
+      "phase": "P0",
+      "description": "Unit test harness for the pure engine",
+      "acceptance": "pnpm test runs Vitest over src/engine with at least one real test and exits 0",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test",
+          "output": "Test Files 2 passed (2) / Tests 5 passed (5); src/engine/__tests__/rng.test.ts included",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-04",
+      "phase": "P0",
+      "description": "GitHub Actions CI: lint, typecheck, unit tests, Expo web export, Playwright screenshots uploaded as artifacts",
+      "acceptance": "Workflow file in .github/workflows; the run on the P0 PR is green; screenshot artifact present",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": ".github/workflows/ci.yml",
+          "output": "Workflow added (jobs: checks, web-screenshots); YAML parses via PyYAML. Run output pending from the P0 PR.",
+          "by": "qa-runner",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "artifact",
+          "ref": "https://github.com/davidjaehrling/ghost-detector/actions/runs/38401286225",
+          "output": "pull_request run on a444c08: jobs checks and web-screenshots both success; artifact web-screenshots (4989 bytes) uploaded",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-05",
+      "phase": "P0",
+      "description": "Playwright L2 harness: Expo web export served and screenshotted at 360x800, 390x844 and 428x926",
+      "acceptance": "pnpm e2e:web produces three PNGs under e2e/screenshots with those exact pixel sizes; committed goldens exist",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "file e2e/screenshots/golden/*/boot.png",
+          "output": "e2e/screenshots/golden/android-360x800/boot.png: PNG image data, 360 x 800, 8-bit/color RGB, non-interlaced\ne2e/screenshots/golden/android-390x844/boot.png: PNG image data, 390 x 844, 8-bit/color RGB, non-interlaced\ne2e/screenshots/golden/android-428x926/boot.png: PNG image data, 428 x 926, 8-bit/color RGB, non-interlaced",
+          "by": "qa-runner",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web",
+          "output": "Running 3 tests using 2 workers\n  ✓ [android-360x800] boot screen renders\n  ✓ [android-390x844] boot screen renders\n  ✓ [android-428x926] boot screen renders\n  3 passed",
+          "by": "qa-runner",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-06",
+      "phase": "P0",
+      "description": "EAS e2e Android workflow ready to run: eas.json e2e-test profile, .eas/workflows/e2e-android.yml, first Maestro flow with takeScreenshot",
+      "acceptance": "Files exist and are schema-valid YAML/JSON; eas workflow:validate passes once expo.dev is reachable",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "python3 yaml.safe_load on .eas/workflows/e2e-android.yml and e2e/maestro/boot.yml; node JSON.parse eas.json",
+          "output": "all parse; field names match digest §2; eas workflow:validate NOT run (expo.dev blocked, EXPO_TOKEN unset)",
+          "by": "release-manager",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "blocked_by": "eas workflow:validate needs expo.dev allowlist and EXPO_TOKEN (owner)",
+      "refuter": "UNVERIFIED (validate cannot run here); files parse; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-07",
+      "phase": "P0",
+      "description": "Agent roster and skills",
+      "acceptance": "12 agent files in .claude/agents each with a pinned model; .claude/settings.json enables expo, frontend-design and impeccable plugins",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "grep -L '^model: claude-' .claude/agents/*.md; cat .claude/settings.json",
+          "output": "12 agent files, none without a pinned model; plugins enabled: expo, frontend-design, impeccable",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-08",
+      "phase": "P0",
+      "description": "State files and init.sh",
+      "acceptance": "CLAUDE.md, PROGRESS.md, features.json, docs/decisions.md, assets/LICENSES.md exist; ./init.sh installs and runs the smoke test from a clean clone and exits 0",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "./init.sh",
+          "output": "frozen-lockfile install then pnpm smoke, exit 0 (Builder A run from repo root)",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
+    },
+    {
+      "id": "P0-09",
+      "phase": "P0",
+      "description": "First L3 Maestro screenshot downloaded from EAS",
+      "acceptance": "A PNG from the Maestro Test Results artifact committed under e2e/evidence/l3/",
+      "evidence": [],
+      "passes": false,
+      "blocked_by": "expo.dev network allowlist and EXPO_TOKEN (owner)"
+    }
+  ]
+}

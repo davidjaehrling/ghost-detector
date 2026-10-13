@@ -1,0 +1,4 @@
+This line is a pivotal fixture for the banned-copy linter.
+We are delving into the signal.
+The detector underscores every reading.
+This is not a toy, but a field instrument.

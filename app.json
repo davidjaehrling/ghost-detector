@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Ghost Detector",
+    "slug": "ghost-detector",
+    "scheme": "ghostdetector",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "com.ghostdetector.app"
+    },
+    "web": {
+      "output": "static",
+      "bundler": "metro"
+    }
+  }
+}

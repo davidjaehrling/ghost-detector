@@ -1,0 +1,7 @@
+appId: com.ghostdetector.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*FIELD UNIT.*"
+    timeout: 20000
+- takeScreenshot: boot
