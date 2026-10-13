@@ -89,19 +89,20 @@ test('cancel returns to the viewfinder and saves nothing', async ({ page }) => {
   check();
 });
 
-// A live run (nothing frozen): in the 1.2 s hold the block after the held ΔT blinks at 1 Hz.
+// A live run (nothing frozen): in the 1.2 s hold the block after the held ΔT blinks at 1 Hz. The page
+// records the block's opacity itself every 25 ms (a test round trip is too slow under load).
 test('the block after the held ΔT blinks', async ({ page }) => {
   test.setTimeout(45_000);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __blink: string[] };
+    w.__blink = [];
+    setInterval(() => {
+      const e = document.querySelector('[data-testid="scan-held-block"]');
+      if (e) w.__blink.push(getComputedStyle(e).opacity);
+    }, 25);
+  });
   await page.goto(`/scan?seed=${STRONG_SEED}`);
-  const block = page.getByTestId('scan-held-block');
-  await expect(block).toHaveCount(1, { timeout: 25_000 });
-  const seen = new Set<string>();
-  const until = Date.now() + 1200;
-  while (Date.now() < until && !(seen.has('0') && seen.has('1'))) {
-    // Read the DOM directly: the block goes with the hold, and a locator would wait for it to return.
-    seen.add(await page.evaluate(() => { const e = document.querySelector('[data-testid="scan-held-block"]'); return e ? getComputedStyle(e).opacity : 'gone'; }));
-    await page.waitForTimeout(40);
-  }
-  seen.delete('gone');
-  expect([...seen].sort()).toEqual(['0', '1']);
+  await expect(page.getByTestId('screen-result')).toBeVisible({ timeout: 30_000 });
+  const seen = await page.evaluate(() => [...new Set((window as unknown as { __blink: string[] }).__blink)].sort());
+  expect(seen).toEqual(['0', '1']);
 });
