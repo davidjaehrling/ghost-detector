@@ -1,0 +1,23 @@
+# Run: eas workflow:run .eas/workflows/e2e-android.yml --wait   (exit 0 pass, 11 fail); artifacts: eas workflow:view <id> --json
+name: e2e-android
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ['main']
+
+jobs:
+  build_android:
+    type: build
+    params:
+      platform: android
+      profile: e2e-test
+  maestro_test:
+    needs: [build_android]
+    type: maestro
+    runs_on: linux-large-nested-virtualization
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      flow_path: ['e2e/maestro/boot.yml']
+      record_screen: true
+      retries: 1
