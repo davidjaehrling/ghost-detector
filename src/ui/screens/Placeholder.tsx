@@ -21,7 +21,7 @@ export function Placeholder({
 }: {
   testID: string;
   code: string;
-  readout: string;
+  readout?: string;
   sub?: string;
   keys: KeySpec[];
   children?: ReactNode;
@@ -41,9 +41,11 @@ export function Placeholder({
           <View style={s.readoutBlock}>
             <Text style={s.sub}>{code}</Text>
             {sub ? <Text style={s.sub}>{sub}</Text> : null}
-            <Text style={s.readout} accessibilityLabel={readout}>
-              {readout}
-            </Text>
+            {readout ? (
+              <Text style={s.readout} accessibilityLabel={readout}>
+                {readout}
+              </Text>
+            ) : null}
           </View>
           {children}
         </View>

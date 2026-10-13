@@ -1,6 +1,6 @@
 import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
-import { type RefObject, useRef, useState, useSyncExternalStore } from 'react';
+import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sessionActivity } from '../src/state/session';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
@@ -9,6 +9,7 @@ import { captureSeed } from '../src/ui/capture';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
 import { fixtureSource, fixtureUri } from '../src/ui/fixtures';
 import { type Harness, readHarness } from '../src/ui/harness';
+import { sound } from '../src/ui/audio';
 import { Readout } from '../src/ui/Readout';
 import { useActive } from '../src/ui/useActive';
 import { useReduceMotion } from '../src/ui/useReduceMotion';
@@ -16,7 +17,7 @@ import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
-import { formatFlux, formatGeo, jitteredAngle, liveLeds, liveThermal } from '../src/ui/viewfinder/flux';
+import { formatFlux, formatGeo, jitteredAngle, liveLeds, liveThermal, liveTier } from '../src/ui/viewfinder/flux';
 import { useFlux } from '../src/ui/viewfinder/useFlux';
 import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend } from '../src/ui/viewfinder/lore';
 
@@ -102,6 +103,26 @@ function Viewfinder({
   const busy = useRef(false);
   const { index } = sessionActivity(isStatic ? STATIC_NOW : new Date());
 
+  // Sound follows the screen: on while it is focused and in the foreground, off on a blur or when
+  // the app goes to the background (useActive). The flux and its tier drive the clicks and the hum.
+  const tierNow = liveTier(sample.mg);
+  const tierRef = useRef(tierNow);
+  useEffect(() => {
+    tierRef.current = tierNow;
+  }, [tierNow]);
+  useEffect(() => sound.setReducedMotion(reduceMotion), [reduceMotion]);
+  useEffect(() => {
+    if (!active) return;
+    sound.start('vf', tierRef.current);
+    return () => sound.stop('vf');
+  }, [active]);
+  useEffect(() => {
+    if (active) sound.setTier(tierNow);
+  }, [active, tierNow]);
+  useEffect(() => {
+    if (active) sound.setFlux(sample.mg);
+  }, [active, sample.mg]);
+
   const angle = jitteredAngle(sample.mg, sample.jitter, reduceMotion);
   const flux = formatFlux(sample.mg);
   const dT = liveThermal(sample.mg);
@@ -109,6 +130,7 @@ function Viewfinder({
   const capture = async () => {
     if (busy.current) return;
     busy.current = true;
+    sound.capture();
     try {
       let uri = fixtureUri(fixture);
       let size = FIXTURE_SIZE;

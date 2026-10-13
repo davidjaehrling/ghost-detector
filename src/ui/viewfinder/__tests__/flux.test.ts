@@ -13,6 +13,7 @@ import {
   geoDeviation,
   jitteredAngle,
   liveLeds,
+  liveTier,
   liveThermal,
   magnitudeUt,
   microTeslaToMilliGauss,
@@ -136,6 +137,10 @@ describe('magnetometer mapping (P4-05)', () => {
     expect(liveLeds(400 * (1 - 0.15))).toBe(2);
     expect(liveLeds(400 * (1 - 0.4))).toBe(3);
     expect(liveLeds(400 * (1 - 0.75))).toBe(4);
+  });
+
+  it('reads the ladder as a live tier, QUIET to STRONG', () => {
+    expect([400, 470, 600, 800].map(liveTier)).toEqual(['quiet', 'trace', 'active', 'strong']);
   });
 
   it('reports the GEO deviation in whole percent, signed', () => {

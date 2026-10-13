@@ -1,5 +1,5 @@
 import { mulberry32 } from '../boot/seed';
-import { needle } from '../tokens';
+import { type Tier, needle } from '../tokens';
 
 // Seeded flux walk for the viewfinder HUD. Mean-reverting in the log domain
 // around Earth's field (Bible section 3: 250 to 650 mG), with rare excursions.
@@ -66,6 +66,10 @@ export function liveLeds(mg: number): number {
   const dev = Math.abs(geoDeviation(mg)) / 100;
   return 1 + LED_STEPS.filter((s) => dev >= s - 1e-9).length;
 }
+
+// The scene's tier while live: the rungs of the ladder read as QUIET to STRONG (never CRITICAL).
+const LIVE_TIERS: readonly Tier[] = ['quiet', 'trace', 'active', 'strong'];
+export const liveTier = (mg: number): Tier => LIVE_TIERS[liveLeds(mg) - 1]!;
 
 // Cold-spot style gradient shown next to the flux: it dips as the field leaves
 // the GEO centre, so the two readouts move together. dT stays in -12.0 to +6.0.
