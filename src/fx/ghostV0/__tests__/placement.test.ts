@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { mulberry32 } from '../../../engine';
+import { TIERS, mulberry32 } from '../../../engine';
 import {
   CENTRE_EXCLUSION,
   COPY_ALPHA_SUM,
+  DEFAULT_OPACITY_RANGE,
+  EDGE_MARGIN_X,
+  EDGE_MARGIN_Y,
   FALLBACK_LIFT,
   MAX_AREA_FRACTION,
   OPACITY_MAX,
   OPACITY_MIN,
+  TIER_OPACITY_CAP,
   ghostTint,
   stackedAlpha,
   placeGhost,
@@ -180,5 +184,111 @@ describe('ghostTint (fallback)', () => {
     }
     expect(ghostTint(Number.NaN).luma).toBe(60 + FALLBACK_LIFT);
     expect(ghostTint(-20).luma).toBe(FALLBACK_LIFT);
+  });
+});
+
+// Shapes like the regions the fixtures produce (D-009): flush left, flush right, centred low,
+// a top band, and no region at all.
+const FIXTURE_REGIONS: (RegionInput | null)[] = [
+  { x: 0, y: 0.18, w: 0.3, h: 0.62, cx: 0.11, cy: 0.5, areaFraction: 0.15 },
+  { x: 0.7, y: 0.25, w: 0.3, h: 0.55, cx: 0.88, cy: 0.52, areaFraction: 0.13 },
+  { x: 0.3, y: 0.6, w: 0.42, h: 0.38, cx: 0.5, cy: 0.8, areaFraction: 0.12 },
+  { x: 0.04, y: 0, w: 0.92, h: 0.26, cx: 0.45, cy: 0.1, areaFraction: 0.2 },
+  null,
+];
+const PANEL_FRAMES = [{ w: 390, h: 360 }, { w: 390, h: 844 }, { w: 1080, h: 1920 }, { w: 1920, h: 1080 }, { w: 360, h: 300 }];
+
+describe('placement margins (D-009)', () => {
+  // 5 regions x 400 seeds = 2000 placements, frames cycled.
+  const rnd = mulberry32(2009);
+  const cases = FIXTURE_REGIONS.flatMap((region, r) =>
+    Array.from({ length: 400 }, (_, i) => ({ region, frame: PANEL_FRAMES[(i + r) % PANEL_FRAMES.length]!, seed: (rnd() * 2 ** 32) >>> 0 })),
+  );
+
+  it('keeps the centre 15 to 40% in from a side edge, 10% from top and bottom, off the midline', () => {
+    expect(cases).toHaveLength(2000);
+    for (const { region, frame, seed } of cases) {
+      for (const tier of [undefined, 'active', 'critical'] as const) {
+        const p = placeGhost(region, frame, seed, tier ? { tier } : {});
+        const fx = (p.x + p.w / 2) / frame.w;
+        const fy = (p.y + p.h / 2) / frame.h;
+        const inset = Math.min(fx, 1 - fx);
+        expect(inset).toBeGreaterThanOrEqual(EDGE_MARGIN_X[0] - 1e-9);
+        expect(inset).toBeLessThanOrEqual(EDGE_MARGIN_X[1] + 1e-9);
+        expect(fy).toBeGreaterThanOrEqual(EDGE_MARGIN_Y - 1e-9);
+        expect(fy).toBeLessThanOrEqual(1 - EDGE_MARGIN_Y + 1e-9);
+        expect(Math.abs(fx - 0.5)).toBeGreaterThanOrEqual(CENTRE_EXCLUSION);
+        const u = union(p);
+        expect(u.x0).toBeGreaterThanOrEqual(-1e-6);
+        expect(u.x1).toBeLessThanOrEqual(frame.w + 1e-6);
+        expect(u.y0).toBeGreaterThanOrEqual(-1e-6);
+        expect(u.y1).toBeLessThanOrEqual(frame.h + 1e-6);
+        expect(u.area / (frame.w * frame.h)).toBeLessThanOrEqual(MAX_AREA_FRACTION);
+      }
+    }
+  });
+
+  it('overlaps the region, and slides to the inner side of a region flush with an edge', () => {
+    for (const { region, frame, seed } of cases) {
+      if (!region) continue;
+      const p = placeGhost(region, frame, seed);
+      const u = union(p);
+      // The figure box overlaps the region box.
+      expect(p.x).toBeLessThan((region.x + region.w) * frame.w);
+      expect(p.x + p.w).toBeGreaterThan(region.x * frame.w);
+      expect(p.y).toBeLessThan((region.y + region.h) * frame.h);
+      expect(p.y + p.h).toBeGreaterThan(region.y * frame.h);
+      expect(u.area).toBeGreaterThan(0);
+      const fx = (p.x + p.w / 2) / frame.w;
+      if (region.x === 0) expect(fx).toBeGreaterThan(region.cx);
+      if (region.x + region.w === 1) expect(fx).toBeLessThan(region.cx);
+    }
+  });
+});
+
+describe('tier caps (D-009)', () => {
+  it('caps opacity by tier when a tier is given, and leaves it alone without one', () => {
+    let aboveCritical = 0;
+    for (let seed = 0; seed < 500; seed++) {
+      for (const tier of TIERS) {
+        const p = placeGhost(null, FRAMES[2]!, seed, { tier, opacityRange: [0.08, 0.25] });
+        expect(p.opacity).toBeLessThanOrEqual(TIER_OPACITY_CAP[tier] + 1e-12);
+        expect(p.opacity).toBeGreaterThanOrEqual(OPACITY_MIN);
+      }
+      if (placeGhost(null, FRAMES[2]!, seed).opacity > TIER_OPACITY_CAP.critical) aboveCritical++;
+      const custom = placeGhost(null, FRAMES[2]!, seed, { tier: 'active', tierCap: { active: 0.12 } });
+      expect(custom.opacity).toBeLessThanOrEqual(0.12);
+    }
+    expect(aboveCritical).toBeGreaterThan(0);
+  });
+
+  it('keeps a belief band under the cap: [0.14, 0.22] on CRITICAL becomes [0.14, 0.18]', () => {
+    for (let seed = 0; seed < 200; seed++) {
+      const p = placeGhost(null, FRAMES[0]!, seed, { tier: 'critical', opacityRange: [0.14, 0.22] });
+      expect(p.opacity).toBeGreaterThanOrEqual(0.14);
+      expect(p.opacity).toBeLessThanOrEqual(0.18);
+    }
+  });
+
+  it('drops one motion copy on CRITICAL', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      const base = placeGhost(null, FRAMES[0]!, seed);
+      const crit = placeGhost(null, FRAMES[0]!, seed, { tier: 'critical' });
+      expect(crit.offsetCopies.length).toBe(base.offsetCopies.length - 1);
+      expect(crit.offsetCopies.reduce((a, c) => a + c.alpha, 0)).toBeCloseTo(COPY_ALPHA_SUM, 9);
+      expect(placeGhost(null, FRAMES[0]!, seed, { tier: 'active' }).offsetCopies.length).toBe(base.offsetCopies.length);
+    }
+  });
+});
+
+describe('default opacity band', () => {
+  it('uses DEFAULT_OPACITY_RANGE without an opacityRange, and still accepts belief bands down to 0.08', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      const p = placeGhost(null, FRAMES[0]!, seed);
+      expect(p.opacity).toBeGreaterThanOrEqual(DEFAULT_OPACITY_RANGE[0]);
+      expect(p.opacity).toBeLessThanOrEqual(DEFAULT_OPACITY_RANGE[1]);
+      const yes = placeGhost(null, FRAMES[0]!, seed, { opacityRange: [0.08, 0.14] });
+      expect(yes.opacity).toBeLessThanOrEqual(0.14);
+    }
   });
 });

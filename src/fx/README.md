@@ -11,20 +11,40 @@ so it runs before Skia lands. P3 swaps the internals; the props stay.
   - Native (`regionFromImage.ts`): `expo-image-manipulator` resizes to 96 px on the long side and
     saves a base64 JPEG; `jpeg-js` decodes it in JS (`regionFromJpegBase64`). No Skia. Needs a dev
     client build that includes `expo-image-manipulator`.
-- `placeGhost(region | null, frame, seed, { opacityRange? })` -> `Placement`. Pure, seeded, tested.
-  Figure plus motion copies cover at most 15% of the frame, centre 10 to 30% of the region size
-  off the centroid and inside the region box, never within 8% of the frame midline, opacity
-  0.08 to 0.25, 3 to 5 offset copies along one drift direction at falling alpha. No region:
-  lower third, left or right of the midline.
+- `placeGhost(region | null, frame, seed, { opacityRange?, tier?, tierCap? })` -> `Placement`. Pure,
+  seeded, tested. Figure plus motion copies cover at most 15% of the frame and stay inside it.
+  Centre 10 to 30% of the region size off the centroid, inside the region box where the margins
+  allow, otherwise as close to it as they allow (the figure box still overlaps the region).
+  - Margins (D-009): the centre sits 15 to 40% in from the left or right frame edge
+    (`EDGE_MARGIN_X`) and at least 10% from the top and bottom (`EDGE_MARGIN_Y`), so it is never
+    jammed against the bezel and never within 8% of the midline (the band leaves 10% clear).
+    A region flush with one side edge pushes the offset to its inner side.
+  - Opacity: `opacityRange` clamped to 0.08 to 0.25; without one the band is
+    `DEFAULT_OPACITY_RANGE` = 0.13 to 0.25 (at 0.09 the cellar figure lifted only 7 luma).
+  - `tier` (the result screen should pass `outcome.tier`): caps the band's top at
+    `TIER_OPACITY_CAP` (quiet 0.10, trace 0.10, active 0.22, strong 0.20, critical 0.18; override
+    per tier with `tierCap`). The tier shows in the SPI, not in the ghost's brightness. CRITICAL
+    also drops one motion copy (2 to 4 instead of 3 to 5) so it smears less.
+  - 3 to 5 offset copies along one drift direction at falling alpha. No region: lower third,
+    left or right of the midline, inside the same margins.
 - `<GhostV0 placement regionMeanLuma />` draws the matte copies inside one absolute-fill layer
   over the photo. Optional props: `fadeInMs` (linear `Animated.timing` 0 to 1, default 0 = final
   state at once; `?static=1` on web always shows the final state), `regionP90Luma` (tint fallback
   only), `disabled`, `blend` (`'screen' | 'tint'`).
 - Mattes: `assets/ghost/matte-{1,2,3}.png` from `scripts/gen-ghost-mattes.mjs` (seeded, no source
-  images). Alpha is normalised so the densest 2% of each matte is fully opaque, eased
-  (`1 - (1 - a)^3.2`) so the drape fills while the edge stays soft, and the figure is cropped to its
-  box (at most 1.3x stretch per axis). A second, finer noise field warps and bites the head so it
-  never reads as a round blob.
+  images). Alpha is normalised so the densest 0.5% of each matte is fully opaque, eased
+  (`1 - (1 - a)^2`), and the figure is cropped to its box (at most 1.3x stretch per axis).
+  - No enclosed holes (D-009): the noise mask may cut gaps only near the silhouette edge; deep
+    inside the body it only varies density (floor 0.4), so every gap bites in from outside. A
+    flood fill from the border finds no enclosed component below alpha 40, 80 or 128 in the top
+    60% of any matte.
+  - Edge feather: a 34 px blur of the same alpha at 0.6 strength is laid under the body (max), so
+    the outer falloff (90% to 5% of the row peak) runs over 99 to 197 px of the 512 px matte width,
+    wider than the body's own soft edge.
+  - Head: a second, finer noise field warps it and bites its outer band (the core keeps at least
+    60%), and it is drawn at 72% of the torso density so it never pops out as a bright ball.
+  - Asymmetry: uneven shoulders, a lean, one faint arm hint on mattes 1 and 2; matte 3 is cut by
+    a ragged occluder at 62% of its height.
 
 ## Blend: the ghost adds light
 The layer has `mixBlendMode: 'screen'`; the copies stack with normal alpha inside it. Screen gives
@@ -50,16 +70,19 @@ Copies share a fixed budget: their alpha multipliers sum to `COPY_ALPHA_SUM` = 0
 - `?ghostblend=tint` forces the fallback path.
 
 ## Measured (L2, Chromium, 390x844 at 1x, `fixture=cellar`, `static=1`)
-Screenshot of the photo panel with and without the ghost, luma difference:
+Screenshot of the photo panel (318x303) with and without the ghost (`&ghost=0`), luma difference
+(Rec. 601) per pixel. Mean lift is over the main figure box; the union box is the figure plus its
+copies, as a share of the visible panel (`frame` is the panel, so the 15% cap applies to it).
 
-| demo | matte, opacity | mean lift in figure box | max lift | darkened px | lifted px (>= 2) of panel |
-|---|---|---|---|---|---|
-| active | 3, 0.174 | 12.9 | 58 | 0 | 10.7% |
-| critical | 1, 0.090 | 9.1 | 31 | 0 | 10.5% |
+| demo | build | matte opacity | copies | mean lift in figure box | max lift | darkened px | lifted px (>= 2) | union box | centre (x, y) |
+|---|---|---|---|---|---|---|---|---|---|
+| active | as shipped (no `tier`) | 0.196 | 3 | 12.0 | 64 | 0 | 5.5% | 13.9% | 0.29, 0.62 |
+| critical | as shipped (no `tier`) | 0.137 | 5 | 10.9 | 45 | 0 | 6.1% | 13.9% | 0.31, 0.62 |
+| active | with `tier` passed | 0.180 | 3 | 10.9 | 58 | 0 | 5.4% | 13.9% | 0.29, 0.62 |
+| critical | with `tier` passed | 0.133 | 4 | 10.6 | 44 | 0 | 6.0% | 13.6% | 0.31, 0.62 |
 
-The union box of figure plus copies is 25% / 23% of the visible panel: the area cap is applied
-to the full 3:4 photo frame passed to `placeGhost`, and the result screen crops it to a shorter
-panel. Pass the visible panel as `frame` to cap against what is seen.
+CRITICAL lifts no more than ACTIVE in either build. "With `tier`" is a scratch build whose result
+screen passes `tier: outcome.tier`; the shipped screen does not pass it yet.
 
 ## Stable contract (P3 keeps these)
 - `placeGhost` signature and the `Placement` shape (pixels in the photo view's space).

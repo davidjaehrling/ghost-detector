@@ -15,14 +15,18 @@ const outDir = join(root, 'assets', 'ghost');
 // Each figure: a leaning spine, uneven shoulders, a head that is barely a head.
 // `cut` is the fraction of height after which the figure is hidden (occlusion).
 const FIGURES = [
-  { seed: 0x5eed0001, lean: 0.07, shoulder: [0.24, 0.14], headShift: 0.05, headTilt: -0.25, cut: 1.0, armL: 0.4, armR: 0.0 },
-  { seed: 0x5eed0002, lean: -0.1, shoulder: [0.12, 0.22], headShift: -0.07, headTilt: 0.35, cut: 1.0, armL: 0.0, armR: 0.7 },
+  { seed: 0x5eed0001, lean: 0.07, shoulder: [0.24, 0.14], headShift: 0.05, headTilt: -0.25, cut: 1.0, armL: 0.22, armR: 0.0 },
+  { seed: 0x5eed0002, lean: -0.1, shoulder: [0.12, 0.22], headShift: -0.07, headTilt: 0.35, cut: 1.0, armL: 0.0, armR: 0.5 },
   { seed: 0x5eed0003, lean: 0.04, shoulder: [0.2, 0.17], headShift: 0.03, headTilt: 0.15, cut: 0.62, armL: 0.25, armR: 0.2 },
 ];
 
 // Runs inside the page. Must stay self-contained.
 function drawMatte(fig) {
-  const ALPHA_EASE = 3.2;
+  const ALPHA_EASE = 2.0;
+  const EDGE_FEATHER_PX = 34;
+  const EDGE_FEATHER_GAIN = 0.6;
+  const INNER_FLOOR = 0.4;
+  const HEAD_DENSITY = 0.72;
   const MAX_STRETCH = 1.3;
   const W = 512;
   const H = 1024;
@@ -67,7 +71,7 @@ function drawMatte(fig) {
     blob(hx + (rnd() - 0.5) * 34 + fig.headTilt * 26, hy + (rnd() - 0.5) * 40, 36 + rnd() * 18, 48 + rnd() * 22, 0.3);
   }
   // A faint, off-axis neck so the head does not float.
-  blob(spineX(0.19) + W * fig.headShift * 0.5, H * 0.19, 26, 48, 0.16);
+  blob(spineX(0.19) + W * fig.headShift * 0.5, H * 0.19, 34, 56, 0.26);
   // Shoulders: deliberately uneven.
   const sy = H * 0.255;
   blob(spineX(0.26) - W * fig.shoulder[0], sy + 12, 80, 60, 0.38);
@@ -156,6 +160,9 @@ function drawMatte(fig) {
   const headWeight = (y) => Math.min(1, Math.max(0, (headEnd - y) / (H * 0.08)));
 
   // 4. Composite: blur the body, warp the head, multiply alpha by the noise masks.
+  // Noise may only open gaps near the silhouette edge, so every gap bites in from outside and
+  // none sits enclosed in the head or torso (D-009: an enclosed dark hole reads as a face
+  // cavity). `depth` is how far inside the body a pixel is, from the blurred body density.
   const out = make(W, H);
   const o = out.getContext('2d');
   o.filter = 'blur(14px)';
@@ -164,6 +171,14 @@ function drawMatte(fig) {
   const px = o.getImageData(0, 0, W, H);
   const src = Uint8ClampedArray.from(px.data);
   const nz = n.getImageData(0, 0, W, H).data;
+  const bodySorted = new Float32Array(W * H);
+  for (let k = 0; k < W * H; k++) bodySorted[k] = src[k * 4 + 3];
+  bodySorted.sort();
+  const bodyPeak = Math.max(1, bodySorted[Math.floor(bodySorted.length * 0.98)]);
+  const smooth = (e0, e1, v) => {
+    const t = Math.min(1, Math.max(0, (v - e0) / (e1 - e0)));
+    return t * t * (3 - 2 * t);
+  };
   const cutY = fig.cut * H;
   const alphaOut = new Float32Array(W * H);
   for (let y = 0; y < H; y++) {
@@ -174,35 +189,66 @@ function drawMatte(fig) {
       const i = (y * W + x) * 4;
       const nv = nz[i] / 255;
       let bodyA = src[i + 3] / 255;
+      const depth = smooth(0.3, 0.62, src[i + 3] / bodyPeak);
       if (hw > 0) {
         const hv = hz[i] / 255;
         const hv2 = hz[(y * W + ((x + 97) % W)) * 4] / 255;
         const sx = Math.min(W - 1, Math.max(0, Math.round(x + hw * (hv - 0.5) * 70)));
         const sy = Math.min(H - 1, Math.max(0, Math.round(y + hw * (hv2 - 0.5) * 50)));
         const warped = src[(sy * W + sx) * 4 + 3] / 255;
+        // Bites only in the head's outer band; its core keeps at least 60%.
         const bite = Math.min(1, Math.max(0, (hv - 0.3) * 2.6));
-        bodyA = (bodyA * (1 - hw) + warped * hw) * (1 - hw + hw * bite);
+        const headDepth = smooth(0.45, 0.85, (warped * 255) / bodyPeak);
+        const biteKept = bite + (1 - bite) * 0.6 * headDepth;
+        // The head is fainter than the torso, so it never pops out as a bright ball.
+        bodyA = (bodyA * (1 - hw) + warped * hw) * (1 - hw + hw * biteKept) * (1 - hw * (1 - HEAD_DENSITY));
       }
       // Ragged occluder edge: the cut line wanders with x, like a chair back or a doorframe in shadow.
       const wobble = 22 * Math.sin(x / 61 + fig.seed) + 14 * Math.sin(x / 17);
       const occl = fig.cut < 1 ? Math.min(1, Math.max(0, (cutY + wobble - y) / 34)) : 1;
-      // Contrast-stretch the noise so gaps open up inside the figure.
+      // Contrast-stretched noise: full gaps at the edge, only density variation (floor
+      // INNER_FLOOR)
+      // deep inside.
       const m = Math.min(1, Math.max(0, (nv - 0.36) * 2.4));
+      const mEff = m + (1 - m) * INNER_FLOOR * depth;
       const edge = Math.min(1, Math.min(x, W - 1 - x) / 40);
-      alphaOut[y * W + x] = bodyA * m * bottom * occl * edge;
+      alphaOut[y * W + x] = bodyA * mEff * bottom * occl * edge;
       const lum = Math.round(200 + 55 * nv);
       px.data[i] = lum;
       px.data[i + 1] = lum;
       px.data[i + 2] = lum;
     }
   }
-  // 5. Normalise: the densest 2% of the frame reaches full alpha, then an ease-out curve
-  // (1 - (1 - a)^ALPHA_EASE) fills the drape while the edge ramp stays soft (finite slope at 0,
-  // unlike a gamma, which would harden the outline). The compositor's opacity (8 to 25%) is then the figure's real peak, not a fraction of it.
+  // 5. Normalise: the densest pixels reach full alpha, then an ease-out curve
+  // (1 - (1 - a)^ALPHA_EASE) fills the drape (finite slope at 0, unlike a gamma, which would
+  // harden the outline). The compositor's opacity is then the figure's real peak. The densest
+  // 0.5% sets the scale, so the body keeps density variation instead of a flat plateau.
+  // Edge feather: a wide blur of the same alpha, at reduced strength, is laid under it
+  // (max), so the outer falloff runs over a wider band than the body's own soft edge and the
+  // silhouette does not read as a cut-out.
   const sorted = Float32Array.from(alphaOut).sort();
-  const peak = Math.max(1e-3, sorted[Math.floor(sorted.length * 0.98)]);
+  const peak = Math.max(1e-3, sorted[Math.floor(sorted.length * 0.995)]);
+  const eased = new Float32Array(W * H);
+  const sharp = make(W, H);
+  const sc = sharp.getContext('2d');
+  const simg = sc.createImageData(W, H);
   for (let k = 0; k < W * H; k++) {
-    px.data[k * 4 + 3] = Math.round((1 - Math.pow(1 - Math.min(1, alphaOut[k] / peak), ALPHA_EASE)) * 255);
+    eased[k] = 1 - Math.pow(1 - Math.min(1, alphaOut[k] / peak), ALPHA_EASE);
+    simg.data[k * 4] = 255;
+    simg.data[k * 4 + 1] = 255;
+    simg.data[k * 4 + 2] = 255;
+    simg.data[k * 4 + 3] = Math.round(eased[k] * 255);
+  }
+  sc.putImageData(simg, 0, 0);
+  const wide = make(W, H);
+  const wc = wide.getContext('2d');
+  wc.filter = `blur(${EDGE_FEATHER_PX}px)`;
+  wc.drawImage(sharp, 0, 0);
+  const wd = wc.getImageData(0, 0, W, H).data;
+  for (let k = 0; k < W * H; k++) {
+    const body = eased[k];
+    const halo = EDGE_FEATHER_GAIN * (wd[k * 4 + 3] / 255);
+    px.data[k * 4 + 3] = Math.round(Math.max(body, halo) * 255);
   }
   o.putImageData(px, 0, 0);
 
