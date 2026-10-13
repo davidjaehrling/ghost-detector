@@ -7,3 +7,6 @@ export { BurnIn, BurnInLayer, type BurnInLabels, type BurnInLayerProps } from '.
 export { PHOSPHOR, hexToRgb, withAlpha, type PhosphorStep } from './color';
 export { dustField, type DustField } from './dust';
 export { effectiveTau, trailLifetime, trailStyle, warmBrightness } from './persistence';
+export { FeedTint, FEED_SKSL, makeFeedEffect, type FeedTintProps } from './FeedTint';
+export { FEED_LIFT, FEED_MIX, feedColor } from './feed';
+export { SnapshotCanvas, snapshotCanvasElement } from './snapshotRegistry';

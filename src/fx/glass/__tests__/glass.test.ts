@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { dustField, SCRATCH_ALPHA } from '../dust';
 import { effectiveTau, trailLifetime, trailStyle, warmBrightness } from '../persistence';
+import { PHOSPHOR, hexToRgb } from '../color';
+import { FEED_LIFT, FEED_MIX, feedColor } from '../feed';
 
 describe('dustField (Bible §6 glass layer)', () => {
   it('is fixed per seed and differs across seeds', () => {
@@ -70,6 +72,30 @@ describe('warm-up brightness', () => {
     for (let t = 0; t <= 1; t += 0.05) {
       expect(warmBrightness(t)).toBeGreaterThanOrEqual(last);
       last = warmBrightness(t);
+    }
+  });
+});
+
+describe('feed tint (D-017)', () => {
+  it('mixes the phosphor ramp 25 to 35% over the colour and lifts the blacks toward p0', () => {
+    expect(FEED_MIX).toBeGreaterThanOrEqual(0.25);
+    expect(FEED_MIX).toBeLessThanOrEqual(0.35);
+    // A saturated red keeps most of its colour but moves toward the ramp's green.
+    const red = feedColor([0.8, 0.1, 0.1]);
+    expect(red[0]).toBeGreaterThan(red[1]);
+    expect(red[1]).toBeGreaterThan(0.1);
+    // Black is lifted to p0 x FEED_LIFT (the ramp's p0 mixed in, then screened over that floor).
+    const black = feedColor([0, 0, 0]);
+    const p0 = hexToRgb(PHOSPHOR[0]);
+    for (let i = 0; i < 3; i++) expect(black[i]).toBeGreaterThan(p0[i]! * FEED_LIFT - 1e-9);
+    expect(black[1]).toBeGreaterThan(black[0]);
+    // Monotone in brightness for a grey ramp.
+    let prev = -1;
+    for (let v = 0; v <= 1.0001; v += 0.05) {
+      const c = feedColor([v, v, v]);
+      const l = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+      expect(l).toBeGreaterThan(prev);
+      prev = l;
     }
   });
 });

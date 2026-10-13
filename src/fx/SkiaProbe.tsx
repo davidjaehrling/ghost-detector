@@ -1,8 +1,9 @@
 import { Canvas, FractalNoise, Path, Rect, Shader, Skia } from '@shopify/react-native-skia';
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { fixtureUri } from '../ui/fixtures';
 import { color, font } from '../ui/tokens';
-import { Glass, PhosphorText, usePersistence, hexToRgb } from './glass';
+import { FeedTint, Glass, PhosphorText, SnapshotCanvas, usePersistence, hexToRgb } from './glass';
 
 // P3-01 proof that Skia draws on both backends: a 1 px p1 graticule, a p4 trace, and a runtime
 // shader that turns a seeded FractalNoise into signed grain (4%) tinted by the phosphor.
@@ -78,9 +79,9 @@ function BaseProbe({ testID }: { testID: string }) {
   );
 }
 
-// ---------- P3-02 glass probes: /probe?layer=overlay|warp|phosphor ----------
+// ---------- P3-02 glass probes: /probe?layer=overlay|warp|warpcanvas|phosphor|feed ----------
 
-export type ProbeLayer = 'base' | 'overlay' | 'warp' | 'phosphor';
+export type ProbeLayer = 'base' | 'overlay' | 'warp' | 'warpcanvas' | 'phosphor' | 'feed';
 export const GLASS_W = 362;
 export const GLASS_H = 420;
 const GLASS_SEED = 417;
@@ -95,7 +96,7 @@ function probeGrainScale(): 1 | 2 | undefined {
 export function probeLayer(): ProbeLayer {
   if (typeof window === 'undefined') return 'base';
   const v = new URLSearchParams(window.location?.search ?? '').get('layer');
-  return v === 'overlay' || v === 'warp' || v === 'phosphor' ? v : 'base';
+  return v === 'overlay' || v === 'warp' || v === 'warpcanvas' || v === 'phosphor' || v === 'feed' ? v : 'base';
 }
 
 // Plain RN content standing in for a screen: a p1 block near the glass edges (so the barrel
@@ -106,6 +107,37 @@ function SampleScreen() {
       <View style={st.block} />
       <Text style={st.big}>072</Text>
       <Text style={st.small}>mG  FLUX</Text>
+    </View>
+  );
+}
+
+// The camera feed through the tube: the cellar fixture drawn by <FeedTint> on the left half, and
+// the RN approximation (for the live CameraView) over a plain image on the right half.
+function FeedProbe() {
+  const uri = fixtureUri('cellar');
+  return (
+    <View style={st.sample}>
+      <View style={[st.half, { left: 0 }]}>
+        <FeedTint image={uri} testID="feed-shader" />
+      </View>
+      <View style={[st.half, { left: GLASS_W / 2 }]}>
+        <FeedTint testID="feed-overlay">
+          <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        </FeedTint>
+      </View>
+    </View>
+  );
+}
+
+// The warp capture fix: a Skia canvas (a <SnapshotCanvas>) inside a warped glass must show up in
+// the warped snapshot (a plain WebGL canvas reads back blank on web).
+function CanvasScreen() {
+  return (
+    <View style={st.sample}>
+      <SnapshotCanvas style={{ width: GLASS_W, height: GLASS_H }}>
+        <Rect x={8} y={8} width={GLASS_W - 16} height={190} color={color.p1} />
+        <PhosphorText text="072" x={GLASS_W / 2} y={330} size={120} align="center" />
+      </SnapshotCanvas>
     </View>
   );
 }
@@ -128,8 +160,15 @@ export function SkiaProbe({ testID = 'skia-probe', layer = probeLayer() }: { tes
   if (layer === 'base') return <BaseProbe testID={testID} />;
   const grainScale = probeGrainScale();
   return (
-    <Glass testID={testID} warp={layer === 'warp'} warmUp={layer !== 'warp'} seed={GLASS_SEED} grainScale={grainScale} style={st.window}>
-      {layer === 'phosphor' ? <PhosphorProbe /> : <SampleScreen />}
+    <Glass
+      testID={testID}
+      warp={layer === 'warp' || layer === 'warpcanvas'}
+      warmUp={layer !== 'warp' && layer !== 'warpcanvas'}
+      seed={GLASS_SEED}
+      grainScale={grainScale}
+      style={st.window}
+    >
+      {layer === 'phosphor' ? <PhosphorProbe /> : layer === 'feed' ? <FeedProbe /> : layer === 'warpcanvas' ? <CanvasScreen /> : <SampleScreen />}
     </Glass>
   );
 }
@@ -137,6 +176,7 @@ export function SkiaProbe({ testID = 'skia-probe', layer = probeLayer() }: { tes
 const st = StyleSheet.create({
   window: { width: GLASS_W, height: GLASS_H, backgroundColor: color.n0 },
   sample: { width: GLASS_W, height: GLASS_H, backgroundColor: color.n0 },
+  half: { position: 'absolute', top: 0, width: GLASS_W / 2, height: GLASS_H, overflow: 'hidden' },
   block: { position: 'absolute', left: 8, top: 8, width: GLASS_W - 16, height: 190, backgroundColor: color.p1 },
   big: { position: 'absolute', left: 0, right: 0, top: 220, textAlign: 'center', fontFamily: font.readout, fontSize: 120, lineHeight: 120, color: color.p4 },
   small: { position: 'absolute', left: 0, right: 0, top: 350, textAlign: 'center', fontFamily: font.readout, fontSize: 28, color: color.p4 },

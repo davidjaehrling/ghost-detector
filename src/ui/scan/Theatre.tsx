@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { ScopeLayer } from '../../fx/scope';
 import { GRID_COLS, GRID_ROWS, GRID_TOP, Graticule, GridLabels, gridDiv, useBlink } from '../boot/parts';
-import { mulberry32 } from '../boot/seed';
 import { Readout } from '../Readout';
 import type { GlassSize } from '../screens/Housing';
 import { color, type } from '../tokens';
@@ -25,7 +26,6 @@ const copy = {
   sens: '10 mG/DIV',
 };
 
-const SEG = 6;
 const CH_S = 8.5; // rdS advance: 0.4 em plus 0.5 tracking
 // Live row 44, RATE 24, rate ramp, gaps and the bottom margin.
 const RATE_BAR_BOTTOM = 12;
@@ -79,10 +79,21 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
 
   return (
     <>
-      <Graticule w={w} h={h} rows={rows} />
-      <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} sens={copy.sens} rows={rows} />
-      <Trace seed={seed} frame={frame} left={gridLeft} cy={GRID_TOP + gh / 2} gw={gw} gh={gh} flat={fault} dim={hold} />
-      <Sweep turns={frame.sweep} left={gridLeft} gw={gw} gh={gh} dim={hold} />
+      <StaticGraticule w={w} h={h} rows={rows} />
+      <StaticGridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} sens={copy.sens} rows={rows} />
+      {/* Trace, afterglow and sweep in Skia (src/fx/scope); the fault beat tears the grid and dips the glass. */}
+      <ScopeLayer
+        seed={seed}
+        frame={{ tick: frame.tick, sweep: frame.sweep, activeFrac: frame.activeFrac, faultT: frame.kind === 'fault' ? frame.faultT : -1 }}
+        left={gridLeft}
+        top={GRID_TOP}
+        gw={gw}
+        gh={gh}
+        div={div}
+        flat={fault}
+        dim={hold}
+        still={still}
+      />
       <BlockBar lit={lit} left={barLeft} top={gridBottom + 24} width={gw - 48} hideLast={fault && !faultVisible} testID="scan-bar" label={`Progress ${pct} percent`} />
       {hold ? (
         <View style={[s.holdBlock, { left: gridLeft + gw - 10, top: gridBottom + 26, opacity: blink ? 1 : 0 }]} testID="scan-percent" />
@@ -151,61 +162,12 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   );
 }
 
-// Noise trace: points every SEG px joined by straight segments.
-function Trace({ seed, frame, left, cy, gw, gh, flat, dim }: { seed: number; frame: ScanFrame; left: number; cy: number; gw: number; gh: number; flat: boolean; dim: boolean }) {
-  const n = Math.ceil(gw / SEG) + 1;
-  const rnd = mulberry32((seed ^ Math.imul(frame.tick + 1, 2246822519)) >>> 0);
-  const amp = flat ? 0 : (0.12 + 0.5 * frame.activeFrac) * (gh / 2);
-  const drift = frame.tick * 0.9;
-  const pts = Array.from({ length: n }, (_, i) => {
-    const dy = amp * (0.6 * Math.sin(i * 0.21 + drift) + 0.4 * (rnd() * 2 - 1));
-    return { x: Math.min(gw, i * SEG), y: Math.round((cy + dy) * 2) / 2 };
-  });
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {pts.slice(1).map((b, i) => {
-        const a = pts[i]!;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const len = Math.hypot(dx, dy);
-        return (
-          <View
-            key={i}
-            style={[
-              s.trace,
-              {
-                height: dim ? 2 : 1.5,
-                left: left + (a.x + b.x) / 2 - len / 2,
-                top: (a.y + b.y) / 2 - 0.75,
-                width: len,
-                backgroundColor: dim ? color.p2 : color.p4,
-                transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
-              },
-            ]}
-          />
-        );
-      })}
-    </View>
-  );
-}
-
-const TAIL = [color.p5, color.p4, color.p3, color.p2, color.p1];
-
-function Sweep({ turns, left, gw, gh, dim }: { turns: number; left: number; gw: number; gh: number; dim: boolean }) {
-  const x = Math.floor((turns % 1) * gw);
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {TAIL.map((c, i) => {
-        const tx = x - i * 7;
-        if (tx < 0) return null;
-        return <View key={i} style={{ position: 'absolute', left: left + tx, top: GRID_TOP, width: i === 0 ? 2 : 3, height: gh, backgroundColor: dim ? color.p2 : c, opacity: dim ? (i === 0 ? 0.9 : 0.35) : i === 0 ? 0.9 : 0.55 }} />;
-      })}
-    </View>
-  );
-}
+// The grid and its labels never change during a scan: memoised so the 20 Hz scan clock does not
+// re-render a hundred views each tick.
+const StaticGraticule = memo(Graticule);
+const StaticGridLabels = memo(GridLabels);
 
 const s = StyleSheet.create({
-  trace: { position: 'absolute', height: 1.5, backgroundColor: color.p4 },
   pct: { ...type.rdXS, position: 'absolute', color: color.p4, textAlign: 'right' },
   block: { position: 'absolute' },
   log: { ...type.rdS, color: color.p3, height: 24 },

@@ -1,13 +1,15 @@
 import { Skia, AlphaType, ColorType, type SkImage } from '@shopify/react-native-skia';
 import type { RefObject } from 'react';
 import type { View } from 'react-native';
+import { snapshotCanvasElement } from './snapshotRegistry';
 
 // Web: Skia's makeImageFromView needs a caller-supplied rasteriser here. This one clones the
 // view's DOM into an SVG <foreignObject>, carries the page's CSS rules (react-native-web keeps
 // its styles in CSSOM, so they are serialised from cssRules) and inlines @font-face sources as
 // data URLs (an SVG image cannot fetch fonts), draws it on a 2D canvas and hands the RGBA
-// pixels to Skia. Limits: <canvas> children are copied with toDataURL, so a WebGL canvas
-// without preserveDrawingBuffer comes out blank; cross-origin images and sheets are skipped.
+// pixels to Skia. <canvas> children: a <SnapshotCanvas> is asked for its Skia image (a WebGL
+// canvas reads back blank with toDataURL once its frame is done); any other canvas is copied with
+// toDataURL (fine for 2D canvases). Cross-origin images and sheets are skipped.
 
 let fontCss: Promise<string> | null = null;
 
@@ -59,7 +61,7 @@ function cloneForSnapshot(node: HTMLElement): HTMLElement {
   srcCanvases.forEach((c, i) => {
     const img = document.createElement('img');
     try {
-      img.src = c.toDataURL();
+      img.src = snapshotCanvasElement(c) ?? c.toDataURL();
     } catch {
       // Tainted canvas: leave a blank box.
     }
