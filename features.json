@@ -30,7 +30,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-02",
@@ -60,7 +61,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-03",
@@ -76,7 +78,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-04",
@@ -85,14 +88,22 @@
       "acceptance": "Workflow file in .github/workflows; the run on the P0 PR is green; screenshot artifact present",
       "evidence": [
         {
-          "kind": "file",
+          "kind": "artifact",
           "ref": ".github/workflows/ci.yml",
           "output": "Workflow added (jobs: checks, web-screenshots); YAML parses via PyYAML. Run output pending from the P0 PR.",
           "by": "qa-runner",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "artifact",
+          "ref": "https://github.com/davidjaehrling/ghost-detector/actions/runs/38401286225",
+          "output": "pull_request run on a444c08: jobs checks and web-screenshots both success; artifact web-screenshots (4989 bytes) uploaded",
+          "by": "director",
+          "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-05",
@@ -115,15 +126,26 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-06",
       "phase": "P0",
       "description": "EAS e2e Android workflow ready to run: eas.json e2e-test profile, .eas/workflows/e2e-android.yml, first Maestro flow with takeScreenshot",
       "acceptance": "Files exist and are schema-valid YAML/JSON; eas workflow:validate passes once expo.dev is reachable",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "python3 yaml.safe_load on .eas/workflows/e2e-android.yml and e2e/maestro/boot.yml; node JSON.parse eas.json",
+          "output": "all parse; field names match digest §2; eas workflow:validate NOT run (expo.dev blocked, EXPO_TOKEN unset)",
+          "by": "release-manager",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "blocked_by": "eas workflow:validate needs expo.dev allowlist and EXPO_TOKEN (owner)",
+      "refuter": "UNVERIFIED (validate cannot run here); files parse; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-07",
@@ -139,7 +161,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-08",
@@ -155,7 +178,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "HOLDS; Refuter sweep 2026-10-13 on a444c08 (see docs/decisions.md D-001)"
     },
     {
       "id": "P0-09",

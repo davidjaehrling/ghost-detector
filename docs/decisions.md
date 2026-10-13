@@ -6,3 +6,11 @@ Append-only log of panel decisions (plan §3). Format: date, topic, options, sco
 - Options: as specified in plan §2 and §5. No panel needed; the plan is the owner's decision.
 - Result: Expo SDK 57, expo-router, expo-dev-client, pnpm, TypeScript strict, ESLint 0 warnings, Vitest for the pure engine, Playwright for L2 web screenshots, EAS Workflows with Maestro for L3.
 - Director note: Impeccable installed via its GitHub marketplace because `impeccable.style` is blocked by the network policy; the detector binary runs.
+
+## 2026-10-13 · D-001 · P0 Refuter sweep and merge policy
+- Refuter (Opus, read-only) re-ran every P0 acceptance command on a444c08 and opened the goldens. Verdicts: P0-01, 02, 03, 04, 05, 07, 08 HOLD; P0-06 UNVERIFIED (`eas workflow:validate` cannot run until expo.dev is allowed); P0-09 blocked.
+- Defects fixed before merge: Maestro selector `FIELD UNIT` would not match the whole text `FIELD UNIT · BOOT`; screenshot diff too loose (now `maxDiffPixels: 150` plus console-error assertions); copy linter matched exact word forms only (now stems plus "not X but Y" framing); `init.sh` fallback pinned to pnpm 10.28.0; `features.json` evidence kind fixed to match its schema.
+- Deferred: the boot screen is a plain placeholder that breaks §6 craft rules; P1 Identity replaces it and regenerates the goldens.
+- Director rulings: (a) no AI model name in any commit trailer either; phase PRs are squash-merged so earlier trailers do not reach `main`; (b) `e2e/maestro/` belongs to the Release Manager, the rest of `e2e/` to QA.
+- Compliance: no review needed in P0 (no copy, ads, notifications or art exist). Refuter confirmed nothing violates §7 yet.
+- Panel vote: none required; no taste decision was made in P0.

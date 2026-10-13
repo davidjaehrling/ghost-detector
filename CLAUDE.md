@@ -23,11 +23,11 @@ Only then do any work.
 
 ## Rules
 - Proof beats prose. `passes:true` in `features.json` needs an `evidence` entry (command output, screenshot or video path) and a Refuter sign-off. Builders and QA may only add evidence; the Director flips `passes`.
-- One `claude/p<N>-<slug>` branch and one PR per phase. CI must be green. Commit small and often. Conventional commits. Never name any AI model in commit messages, PR titles or PR bodies.
+- One `claude/p<N>-<slug>` branch and one PR per phase. CI must be green. Commit small and often. Conventional commits. Never name any AI model in commit messages, PR titles or PR bodies; that includes `Co-Authored-By` trailers. A `Claude-Session:` trailer with the session URL is fine. Phase PRs are squash-merged with a clean message.
 - Simplicity: copy the smallest proven pattern; no new layer until something hurts.
 - Licence ledger: every image, font or sound goes into `assets/LICENSES.md` with source URL, licence and author. No clear licence, no ship. Ghost source images: public domain or CC0 only, then distorted.
 - Craft rules in plan §6 bind every agent: one instrument, one phosphor hue, two type faces, banned visual tells, banned copy words (delve, tapestry, pivotal, crucial, intricate, testament, foster, landscape, underscore), no em-dash asides.
-- File ownership: `app/` and `src/ui/` Builder A; `src/engine/` Builder B; `src/fx/` FX Engineer; `src/audio/` Sound & Haptics; `locales/` Copy; `e2e/` and `.github/workflows/` QA; `eas.json` and `.eas/` Release. Stay inside your tree.
+- File ownership: `app/` and `src/ui/` Builder A; `src/engine/` Builder B; `src/fx/` FX Engineer; `src/audio/` Sound & Haptics; `locales/` Copy; `e2e/web/`, `e2e/screenshots/` and `.github/workflows/` QA; `eas.json`, `.eas/` and `e2e/maestro/` Release. Stay inside your tree.
 - Agent teams are off. Fan-out uses the Workflow tool with at most 10 agents per run.
 - `isolation: worktree` branches from the default branch, not the current HEAD. Do not use it while the phase branch is ahead of `main`; give agents disjoint file trees instead.
 
