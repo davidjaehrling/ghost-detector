@@ -537,7 +537,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P3-02",
@@ -553,7 +554,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P3-03",
@@ -569,7 +571,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P3-04",
@@ -585,7 +588,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P3-05",
@@ -601,7 +605,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P3-06",
@@ -617,14 +622,23 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P3-07",
       "phase": "P3",
       "description": "Believability on the fixture set",
       "acceptance": "judges score the apparition on result goldens for cellar, attic, bright, black and outdoors at ≥8 mean (hint not show, adds light, off-centre, ≤15%, no symmetry, no features, grain unifies); Refuter holds on the measured lifts",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-017",
+          "output": "round 1 believability: cellar 4.33, attic 6.67, bright 5.0, black 4.0, outdoors 4.67 (mean 4.9); round 2 fixes in progress",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -632,7 +646,15 @@
       "phase": "P3",
       "description": "Four screens re-enter the design loop",
       "acceptance": "boot, viewfinder, scan, result with the glass stack and the D-011 leftovers applied; exit ≥8 mean with no dimension <7, or leftovers logged after 5 rounds",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-017",
+          "output": "round 1 with glass: boot 7.38, viewfinder 7.24, scan 7.38, result 7.1",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -640,8 +662,17 @@
       "phase": "P3",
       "description": "Performance budget",
       "acceptance": "scan theatre and result render under 16.7 ms median frame time on the web harness at 390 as a proxy (measured via requestAnimationFrame timings in a Playwright run), bundle size delta from Skia reported, device numbers deferred to Phone check 2",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "Playwright rAF deltas, 390, 3 s x 3 runs (Refuter)",
+          "output": "scan: 89 to 114 frames per 3 s (mean 26 to 34 ms), p95 50 to 67; result: median 16.7, p95 16.7 to 33.4; viewfinder live: median 100 ms; dist 19.7 MB, entry JS 2.73 MB (650 KB gzip), wasm 8.08 MB",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false,
+      "refuter": "DISPROVED: scan theatre 26 to 34 ms mean frame on SwiftShader (result holds at 16.7 median); viewfinder live at 100 ms median; perf fix in round 2; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P4-01",
@@ -657,7 +688,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": false,
+      "refuter": "DISPROVED on the test clause (self-referential rates); fix in round 2; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P4-02",
@@ -673,7 +705,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P4-03",
@@ -689,7 +722,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P4-04",
@@ -705,7 +739,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P4-05",
@@ -721,7 +756,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P4-06",
@@ -737,7 +773,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
     },
     {
       "id": "P4-07",
