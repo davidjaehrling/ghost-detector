@@ -205,19 +205,23 @@ export function BurnIn({ cx, cy, labels }: { cx: number; cy: number; labels: { l
 
 // ---------- LED ladder ----------
 
-// Boot state: LED 1 (bottom) lit at p3 with bloom; 2 to 5 unlit.
-export function LedLadder() {
+// Bible section 3: lit LEDs differ by brightness only (p3, p4, p4, p5, then red
+// for CRITICAL). `lit` counts from the bottom; boot shows only the power LED.
+const LED_COLORS = [color.p3, color.p4, color.p4, color.p5, color.red] as const;
+
+export function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
   const leds = [0, 1, 2, 3, 4];
   return (
     <View style={st.plate}>
       <PlateScrew style={{ top: 2 }} />
       <View style={st.ledCol}>
         {leds.map((i) => {
-          const lit = i === 0;
+          const lit = i < Math.max(1, litCount);
+          const hue = LED_COLORS[i]!;
           return (
             <View key={i} style={st.ledSlot}>
-              {lit ? <View style={st.bloom} /> : null}
-              <View style={[st.led, { backgroundColor: lit ? color.p3 : color.n2 }]}>
+              {lit ? <View style={[st.bloom, { backgroundColor: hue }]} /> : null}
+              <View style={[st.led, { backgroundColor: lit ? hue : color.n2 }]}>
                 {!lit && i < 4 ? <View style={st.spec} /> : null}
               </View>
             </View>

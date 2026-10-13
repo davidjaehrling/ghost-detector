@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "plugins": ["expo-router"],
+    "plugins": ["expo-router", ["expo-camera", { "cameraPermission": "Camera access required for capture. Frames stay on this device.", "recordAudioAndroid": false }]],
     "android": {
       "package": "com.ghostdetector.app"
     },
