@@ -6,7 +6,7 @@ import { Easing, useDerivedValue, useSharedValue, withTiming } from 'react-nativ
 import type { Tier } from '../../engine';
 import { FIT_H, FIT_W, renderApparition, VARIANT_COUNT } from '../apparition';
 import { stackedAlpha, type Placement, type RegionInput } from '../ghostV0/placement';
-import { CLAMP_LIFT, COMPOSITE_SKSL, GAMMA, GRAIN, OCC_GRID_BLUR } from './blend';
+import { CLAMP_LIFT, COMPOSITE_SKSL, GAMMA, GRAIN, OCC_GRID_BLUR, POP_ALPHA, POP_LIFT } from './blend';
 import { SnapshotCanvas } from '../glass/snapshotRegistry';
 import { buildGhostLayer } from './ghostLayer';
 import { reference } from './reference';
@@ -77,10 +77,8 @@ export interface CompositeProps {
   testID?: string;
 }
 
-/** Peak alpha of the figure on the pop frame (D-017: 35 to 45%). */
-export const POP_ALPHA = 0.4;
-/** How far the clamp opens on the pop frame, luma. */
-export const POP_LIFT = 40;
+// The pop constants live in blend.ts (pure, unit-tested); re-exported here for the public API.
+export { POP_ALPHA, POP_LIFT };
 
 /** What the compositor drew, published on `window.__composite` under the web harness (`?static=1`). */
 export interface CompositeInfo {

@@ -31,6 +31,10 @@ export const LUMA: readonly [number, number, number] = [0.299, 0.587, 0.114];
  * the clamp curve no longer saturates the mid alphas.
  */
 export const CLAMP_LIFT = 34;
+/** Peak alpha of the figure on the jump-scare pop frame (D-017: 35 to 45%). */
+export const POP_ALPHA = 0.4;
+/** How far the clamp opens on the pop frame, luma. */
+export const POP_LIFT = 40;
 /** Width of the occlusion ramp above the 80th percentile, in 0..255 luma. */
 export const OCC_RAMP = 10;
 /**

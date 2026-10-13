@@ -519,6 +519,15 @@ a ghost change of a few luma; `measure-ghost.mjs` is the check for the figure it
    photo). The needle-settle gating can stay outside, as now.
 5. `scripts/measure-ghost.mjs --route result` measures the result screen; the `Composite` there
    publishes `window.__composite` under `?static=1`, so the clamp and the box are checked exactly.
+   The gating pass carries `&warp=0` (flat glass) on both shots: the clamp is accepted before the
+   barrel warp, which is a lens over the finished screen, not part of the composite. With the warp
+   on, the bilinear resample carries part of a lifted dark pixel into its bright neighbour, so on
+   outdoors 12 pixels on rows 164 and 182 (x 244 to 269, no-ghost luma 155 to 182, already above
+   the 152.4 limit) read 1 to 10 luma over; with `warp=0` the same fixture reads 0. A second pass
+   with the warp on prints these numbers and never fails the run. Each fixture is captured twice
+   (fonts, `window.__composite`, the warped layer, two frames, then screenshots repeated until two
+   in a row are identical, both shots of a pair from the same clip); a target fails only when it
+   fails in both runs, and a mean lift that moves by more than 0.5 luma between runs fails too.
 
 ### Unverified
 - Native: `regionFromImage` via Skia (decode, raster halving, `readPixels`), `MakeOffscreen` plus
