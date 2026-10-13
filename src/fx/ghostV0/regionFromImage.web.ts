@@ -1,11 +1,9 @@
-import { downsampleLuma, findDarkRegion } from '../../engine';
-import type { RegionResult } from './regionFromImage';
+import { regionFromRgba, type RegionResult } from './regionFromPixels';
 
-export type { RegionResult } from './regionFromImage';
+export type { RegionResult } from './regionFromPixels';
 
-/** Long side of the canvas we read back. `downsampleLuma` then takes it to 96. */
+/** Long side of the canvas we read back. `regionFromRgba` then takes it to 96. */
 const READ_SIZE = 384;
-const TARGET = 96;
 
 function loadImage(uri: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -36,13 +34,7 @@ export async function regionFromImage(uri: string): Promise<RegionResult | null>
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(img, 0, 0, w, h);
-    const { data } = ctx.getImageData(0, 0, w, h);
-    const { luma, width, height } = downsampleLuma(data, w, h, TARGET);
-    const region = findDarkRegion(luma, width, height);
-    if (region) return { region, meanLuma: region.meanLuma };
-    let sum = 0;
-    for (let i = 0; i < luma.length; i++) sum += luma[i]!;
-    return { region: null, meanLuma: sum / Math.max(1, luma.length) };
+    return regionFromRgba(ctx.getImageData(0, 0, w, h).data, w, h);
   } catch {
     return null;
   }

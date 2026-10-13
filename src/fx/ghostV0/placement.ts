@@ -27,7 +27,7 @@ export interface OffsetCopy {
   /** Offset from the main figure, in pixels. */
   dx: number;
   dy: number;
-  /** Multiplier on `Placement.opacity`, decreasing with distance. */
+  /** Multiplier on `Placement.opacity`, decreasing with distance. All copies sum to `COPY_ALPHA_SUM`. */
   alpha: number;
 }
 
@@ -54,6 +54,15 @@ export const OPACITY_MIN = 0.08;
 export const OPACITY_MAX = 0.25;
 /** Hard cap from plan section 6, measured on the union of the figure and its copies. */
 export const MAX_AREA_FRACTION = 0.15;
+/**
+ * Alpha budget for the motion copies, as a fraction of the main figure's opacity. Copies stack
+ * with normal "over" inside the ghost layer, so where the figure and every copy overlap the
+ * layer alpha is 1 - (1 - o) * prod(1 - o * a_i) <= o * (1 + sum(a_i)) = o * (1 + COPY_ALPHA_SUM)
+ * (union bound). With o <= OPACITY_MAX that is at most 0.25 * 1.35 = 0.3375 anywhere.
+ */
+export const COPY_ALPHA_SUM = 0.35;
+/** Falloff between neighbouring copies: each is this fraction of the one before. */
+export const COPY_FALLOFF = 0.72;
 /** A figure whose centre is closer than this (fraction of frame width) to the midline counts as centred. */
 export const CENTRE_EXCLUSION = 0.08;
 /** Matte aspect, width / height (512 x 1024). */
@@ -105,11 +114,13 @@ export function placeGhost(
 
   const step = h * stepFrac;
   const offsetCopies: OffsetCopy[] = [];
+  let weightSum = 0;
+  for (let i = 0; i < nCopies; i++) weightSum += Math.pow(COPY_FALLOFF, i);
   for (let i = 1; i <= nCopies; i++) {
     offsetCopies.push({
       dx: Math.cos(angle) * step * i,
       dy: Math.sin(angle) * step * i,
-      alpha: 0.7 * Math.pow(0.68, i - 1),
+      alpha: (COPY_ALPHA_SUM * Math.pow(COPY_FALLOFF, i - 1)) / weightSum,
     });
   }
 
@@ -166,23 +177,27 @@ export function placeGhost(
   return { x, y, w, h, matte, opacity, flipX, offsetCopies };
 }
 
-/** Peak lift above the region mean, in luma units (the brightness clamp). */
-export const PEAK_LIFT = 14;
-
 /**
- * Grey tint for the matte so the brightest stacked pixel lands about PEAK_LIFT above the
- * region mean under normal alpha blending: result = mean + (tint - mean) * effectiveAlpha.
- * Returns the luma 0..255 and a neutral `#rrggbb` (no saturation).
+ * Layer alpha where the figure and all its copies overlap: 1 - (1 - o) * prod(1 - o * a_i).
+ * Bounded by `opacity * (1 + COPY_ALPHA_SUM)`; see `COPY_ALPHA_SUM`.
  */
-export function ghostTint(
-  regionMeanLuma: number,
-  placement: Pick<Placement, 'opacity' | 'offsetCopies'>,
-): { luma: number; hex: string } {
-  const mean = clamp(Number.isFinite(regionMeanLuma) ? regionMeanLuma : 40, 0, 255);
+export function stackedAlpha(placement: Pick<Placement, 'opacity' | 'offsetCopies'>): number {
   let keep = 1 - placement.opacity;
   for (const c of placement.offsetCopies) keep *= 1 - placement.opacity * c.alpha;
-  const eff = Math.max(1e-3, 1 - keep);
-  const luma = Math.round(clamp(mean + PEAK_LIFT / eff, mean, 255));
+  return 1 - keep;
+}
+
+/** Tint fallback: how far above the region's 90th-percentile luma the grey sits. */
+export const FALLBACK_LIFT = 18;
+
+/**
+ * Grey for the matte when the platform has no add-light blend mode. Under a normal alpha blend
+ * a pixel moves toward the tint, so a tint above the region's brightest pixels lifts all of them:
+ * tint = p90 + FALLBACK_LIFT, clamped to 0..255. Returns the luma and a neutral `#rrggbb`.
+ */
+export function ghostTint(regionP90Luma: number): { luma: number; hex: string } {
+  const p90 = clamp(Number.isFinite(regionP90Luma) ? regionP90Luma : 60, 0, 255);
+  const luma = Math.round(clamp(p90 + FALLBACK_LIFT, 0, 255));
   const h = luma.toString(16).padStart(2, '0');
   return { luma, hex: `#${h}${h}${h}` };
 }

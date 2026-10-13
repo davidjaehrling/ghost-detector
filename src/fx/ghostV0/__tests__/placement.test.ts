@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../../../engine';
 import {
   CENTRE_EXCLUSION,
+  COPY_ALPHA_SUM,
+  FALLBACK_LIFT,
   MAX_AREA_FRACTION,
   OPACITY_MAX,
   OPACITY_MIN,
-  PEAK_LIFT,
   ghostTint,
+  stackedAlpha,
   placeGhost,
   type Placement,
   type RegionInput,
@@ -154,20 +156,29 @@ describe('placeGhost', () => {
   });
 });
 
-describe('ghostTint', () => {
-  it('is neutral grey, at or above the region mean, and lifts the peak by about PEAK_LIFT', () => {
-    for (const { frame, region, seed } of CASES.slice(0, 200)) {
+describe('copy alpha cap (Refuter D4)', () => {
+  it('copies sum to COPY_ALPHA_SUM, so the stacked alpha stays <= opacity x 1.35 <= 0.3375', () => {
+    for (const { frame, region, seed } of CASES) {
       const p = placeGhost(region, frame, seed);
-      for (const mean of [0, 12, 40, 90, 200]) {
-        const t = ghostTint(mean, p);
-        expect(t.hex).toMatch(/^#([0-9a-f]{2})\1\1$/);
-        expect(t.luma).toBeGreaterThanOrEqual(mean);
-        let keep = 1 - p.opacity;
-        for (const c of p.offsetCopies) keep *= 1 - p.opacity * c.alpha;
-        const peak = mean + (t.luma - mean) * (1 - keep);
-        expect(peak).toBeLessThanOrEqual(mean + PEAK_LIFT + 1);
-        if (t.luma < 255) expect(peak).toBeGreaterThanOrEqual(mean + PEAK_LIFT - 1);
-      }
+      const sum = p.offsetCopies.reduce((a, c) => a + c.alpha, 0);
+      expect(sum).toBeCloseTo(COPY_ALPHA_SUM, 9);
+      const a = stackedAlpha(p);
+      expect(a).toBeLessThanOrEqual(p.opacity * (1 + COPY_ALPHA_SUM) + 1e-12);
+      expect(a).toBeLessThanOrEqual(OPACITY_MAX * (1 + COPY_ALPHA_SUM) + 1e-12);
+      expect(a).toBeGreaterThan(p.opacity);
     }
+  });
+});
+
+describe('ghostTint (fallback)', () => {
+  it('is neutral grey at p90 + FALLBACK_LIFT, clamped', () => {
+    for (const p90 of [0, 12, 40, 90, 200, 237, 250, 255]) {
+      const t = ghostTint(p90);
+      expect(t.hex).toMatch(/^#([0-9a-f]{2})\1\1$/);
+      expect(t.luma).toBe(Math.min(255, p90 + FALLBACK_LIFT));
+      expect(parseInt(t.hex.slice(1, 3), 16)).toBe(t.luma);
+    }
+    expect(ghostTint(Number.NaN).luma).toBe(60 + FALLBACK_LIFT);
+    expect(ghostTint(-20).luma).toBe(FALLBACK_LIFT);
   });
 });
