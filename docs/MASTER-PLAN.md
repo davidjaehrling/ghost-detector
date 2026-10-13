@@ -8,6 +8,16 @@ Live state (what's done, what's next) goes in `PROGRESS.md` and `features.json` 
 
 ---
 
+## 0. Owner decisions (2026-10-13)
+
+| Topic | Decision |
+|---|---|
+| Orchestrator | A dedicated cloud session on Fable 5.1 (auto mode), with an hourly resume routine |
+| Merging | **Auto-merge green phase PRs.** "Green" means CI passed, the Refuter could not disprove the phase claims, and Compliance did not veto. The human gates in §5 still pause the work. |
+| Play account | Personal, so the 12 testers × 14 days plan applies |
+| Ghost imagery | Find **free, licence-safe** source images (public domain, CC0 or equivalent; e.g. 19th-century spirit photographs on Wikimedia Commons, or CC0 photo libraries) and distort them so they're scarier and match each photo: mattes, displacement, blur, grain, partial occlusion. Every file is logged in `assets/LICENSES.md` with its URL, licence and author. A file with no clear licence doesn't ship. Procedural apparitions remain the fallback. |
+| Earlier answers | Expo; EN/DE/ES/PT; instrument look; all ghost features; rewarded + interstitial + banner; Firebase with consent; Android first; the owner picks name, icon and listing |
+
 ## 1. What we're building, in one paragraph
 
 An Android-first Expo app that looks and behaves like a piece of real field equipment for paranormal investigation. Point it at your cellar, sweep the room, take a photo, and a 6–10 s analysis runs. You get a "spectral presence" reading, a faint figure composited into the darkest part of your own photo, a thermal view with a cold spot, and (behind a rewarded ad) a full entity profile. Results are simulated and the store listing says so. Inside the app, everything stays in character: telemetry, units, calibration stickers, a needle with mass.
