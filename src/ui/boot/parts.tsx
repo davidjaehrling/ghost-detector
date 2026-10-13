@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
 import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
 import { mulberry32 } from './seed';
@@ -21,6 +21,19 @@ export function useTyped(total: number, cps: number, instant: boolean): number {
     return () => clearInterval(id);
   }, [total, cps, instant]);
   return n;
+}
+
+// ---------- blink ----------
+
+// 500 ms on, 500 ms off. With `still` (harness) it stays on.
+export function useBlink(still: boolean): boolean {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    if (still) return;
+    const id = setInterval(() => setOn((v) => !v), 500);
+    return () => clearInterval(id);
+  }, [still]);
+  return on || still;
 }
 
 // ---------- screws ----------
@@ -256,12 +269,14 @@ export function Sticker({
   pruef,
   bg = color.n0,
   style,
+  onLayout,
 }: {
   serial: string;
   cal: string;
   pruef: string;
   bg?: string;
   style?: object;
+  onLayout?: (e: LayoutChangeEvent) => void;
 }) {
   // One line; the segments wrap whole when the glass is too narrow for it. The
   // serial is on the nameplate too, so it drops off the sticker under 380 px.
@@ -270,7 +285,7 @@ export function Sticker({
   const line = parts.join(' · ');
   const segments = parts.map((t, i) => (i < parts.length - 1 ? `${t} · ` : t));
   return (
-    <View style={[st.sticker, style]}>
+    <View style={[st.sticker, style]} onLayout={onLayout}>
       <Text style={st.head}>{copy.head1}</Text>
       <Text style={st.head}>{copy.head2}</Text>
       <Text style={st.body}>{copy.body}</Text>
@@ -284,17 +299,6 @@ export function Sticker({
       <View style={[st.cut, { borderBottomColor: bg }]} />
       <View style={st.flap} />
       <View style={st.crease} />
-    </View>
-  );
-}
-
-// The same sticker shrunk to 64 x 30 for the housing.
-export function MiniSticker(props: { serial: string; cal: string; pruef: string }) {
-  return (
-    <View testID="sticker-mini" style={st.mini} accessibilityLabel="Calibration sticker. Simulation unit, entertainment use only.">
-      <View style={st.miniInner} pointerEvents="none">
-        <Sticker {...props} bg={color.n3} style={{ width: 290 }} />
-      </View>
     </View>
   );
 }
@@ -478,8 +482,6 @@ const st = StyleSheet.create({
     opacity: 0.45,
     transform: [{ rotate: '-45deg' }],
   },
-  mini: { width: 64, height: 30, alignItems: 'center', justifyContent: 'center' },
-  miniInner: { width: 290, alignItems: 'center', transform: [{ scale: 64 / 290 }] },
 
   keyPlate: {
     height: size.keyH + 12,

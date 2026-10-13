@@ -237,7 +237,6 @@ function Viewfinder({
 }
 
 const HUD = { labelColor: color.p4, valueColor: color.p4, unitColor: color.p4 } as const;
-const HUD_BAND = { labelColor: color.p3, valueColor: color.p4, unitColor: color.p3 } as const;
 
 // Frame marks: 2 px p4 arms with a 1 px n0 outline so they read on any photo,
 // and a small centre cross.

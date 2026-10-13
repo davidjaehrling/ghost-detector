@@ -1,11 +1,15 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { type LayoutChangeEvent, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FIXED_SEED, type InstallIdentity, getInstallIdentity } from '../boot/install';
 import { Key, type KeySlot, KeyRow, LedLadder, Screw, Wear } from '../boot/parts';
 import { color, font, radius, space, type } from '../tokens';
 
 export const MAKER = 'VELDEN  FS-4/87-P';
+// Under this window width the nameplate carries the last 7 characters of the serial.
+export const SERIAL_SHORT_BELOW = 380;
+
+export const plateSerial = (serial: string, windowW: number) => (windowW < SERIAL_SHORT_BELOW ? serial.slice(-7) : serial);
 
 export type GlassSize = { w: number; h: number };
 
@@ -19,7 +23,6 @@ export function Housing({
   glassLabel,
   keys,
   identity: given,
-  bandExtra,
   children,
 }: {
   testID: string;
@@ -30,13 +33,12 @@ export function Housing({
   glassLabel?: string;
   /** Boot passes the identity of its (harness) date. */
   identity?: InstallIdentity;
-  /** Drawn in the key band above the plate (the mini sticker on boot). */
-  bandExtra?: ReactNode;
   /** Four slots, left to right; null is an engraved dummy cap. Slot 3 is the primary action. */
   keys: readonly (KeySlot | null)[];
   children: (size: GlassSize) => ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const { width: windowW } = useWindowDimensions();
   const [size, setSize] = useState<GlassSize>({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
   const own = useMemo(
@@ -51,10 +53,8 @@ export function Housing({
       <View style={s.nameplate}>
         <View style={[s.rivet, { left: 8 }]} />
         <Text style={s.plateText}>{MAKER}</Text>
-        <View style={s.scuffGap}>
-          <View style={s.scuff} />
-        </View>
-        <Text style={s.plateText}>{identity.serial}</Text>
+        <View style={s.scuff} />
+        <Text style={s.plateText}>{plateSerial(identity.serial, windowW)}</Text>
         <View style={[s.rivet, { right: 8 }]} />
       </View>
       <View style={s.windowRow}>
@@ -73,7 +73,6 @@ export function Housing({
         </View>
       </View>
       <View style={s.keyBand}>
-        {bandExtra}
         <KeyRow slots={keys} />
       </View>
     </View>
@@ -114,9 +113,8 @@ const s = StyleSheet.create({
     textShadowRadius: 0,
   },
   rivet: { position: 'absolute', top: 12, width: 4, height: 4, borderRadius: 2, backgroundColor: color.n4 },
-  // The scuff sits in the gap between the two texts, never on a letter.
-  scuffGap: { flex: 1, alignItems: 'center', alignSelf: 'stretch' },
-  scuff: { position: 'absolute', top: 8, width: 6, height: 2, backgroundColor: color.n4, opacity: 0.5 },
+  // The scuff sits in the left half of the plate, under the maker text's baseline, never on a letter.
+  scuff: { position: 'absolute', left: 64, top: 22, width: 6, height: 2, backgroundColor: color.n4, opacity: 0.5 },
   windowRow: { flex: 1, flexDirection: 'row', marginTop: 18, marginBottom: 18 },
   windowWrap: { flex: 1 },
   glass: {

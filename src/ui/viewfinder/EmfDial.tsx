@@ -20,9 +20,6 @@ const TICKS: number[] = [];
 for (const dec of [10, 100]) for (let k = 1; k <= 9; k++) TICKS.push(dec * k);
 TICKS.push(1000, 2000);
 
-const toRad = (deg: number) => (deg * Math.PI) / 180;
-// Point at `deg` from straight up and radius `r`, relative to the dial box.
-const at = (deg: number, r: number) => ({ x: PX + r * Math.sin(toRad(deg)), y: PY - r * Math.cos(toRad(deg)) });
 
 export function EmfDial({
   angle,

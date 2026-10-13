@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { GRID_COLS, GRID_ROWS, GRID_TOP, Graticule, GridLabels, gridDiv } from '../boot/parts';
+import { GRID_COLS, GRID_ROWS, GRID_TOP, Graticule, GridLabels, gridDiv, useBlink } from '../boot/parts';
 import { mulberry32 } from '../boot/seed';
 import { Readout } from '../Readout';
 import type { GlassSize } from '../screens/Housing';
 import { color, type } from '../tokens';
 import { BLOCKS, BlockBar } from './BlockBar';
 import {
-  BLINK_MS,
   FAULT_LINE,
   type Phase,
   type ScanFrame,
@@ -31,17 +29,6 @@ const CH_S = 8.5; // rdS advance: 0.4 em plus 0.5 tracking
 // Live row 44, RATE 24, rate bar 16, gaps and the bottom margin.
 const PINNED_H = 12 + 16 + 4 + 44 + 24;
 const FAULT_INDENT = 'E-07 '.length * CH_S;
-
-// Blink clock for the hold block: 500 ms on, 500 ms off. A still harness frame stays on.
-function useBlink(still: boolean): boolean {
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    if (still) return;
-    const id = setInterval(() => setOn((v) => !v), BLINK_MS);
-    return () => clearInterval(id);
-  }, [still]);
-  return on || still;
-}
 
 // Glass content of the scan theatre: graticule, sweep line with persistence
 // tail, noise trace on the grid; progress bar and the telemetry block below it;

@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BELIEF_PROFILE, type Belief, getBelief, setBelief } from '../src/state/belief';
-import { activityIndex, daysToFullMoon } from '../src/ui/boot/activity';
+import { activityIndex, daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
 import { FIXED_SEED, getInstallIdentity } from '../src/ui/boot/install';
 import { type BootParams, readBootParams } from '../src/ui/boot/params';
 import {
@@ -14,9 +14,9 @@ import {
   GridLabels,
   IdleTrace,
   type KeySlot,
-  MiniSticker,
   Sticker,
   gridDiv,
+  useBlink,
   useTyped,
 } from '../src/ui/boot/parts';
 import { dayKey } from '../src/ui/boot/seed';
@@ -45,6 +45,8 @@ const copy = {
   keyLabel: 'Acknowledge',
   glassLabel: 'Boot self-test and calibration sticker.',
   'onboarding.head': 'FIELD CALIBRATION',
+  // The question is set in three fixed rows; the last row carries the cursor.
+  questionRows: ["Have you ever experienced\nsomething you couldn't", 'explain?'] as const,
   'onboarding.question': "Have you ever experienced something you couldn't explain?",
   'onboarding.note': 'One question. The answer stays on this device.',
   'onboarding.intensitySet': (name: string) => `Intensity set to ${name}. Change any time in Settings.`,
@@ -58,6 +60,7 @@ const TYPE_CPS = 40;
 // Per-launch variation for the seeded self-test readings.
 const BOOT_NONCE = Date.now() % 100_000;
 const snap4 = (n: number) => Math.round(n / 4) * 4;
+const STICKER_H_GUESS = 132; // until the sticker has been measured
 const CONFIRM_MS = 1400;
 const CONFIRM_MS_STATIC = 250;
 
@@ -91,7 +94,11 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
   const typing = typed < total;
 
   const [stage, setStage] = useState<Stage>(calib ? 'calib' : 'sticker');
+  const calibrating = stage !== 'sticker';
   const [answer, setAnswer] = useState<Belief | null>(null);
+  const [stickerH, setStickerH] = useState(STICKER_H_GUESS);
+  const cursorOn = useBlink(isStatic);
+  const countdown = formatWindowCountdown(date);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
@@ -118,7 +125,7 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
             { testID: 'key-calib-yes', label: 'Yes', legend: copy.yes, onPress: () => onAnswer('yes') },
             { testID: 'key-calib-unsure', label: 'Not sure', legend: copy.unsure, onPress: () => onAnswer('unsure') },
             { testID: 'key-calib-no', label: 'No', legend: copy.no, onPress: () => onAnswer('no') },
-            { testID: 'key-calib-skip', label: 'Skip, same as not sure', legend: copy.skip, onPress: () => onAnswer('unsure') },
+            null,
           ]
         : [null, null, null, null];
 
@@ -129,13 +136,6 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
       fixedIdentity={fixed}
       identity={identity}
       keys={keys}
-      bandExtra={
-        stage === 'sticker' ? null : (
-          <View style={s.miniSlot}>
-            <MiniSticker {...identity} />
-          </View>
-        )
-      }
     >
       {({ w, h }) => {
         const div = gridDiv(w);
@@ -153,33 +153,74 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
             <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} />
 
             <View style={[s.readout, { left: snap4(gridLeft), top: snap4(gridBottom + 28) }]} testID="readout">
-              {lines.map((l, i) => (
-                <Readout
-                  key={l.label}
-                  {...l}
-                  typed={typed - lineLen.slice(0, i).reduce((n, p) => n + p, 0)}
-                  labelColor={color.p3}
-                />
-              ))}
-              <Text style={s.stM}>{copy.selftestOk.slice(0, Math.max(0, typed - lineLen.reduce((n, p) => n + p, 0)))}</Text>
-              <Text style={s.activity}>{`${copy.actIdx} ${index}/5 · ${copy.moon} ${moonPct}%`}</Text>
-              <Text style={s.peak}>{`${copy.nextPeak}  +${peakDays} D`}</Text>
-              <Text style={s.peak}>{copy.window}</Text>
+              {calibrating
+                ? null
+                : lines.map((l, i) => (
+                    <Readout
+                      key={l.label}
+                      {...l}
+                      typed={typed - lineLen.slice(0, i).reduce((n, p) => n + p, 0)}
+                      labelColor={color.p3}
+                    />
+                  ))}
+              {calibrating ? null : <Text style={s.stM}>{copy.selftestOk.slice(0, Math.max(0, typed - lineLen.reduce((n, p) => n + p, 0)))}</Text>}
+              <Text style={s.activity} testID="activity">
+                {`${copy.actIdx} `}
+                <Text style={index >= 3 ? s.activityHot : undefined}>{String(index)}</Text>
+                {`/5 · ${copy.moon} ${moonPct}%`}
+              </Text>
+              <Text style={s.countdown} testID="countdown">
+                {countdown}
+              </Text>
+              {calibrating ? null : <Text style={s.peak}>{`${copy.nextPeak}  +${peakDays} D`}</Text>}
+              {calibrating ? null : <Text style={s.peak}>{copy.window}</Text>}
             </View>
 
-            {stage === 'sticker' ? (
-              <View style={s.stickerSlot} testID="sticker">
-                <Sticker {...identity} />
-              </View>
-            ) : (
-              <View style={s.card} testID="calibration">
+            {/* The sticker keeps its full size. In calibration it slides down until
+                only its top third shows above the glass bottom edge (the glass clips the rest). */}
+            <View
+              style={[s.stickerSlot, calibrating && { bottom: 0, transform: [{ translateY: Math.round((stickerH * 2) / 3) }] }]}
+              testID="sticker"
+              pointerEvents="none"
+            >
+              <Sticker {...identity} onLayout={(e: LayoutChangeEvent) => setStickerH(Math.round(e.nativeEvent.layout.height))} />
+            </View>
+
+            {calibrating ? (
+              <View style={[s.calib, { bottom: Math.round(stickerH / 3) + 12 }]} testID="calibration">
                 <Text style={s.cardHead}>{copy['onboarding.head']}</Text>
-                <Text style={s.question}>{copy['onboarding.question']}</Text>
+                <View style={s.rule} />
+                <View accessible accessibilityLabel={copy['onboarding.question']} testID="calibration-question">
+                  <Text style={s.question}>{copy.questionRows[0]}</Text>
+                  <View style={s.cursorRow}>
+                    <Text style={s.question}>{copy.questionRows[1]}</Text>
+                    <View style={[s.cursor, { opacity: cursorOn ? 1 : 0 }]} testID="calibration-cursor" />
+                  </View>
+                </View>
+                <View style={s.answerRow}>
+                  <View>
+                    {[copy.yes, copy.unsure, copy.no].map((a) => (
+                      <Text key={a} style={s.answer}>
+                        {a}
+                      </Text>
+                    ))}
+                  </View>
+                  <Pressable
+                    testID="key-calib-skip"
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip, same as not sure"
+                    onPress={() => onAnswer('unsure')}
+                    hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                    style={s.skip}
+                  >
+                    <Text style={s.skipText}>{copy.skip}</Text>
+                  </Pressable>
+                </View>
                 <Text style={s.note} testID="calibration-note">
                   {answer ? copy['onboarding.intensitySet'](BELIEF_PROFILE[answer].intensity.toUpperCase()) : copy['onboarding.note']}
                 </Text>
               </View>
-            )}
+            ) : null}
           </>
         );
       }}
@@ -194,19 +235,17 @@ const s = StyleSheet.create({
   activity: { ...type.rdM, color: color.p3, height: 28, marginTop: 8 },
   peak: { ...type.rdS, color: color.p3, height: 24 },
   stickerSlot: { position: 'absolute', left: 10, right: 10, bottom: 13 },
-  card: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 12,
-    backgroundColor: color.n0,
-    borderWidth: 1,
-    borderColor: color.p2,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  cardHead: { ...type.lbS, color: color.p3 },
-  question: { ...type.rdS, color: color.p4, marginTop: 8 },
+  activityHot: { color: color.p5 },
+  countdown: { ...type.rdS, color: color.p3, height: 24 },
+  calib: { position: 'absolute', left: 12, right: 12 },
+  cardHead: { ...type.lbS, color: color.p3, height: 14 },
+  rule: { height: 1, backgroundColor: color.p1, marginTop: 4, marginBottom: 8 },
+  question: { ...type.rdS, color: color.p4 },
+  cursorRow: { flexDirection: 'row', alignItems: 'center' },
+  cursor: { width: 9, height: 14, marginLeft: 4, backgroundColor: color.p4 },
+  answerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8 },
+  answer: { ...type.rdXS, color: color.p3, height: 18 },
+  skip: { minWidth: 44, minHeight: 28, alignItems: 'flex-end', justifyContent: 'flex-end' },
+  skipText: { ...type.lbS, color: color.p3 },
   note: { ...type.rdXS, color: color.p3, marginTop: 6, height: 36 },
-  miniSlot: { position: 'absolute', left: 2, top: 0 },
 });
