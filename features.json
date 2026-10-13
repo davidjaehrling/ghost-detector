@@ -471,6 +471,13 @@
           "output": "round 4: ACK inert until typing done; belief card maps per psych-brief §2.9; stored once; loop round 2 mean 7.24",
           "by": "refuter",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/*/boot.png, boot-calib.png (round 4 and 5)",
+          "output": "loop rounds: 7.1 → 7.24 → 7.19 weighted; exit 8 not reached; leftovers in D-011; re-enters loop in P3",
+          "by": "director",
+          "date": "2026-10-13"
         }
       ],
       "passes": false
@@ -480,7 +487,15 @@
       "phase": "P2",
       "description": "Design loop on four screens",
       "acceptance": "Art Director and Dr. Hollow score boot, viewfinder, scan, result (swapped order); exit ≥8 / no dimension <7, or leftovers logged after 5 rounds; Refuter holds",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-007, D-009, D-011",
+          "output": "three rounds on four screens; final means boot 7.19, viewfinder 7.38, scan 7.0, result 7.24; ghost 6; stopped by ruling D-009 (Skia stack is P3)",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
