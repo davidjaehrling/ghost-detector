@@ -332,6 +332,96 @@
       ],
       "passes": false,
       "refuter": "Evidence HOLDS; design loop exit not reached (6.05); stays false; Refuter sweep 2026-10-13 on 2ef1eec (D-006)"
+    },
+    {
+      "id": "P2-01",
+      "phase": "P2",
+      "description": "Navigation skeleton",
+      "acceptance": "expo-router routes: / (boot), /viewfinder, /scan, /result/[id], /history, /settings; typed links; back behaviour; L2 spec navigates boot → viewfinder → scan → result with screenshots at the three viewports; no name-dependent strings",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-02",
+      "phase": "P2",
+      "description": "Engine v0: dark-region finder",
+      "acceptance": "src/engine/darkRegion.ts: downsample to 64..96 px luma, integral image, 20th-percentile threshold, 4-connected components, score area × darkness × low variance with an edge penalty; pure TS; tests on 5 synthetic fixtures (cellar-like, bright room, pitch black, outdoors, attic) assert region choice and determinism",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-03",
+      "phase": "P2",
+      "description": "Engine v0: seeded scan outcome",
+      "acceptance": "src/engine/outcome.ts: seed from photo hash + timestamp; tier distribution per intensity from docs/psych-brief.md §3 (Calm 30/40/22/7/1, Standard 20/35/28/13/4, Brave 12/28/32/20/8); first-session rules (scan 1 ACTIVE or STRONG, no CRITICAL before scan 4, CRITICAL ≥5 scans apart, forced STRONG after 12/16/8 dry scans); distribution test over 10,000 seeds within ±1.5 points per tier; rule tests",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-04",
+      "phase": "P2",
+      "description": "Engine v0: entity profile generator",
+      "acceptance": "src/engine/profile.ts: seeded Barnum-style profile (class, era, trait lines) from a word bank with no repeats within 20 results; EN only; tests for determinism and the no-repeat window",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-05",
+      "phase": "P2",
+      "description": "Viewfinder screen",
+      "acceptance": "expo-camera preview with permission flow in character (voice guide permission.*), EMF needle placeholder driven by a seeded jitter, capture key; web fallback shows a fixture photo; L2 goldens; design loop entry",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-06",
+      "phase": "P2",
+      "description": "Scan theatre",
+      "acceptance": "6 to 10 s sequence per docs/sound-palette.md §5 timeline (phases, 1.2 s silent hold); progress readouts in character; cancel; deterministic in ?static=1; L2 goldens of two phases",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-07",
+      "phase": "P2",
+      "description": "Result screen with v0 ghost",
+      "acceptance": "photo with a v0 apparition composited into the darkest region at 8..25% opacity (plain Image/Skia-free v0: a blurred procedural matte), tier word and SPI number via the needle spring, entity profile preview with the curiosity-gap line; share and Deep Scan keys present but inert; L2 goldens for QUIET, ACTIVE and CRITICAL fixtures",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-08",
+      "phase": "P2",
+      "description": "Boot screen round 3",
+      "acceptance": "the D-005 and D-006 carry-over list applied; contrast of every text on n0 ≥4.5:1 checked by a unit test over tokens; loop score ≥8 with no dimension <7 OR leftovers logged as FX-only",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-09",
+      "phase": "P2",
+      "description": "Design loop on four screens",
+      "acceptance": "Art Director and Dr. Hollow score boot, viewfinder, scan, result (swapped order); exit ≥8 / no dimension <7, or leftovers logged after 5 rounds; Refuter holds",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P2-10",
+      "phase": "P2",
+      "description": "First internal-testing AAB",
+      "acceptance": "eas build production profile uploaded to Play internal testing; Maestro full-flow video from EAS; blocked by expo.dev allowlist, EXPO_TOKEN, Play Console app and service account (owner)",
+      "evidence": [],
+      "passes": false,
+      "blocked_by": "owner: expo.dev allowlist, EXPO_TOKEN, Play Console app + service account"
+    },
+    {
+      "id": "P2-11",
+      "phase": "P2",
+      "description": "Identity applied",
+      "acceptance": "app.json name, slug, android.package and icon from Gate 1; adaptive icon from the chosen concept; blocked by Gate 1 (owner)",
+      "evidence": [],
+      "passes": false,
+      "blocked_by": "Gate 1 (owner picks name and icon)"
     }
   ]
 }
