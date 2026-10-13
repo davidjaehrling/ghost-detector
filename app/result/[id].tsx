@@ -1,11 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Canvas, Text as SkText, useImage } from '@shopify/react-native-skia';
+import { Text as SkText, useImage } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
 import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
-import { PhosphorText, useVT323 } from '../../src/fx/glass';
+import { PhosphorText, SnapshotCanvas, useVT323 } from '../../src/fx/glass';
 import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
 import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
 import { useSkiaReady } from '../../src/fx/useSkiaReady';
@@ -68,12 +68,10 @@ const copy = {
   photoLabel: 'Captured photo',
 };
 
-// The barrel warp snapshots the glass content. On web the snapshot comes out blank where a Skia
-// canvas sits (CanvasKit's WebGL canvases return an empty toDataURL), and the result's photo, thermal
-// view and digit are all Skia canvases; native `makeImageFromView` over a Skia canvas is untested.
-// Until src/fx/glass can snapshot Skia canvases the result stays on the flat glass.
-// `?static=1&warp=1` turns it on for the harness.
-const WARP_RESULT = false;
+// The barrel warp snapshots the glass content. The photo (Composite), the thermal view, the SPI digit and
+// the data strip are SnapshotCanvas, which the web snapshot reads through makeImageSnapshot (a plain WebGL
+// canvas reads back blank). `?static=1&warp=0` turns it off for the harness.
+const WARP_RESULT = true;
 
 const NOT_FITTED_MS = 1500;
 const FADE_MS = 1500;
@@ -132,7 +130,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
 
   // Thermal view of the photo panel (THERM key). ?static=1&therm=1 opens it for the golden.
   const [therm, setTherm] = useState(harness.isStatic && params.therm === '1');
-  const warp = WARP_RESULT || (harness.isStatic && params.warp === '1');
+  const warp = WARP_RESULT && !(harness.isStatic && params.warp === '0');
   // Reported by the panel and the reveal; they only feed the glass snapshot key.
   const [photoLoaded, setPhotoLoaded] = useState(false);
   const [stable, setStable] = useState(harness.isStatic);
@@ -354,7 +352,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
               <Text style={[type.rdXL, s.spi, { color: tint, opacity: 0 }]} testID="result-spi">
                 {landed ? String(outcome.spi) : '--'}
               </Text>
-              <Canvas style={s.spiCanvas} pointerEvents="none">
+              <SnapshotCanvas style={s.spiCanvas} pointerEvents="none">
                 <PhosphorText
                   text={landed ? String(outcome.spi) : '--'}
                   x={SPI_PAD}
@@ -364,7 +362,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
                   static={isStatic}
                   reduceMotion={reduceMotion}
                 />
-              </Canvas>
+              </SnapshotCanvas>
             </View>
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
@@ -622,6 +620,7 @@ function PhotoPanel({
               seed={placementSeed}
               static={isStatic}
               fadeInMs={FADE_MS}
+              pop={pop}
               disabled={!showGhost}
             />
           </V1Boundary>
@@ -641,18 +640,6 @@ function PhotoPanel({
         // stay in the photo's stacking context, so no wrapper).
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           <GhostV0 placement={layout.placement} regionMeanLuma={layout.meanLuma} regionP90Luma={read.result?.p90Luma} fadeInMs={isStatic ? 0 : FADE_MS} />
-        </View>
-      ) : null}
-      {layout && ready && pop !== null && !therm ? (
-        // Jump-scare: the compositor has no pop prop, so a GhostV0 layer above the canvas carries it:
-        // a second figure layer at the matte's full opacity for one frame (0 until then).
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <GhostV0
-            placement={{ ...layout.placement, opacity: pop }}
-            regionMeanLuma={layout.meanLuma}
-            regionP90Luma={read.result?.p90Luma}
-            fadeInMs={0}
-          />
         </View>
       ) : null}
       {therm && field ? (
@@ -682,14 +669,14 @@ function DataStrip({ text, width, height }: { text: string; width: number; heigh
   const base = STRIP_H - 8;
   return (
     <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null}>
-      <Canvas style={{ width, height: STRIP_H }} pointerEvents="none">
+      <SnapshotCanvas style={{ width, height: STRIP_H }} pointerEvents="none">
         {font ? (
           <>
             <SkText font={font} text={text} x={STRIP_X + 1} y={base + 1} color={color.n0} />
             <SkText font={font} text={text} x={STRIP_X} y={base} color={color.p3} />
           </>
         ) : null}
-      </Canvas>
+      </SnapshotCanvas>
     </View>
   );
 }

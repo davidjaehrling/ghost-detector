@@ -1,7 +1,7 @@
-import { Canvas, Path, Skia } from '@shopify/react-native-skia';
+import { Path, Skia } from '@shopify/react-native-skia';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Bloom, TAU, usePersistence } from '../../fx/glass';
+import { Bloom, SnapshotCanvas, TAU, usePersistence } from '../../fx/glass';
 import { GRID_COLS, GRID_TOP, gridDiv } from './parts';
 
 // The one priming transient on the boot trace (psych brief 2.1): a single spike of 2 to 3 divisions
@@ -77,7 +77,7 @@ export function PrimingTransient({
   const x0 = Math.round(gw * 0.62);
   return (
     <View style={{ position: 'absolute', left, top: cy - reach, width: gw, height: reach * 2 }} pointerEvents="none" testID="boot-transient" aria-valuetext={`${Math.round(amp * 100)} percent`}>
-      <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      <SnapshotCanvas style={StyleSheet.absoluteFill} pointerEvents="none">
         <Bloom radius={3}>
           {trail.map((sample, i) => {
             if (sample.value <= 0.01) return null;
@@ -87,7 +87,7 @@ export function PrimingTransient({
             return <Path key={i} path={p.detach()} style="stroke" strokeWidth={1.5} strokeJoin="miter" color={sample.color} opacity={sample.opacity} />;
           })}
         </Bloom>
-      </Canvas>
+      </SnapshotCanvas>
     </View>
   );
 }

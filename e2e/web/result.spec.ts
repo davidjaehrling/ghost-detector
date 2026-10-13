@@ -37,8 +37,9 @@ async function settle(page: import('@playwright/test').Page) {
   await page.waitForFunction(() => Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0));
   // The data strip's font has loaded (its canvas is drawn once aria-busy clears).
   await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-busy', 'false');
-  // The photo and digit canvases have drawn.
+  // The photo and digit canvases have drawn and the warped snapshot has been retaken.
   await frames(page);
+  await page.waitForTimeout(400);
 }
 
 for (const { demo, tier } of DEMOS) {

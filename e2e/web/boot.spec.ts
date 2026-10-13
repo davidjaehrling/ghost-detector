@@ -22,6 +22,7 @@ test('boot screen renders', async ({ page }, testInfo) => {
   expect(sticker.y - (peak.y + peak.height)).toBeLessThan(40);
   expect(sticker.y).toBeGreaterThan(peak.y + peak.height - 4);
   await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(600); // the warped snapshot is retaken after the last state change
   await page.screenshot({
     path: `e2e/screenshots/current/${testInfo.project.name}/boot.png`,
     fullPage: false,
@@ -84,6 +85,7 @@ test('boot calibration card renders', async ({ page }, testInfo) => {
   expect(card.y - (countdown.y + countdown.height)).toBeLessThan(60);
   await expect(page.getByTestId('countdown')).toHaveText('03:00 WINDOW IN 4 H 12 MIN');
   await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(600);
   await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/boot-calib.png` });
   await expect(page).toHaveScreenshot('boot-calib.png', { maxDiffPixels: 150 });
 

@@ -1,13 +1,14 @@
 import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Image, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sessionActivity } from '../src/state/session';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
 import type { KeySlot } from '../src/ui/boot/parts';
 import { captureSeed } from '../src/ui/capture';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
-import { fixtureSource, fixtureUri } from '../src/ui/fixtures';
+import { fixtureUri } from '../src/ui/fixtures';
+import { FeedTint } from '../src/fx/glass';
 import { readBootParams } from '../src/ui/boot/params';
 import { type Harness, readHarness } from '../src/ui/harness';
 import { sound } from '../src/ui/audio';
@@ -181,10 +182,13 @@ function Viewfinder({
         const bandH = Math.max(Math.round(h * BAND), BAND_MIN);
         return (
           <>
+            {/* The feed seen through the tube: the phosphor ramp mixed over the colour, lifted blacks (FeedTint). */}
             {source === 'camera' ? (
-              <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
+              <FeedTint testID="hud-feed">
+                <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
+              </FeedTint>
             ) : source === 'fixture' || source === 'denied' ? (
-              <Image source={fixtureSource(fixture)} style={[StyleSheet.absoluteFill, s.photo]} accessibilityLabel="" />
+              <FeedTint testID="hud-feed" image={fixtureUri(fixture)} />
             ) : null}
             <View style={s.dim} pointerEvents="none" />
             <Sweep
@@ -311,7 +315,6 @@ function Reticle({ bottom }: { bottom: number }) {
 
 const s = StyleSheet.create({
   empty: { flex: 1, backgroundColor: color.n3 },
-  photo: { width: '100%', height: '100%', resizeMode: 'cover' },
   dim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(10, 15, 11, 0.22)' },
   topScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: 56, backgroundColor: SCRIM },
   topLeft: { position: 'absolute', left: 12, top: 4 },

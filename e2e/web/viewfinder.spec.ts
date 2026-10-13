@@ -20,6 +20,8 @@ for (const [name, query] of [
     await expect(page.getByTestId('screen-viewfinder')).toBeVisible();
     await expect(page.getByTestId('hud-flux')).toBeVisible();
     await expect(page.getByTestId('hud-top')).toContainText('3/5');
+    // The feed is a Skia canvas through the glass tint; wait for its first draw.
+    await page.getByTestId('hud-feed').locator('canvas').waitFor();
     await expect(page.getByTestId('key-capture')).toBeVisible();
     await expect(page.getByTestId('key-capture')).toBeEnabled();
     // The needle and its trail are a Skia canvas on the dial plate.

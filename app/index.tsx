@@ -1,8 +1,7 @@
 import { useRouter } from 'expo-router';
-import { Canvas } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
-import { PhosphorText } from '../src/fx/glass';
+import { PhosphorText, SnapshotCanvas } from '../src/fx/glass';
 import { BELIEF_PROFILE, type Belief, getBelief, setBelief } from '../src/state/belief';
 import { sessionActivity } from '../src/state/session';
 import { daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
@@ -57,11 +56,9 @@ const copy = {
   skip: 'SKIP',
 };
 
-// The barrel warp snapshots the glass content, and on web the snapshot comes out blank where a Skia
-// canvas sits (CanvasKit's WebGL canvases return an empty toDataURL). ACT IDX (PhosphorText) and the
-// priming transient are Skia canvases, so boot stays on the flat glass until src/fx/glass can snapshot
-// Skia canvases (the same leftover as the result screen, D-016).
-const WARP_BOOT = false;
+// Boot is a warped glass (barrel snapshot, retaken on each stage). ACT IDX and the priming transient are
+// Skia canvases, so they are SnapshotCanvas (src/fx/glass) to survive the web snapshot.
+const WARP_BOOT = true;
 
 const TYPE_CPS = 40;
 // Per-launch variation for the seeded self-test readings.
@@ -203,7 +200,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                 <Text style={s.activityText} testID="activity">
                   {activity}
                 </Text>
-                <Canvas style={s.activityCanvas} pointerEvents="none">
+                <SnapshotCanvas style={s.activityCanvas} pointerEvents="none">
                   <PhosphorText text={`${copy.actIdx} ${index}/5`} x={ACT_PAD} y={ACT_BASE} size={28} step={5} static={isStatic} reduceMotion={reduceMotion} />
                   <PhosphorText
                     text={`· ${copy.moon} ${moonPct}%`}
@@ -215,7 +212,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                     static={isStatic}
                     reduceMotion={reduceMotion}
                   />
-                </Canvas>
+                </SnapshotCanvas>
               </View>
               <Text style={s.countdown} testID="countdown">
                 {countdown}
