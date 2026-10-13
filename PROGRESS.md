@@ -8,6 +8,7 @@ Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what i
 P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P1-08 boot screen loop at 6.05 (continues as P2-08).
 
 ## Last thing done
+- P3 round 2 built: FX (density, smear, occlusion, tier extent, thermal blocks, wedge sweep, fault tear, feed tint, warp capture, 60 fps on the harness), Builder A (per-case seeds, locked photo window, one thermal number, data strip, housing sticker, priming transient, countdown, session index), goldens regenerated at 81c1c7c (173 e2e x2, 338 unit tests). Clamp measured before the warp (D-021). Re-score running. PR #4 open.
 - P3/P4 build complete except the result screen: compositor v1 (3a29431), glass on all screens, D-011 leftovers, magnetometer needle, sweep, audio and haptics wiring, jump-scare, Settings (dbe3248..d948f73; 302 unit tests, 122 e2e). Result-screen integration (compositor, thermal toggle, warp) running.
 - P3: Skia 2.14 installed (P3-01), glass stack (P3-02), thermal view (P3-05) committed; P4 audio engine (P4-01..03) committed. Compositor v1 (P3-03/04) and Builder A's three-screen integration running. Decisions D-013, D-014.
 - P2 merged as PR #3: 7 of 11 claims pass; 08/09 re-enter the loop in P3; 10/11 wait on the owner. Decisions D-007 to D-012.
@@ -23,9 +24,9 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-0
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Compositor v1 (running) and Builder A's integration of glass, leftovers, magnetometer needle, sweep, audio and jump-scare on boot, viewfinder and scan (running).
-2. Result screen: compositor v1, thermal toggle, warp (Builder A, second task). Then believability scoring on the five fixtures (P3-07) and the four-screen loop (P3-08), Refuter, PR.
-3. Still open on the owner: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console.
+1. Round-2 re-score (running) on the fresh goldens; log D-022; merge PR #4 when CI is green (leftovers carry to P8 if believability stays under 8 after round 2, by the five-round rule the loop may continue in P8 polish).
+2. P5 Monetization & consent (blocked on AdMob and Firebase IDs for anything live; UMP flow, cadence state machine and test IDs can be built) and P6 share card and notifications; P7 localisation.
+3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase.
 
 ## Blockers (owner)
 - **Gate 1**: name (panel recommends option 1 "Velden FS-4 Field Probe", alternative option 5), icon (panel recommends concept 3 nameplate), Android package ID (permanent; must not contain "detector" if option 2 is chosen).
