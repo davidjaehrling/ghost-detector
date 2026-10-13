@@ -166,58 +166,6 @@ export function GridLabels({ w, fw, trig, tb, sens }: { w: number; fw: string; t
   );
 }
 
-// ---------- burn-in ----------
-
-// Off-centre burn-in of the flux gauge: a log arc of 100 degrees from 10 to
-// 1000 mG, drawn with thin rotated views at p0 (70%), clipped by the glass edge.
-const BURN_R = 150;
-const BURN_A0 = -140;
-
-function logAngle(mg: number): number {
-  return BURN_A0 + (Math.log10(mg / 10) / 2) * 100;
-}
-
-export function BurnIn({ cx, cy, labels }: { cx: number; cy: number; labels: { l10: string; l100: string; l1000: string; unit: string } }) {
-  const arc = Array.from({ length: 13 }, (_, i) => BURN_A0 + 100 * (i / 12) - 100 / 24);
-  const minors: number[] = [];
-  for (const dec of [10, 100]) for (let k = 2; k <= 9; k++) minors.push(logAngle(dec * k));
-  const majors = [10, 100, 1000].map(logAngle);
-  const at = (deg: number, r: number) => ({
-    x: cx + r * Math.cos((deg * Math.PI) / 180),
-    y: cy + r * Math.sin((deg * Math.PI) / 180),
-  });
-  const lab = [
-    { t: labels.l10, p: at(majors[0], BURN_R - 22) },
-    { t: labels.l100, p: at(majors[1], BURN_R - 22) },
-    { t: labels.l1000, p: at(majors[2], BURN_R - 22) },
-  ];
-  return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, st.burn]}>
-      {arc.map((a) => (
-        <View key={`a${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
-          <View style={st.arcSeg} />
-        </View>
-      ))}
-      {minors.map((a) => (
-        <View key={`m${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
-          <View style={st.minor} />
-        </View>
-      ))}
-      {majors.map((a) => (
-        <View key={`M${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
-          <View style={st.major} />
-        </View>
-      ))}
-      {lab.map(({ t, p }) => (
-        <Text key={t} style={[st.burnText, { left: p.x - 20, top: p.y - 9 }]}>
-          {t}
-        </Text>
-      ))}
-      <Text style={[st.burnText, { left: cx - 20, top: cy - 46 }]}>{labels.unit}</Text>
-    </View>
-  );
-}
-
 // ---------- LED ladder ----------
 
 // Bible section 3: lit LEDs differ by brightness only (p3, p4, p4, p5, then red
@@ -410,12 +358,6 @@ const st = StyleSheet.create({
   trace: { position: 'absolute', height: 1.5, backgroundColor: color.p4 },
   cornerText: { ...type.rdXS, position: 'absolute', color: color.p3 },
 
-  burn: { opacity: 0.7 },
-  pivot: { position: 'absolute', width: 0, height: 0 },
-  arcSeg: { position: 'absolute', left: BURN_R - 0.75, top: -9, width: 1.5, height: 18, backgroundColor: color.p0 },
-  minor: { position: 'absolute', left: BURN_R - 5, top: -0.5, width: 5, height: 1, backgroundColor: color.p0 },
-  major: { position: 'absolute', left: BURN_R - 9, top: -0.75, width: 9, height: 1.5, backgroundColor: color.p0 },
-  burnText: { ...type.rdXS, position: 'absolute', width: 40, textAlign: 'center', color: color.p0 },
 
   plate: {
     width: 28,

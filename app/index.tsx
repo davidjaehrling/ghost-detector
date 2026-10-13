@@ -6,7 +6,6 @@ import { activityIndex, daysToFullMoon, formatWindowCountdown } from '../src/ui/
 import { FIXED_SEED, getInstallIdentity } from '../src/ui/boot/install';
 import { type BootParams, readBootParams } from '../src/ui/boot/params';
 import {
-  BurnIn,
   GRID_COLS,
   GRID_ROWS,
   GRID_TOP,
@@ -36,10 +35,6 @@ const copy = {
   moon: 'MOON',
   nextPeak: 'NEXT PEAK  FULL MOON',
   window: 'WINDOW 22:00 TO 04:00',
-  gauge10: '10',
-  gauge100: '100',
-  gauge1000: '1000',
-  gaugeUnit: 'mG',
   // 72 px caps cannot carry the full word; the accessibility label does.
   key: 'ACK',
   keyLabel: 'Acknowledge',
@@ -136,6 +131,8 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
       fixedIdentity={fixed}
       identity={identity}
       keys={keys}
+      // Warp is a snapshot: it is retaken once the typing is done and on each stage or answer change.
+      glass={{ warp: true, warmUp: true, refreshKey: `${stage}-${typing ? 'typing' : 'typed'}-${answer ?? ''}` }}
     >
       {({ w, h }) => {
         const div = gridDiv(w);
@@ -143,11 +140,6 @@ function Boot({ params: { isStatic, date, dated, calib } }: { params: BootParams
         const gridBottom = GRID_TOP + div * GRID_ROWS;
         return (
           <>
-            <BurnIn
-              cx={Math.round(w * 0.16)}
-              cy={GRID_TOP + Math.round(div * GRID_ROWS * 0.8)}
-              labels={{ l10: copy.gauge10, l100: copy.gauge100, l1000: copy.gauge1000, unit: copy.gaugeUnit }}
-            />
             <Graticule w={w} h={h} />
             <IdleTrace w={w} seed={dayKey(date) + 1} />
             <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} />

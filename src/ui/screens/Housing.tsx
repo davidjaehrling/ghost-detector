@@ -1,9 +1,12 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FIXED_SEED, type InstallIdentity, getInstallIdentity } from '../boot/install';
+import { Glass, type GlassProps } from '../../fx/glass';
+import { FIXED_SEED, type InstallIdentity, getInstallIdentity, readInstallSeed } from '../boot/install';
 import { Key, type KeySlot, KeyRow, LedLadder, Screw, Wear } from '../boot/parts';
+import { readHarness } from '../harness';
 import { color, font, radius, space, type } from '../tokens';
+import { useReduceMotion } from '../useReduceMotion';
 
 export const MAKER = 'VELDEN  FS-4/87-P';
 // Under this window width the nameplate carries the last 7 characters of the serial.
@@ -12,6 +15,10 @@ export const SERIAL_SHORT_BELOW = 380;
 export const plateSerial = (serial: string, windowW: number) => (windowW < SERIAL_SHORT_BELOW ? serial.slice(-7) : serial);
 
 export type GlassSize = { w: number; h: number };
+
+// What a screen may ask of the glass stack (fx README, "Which screen uses what"). Viewfinder, scan
+// and result take the flat default; boot adds warp and the warm-up.
+export type HousingGlass = Partial<Pick<GlassProps, 'warp' | 'refreshKey' | 'warmUp' | 'warmUpKey' | 'onWarmUpDone'>>;
 
 // Bible section 2 housing for the live screens: nameplate with serial, screen
 // window with four screws, LED ladder plate on the right, key band below.
@@ -23,6 +30,7 @@ export function Housing({
   glassLabel,
   keys,
   identity: given,
+  glass = {},
   children,
 }: {
   testID: string;
@@ -35,6 +43,7 @@ export function Housing({
   identity?: InstallIdentity;
   /** Four slots, left to right; null is an engraved dummy cap. Slot 3 is the primary action. */
   keys: readonly (KeySlot | null)[];
+  glass?: HousingGlass;
   children: (size: GlassSize) => ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -46,6 +55,10 @@ export function Housing({
     [fixedIdentity],
   );
   const identity = given ?? own;
+  const reduceMotion = useReduceMotion();
+  // The install seed fixes the dust and scratches per device; the harness pins it for goldens.
+  const seed = useMemo(() => (fixedIdentity ? FIXED_SEED : readInstallSeed()), [fixedIdentity]);
+  const isStatic = readHarness().isStatic;
   return (
     <View testID={testID} style={[s.housing, { paddingTop: insets.top + 12 }]}>
       <Wear side="left" top="44%" length={58} />
@@ -59,9 +72,19 @@ export function Housing({
       </View>
       <View style={s.windowRow}>
         <View style={s.windowWrap}>
-          <View style={s.glass} accessibilityLabel={glassLabel} accessible={glassLabel !== undefined}>
-            <View style={StyleSheet.absoluteFill} onLayout={onLayout} pointerEvents="none" />
-            {size.w > 0 ? children(size) : null}
+          <View style={s.glassBox} onLayout={onLayout} accessibilityLabel={glassLabel} accessible={glassLabel !== undefined}>
+          <Glass
+            testID={`${testID}-glass`}
+            style={s.glass}
+            seed={seed}
+            static={isStatic}
+            reduceMotion={reduceMotion}
+            {...glass}
+          >
+            {/* Opaque tube colour at an explicit size: the web snapshot clones this view into a block
+                host, so a flex-sized root collapses to its content and bottom-anchored children jump up. */}
+            <View style={[s.tube, { width: size.w, height: size.h }]}>{size.w > 0 ? children(size) : null}</View>
+          </Glass>
           </View>
           <Screw corner={0} />
           <Screw corner={1} />
@@ -117,15 +140,11 @@ const s = StyleSheet.create({
   scuff: { position: 'absolute', left: 64, top: 22, width: 6, height: 2, backgroundColor: color.n4, opacity: 0.5 },
   windowRow: { flex: 1, flexDirection: 'row', marginTop: 18, marginBottom: 18 },
   windowWrap: { flex: 1 },
+  glassBox: { flex: 1 },
+  tube: { backgroundColor: color.n0 },
   glass: {
     flex: 1,
     backgroundColor: color.n0,
-    borderRadius: radius.window,
-    borderTopWidth: 2,
-    borderLeftWidth: 2,
-    borderTopColor: color.n1,
-    borderLeftColor: color.n1,
-    overflow: 'hidden',
   },
   ledWrap: { width: 28, marginLeft: 14, alignSelf: 'flex-start' },
   keyBand: { height: 88, justifyContent: 'flex-end' },
