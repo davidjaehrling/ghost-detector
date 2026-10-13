@@ -1,0 +1,15 @@
+{
+  "extraKnownMarketplaces": {
+    "impeccable": {
+      "source": {
+        "source": "github",
+        "repo": "pbakaus/impeccable"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "expo@anthropic-plugin-directory": true,
+    "frontend-design@anthropic-plugin-directory": true,
+    "impeccable@impeccable": true
+  }
+}
