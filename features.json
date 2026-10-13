@@ -544,7 +544,15 @@
       "phase": "P3",
       "description": "Glass FX stack",
       "acceptance": "src/fx/glass: SkSL shaders for scanlines (2 px, 6%), grain (4%), vignette (18%), barrel (1.5%), phosphor bloom and persistence (tau 180/450 ms), warm-up roll (900 ms), dust and scratch layer; applied to the four screens behind one <Glass> component; deterministic under ?static=1; goldens regenerated",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (glass.spec.ts); probe goldens; rAF timing script",
+          "output": "scanlines (225.7 vs 214.2 on alternating rows), grain, vignette (56 vs 71 corner/centre), barrel bend (top edge y 11 vs 13) all measured on the goldens; three loads byte-identical under static; half-res grain keeps p95 at 16.7 ms on SwiftShader; applied to all four screens via Housing (d948f73: 122 e2e passing)",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -552,7 +560,15 @@
       "phase": "P3",
       "description": "Procedural apparition library",
       "acceptance": "src/fx/apparition: at least 6 seeded figure variants from Skia paths plus FractalNoise displacement (no bitmap mattes required; PNG mattes kept as fallback), asymmetric, no features, partial occlusion; unit tests on silhouette metrics (asymmetry, no enclosed holes, area)",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/fx/apparition metrics, 6 variants x 20 seeds)",
+          "output": "mirror correlation ≤0.50, no enclosed holes, area 36 to 56%; 3000-figure check: correlation ≤0.71, no hole >1%",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -560,7 +576,15 @@
       "phase": "P3",
       "description": "Compositor v1",
       "acceptance": "src/fx/compositor: Screen or Plus blend, ghost blurred more than the scene, directional motion blur, noise-mask feathering, partial occlusion by a scene edge, per-pixel brightness clamp just above the region mean (shader), grain applied after compositing; native pixel access via makeRasterImage with the jpeg-js path as fallback; measured lift 8 to 20 luma and ≤15% of the visible panel on all five fixtures",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "node scripts/measure-ghost.mjs (probe route, 390)",
+          "output": "cellar 9.9 / attic 12.1 / bright 12.7 / black 9.8 / outdoors 11.0 mean lift; 0 darkened; union box 5.8 to 14.1%; centres in margins; Plus blend, per-pixel clamp, occlusion, grain after compositing",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -568,7 +592,15 @@
       "phase": "P3",
       "description": "Thermal view",
       "acceptance": "phosphor white-hot look-up table per the Bible (one hue), rendered at 160x120 and upscaled, cold spot at the dark region with ΔT readout, FLIR-style scale bar; a toggle on the result screen; goldens for cellar and bright",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm vitest run src/fx/thermal (14 tests); thermal.spec.ts goldens",
+          "output": "cold spot inside the region in 300 rooms; ΔT within 0.3 °C of tier depth; QUIET has no spot; one hue (130 to 141°); scale bar legible; field build 5 to 6 ms, redraw 7 to 10 ms at 9 Hz",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -576,7 +608,15 @@
       "phase": "P3",
       "description": "Jump-scare",
       "acceptance": "visual only (audio in P4): within psych-brief limits (CRITICAL only, 400 to 600 ms, ≤2 flashes per second, never in the first 3 scans, caps per day and session), Settings toggle, reduced-motion respected; unit tests on the caps; a golden of the peak frame under ?static=1&scare=1",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/ui/result/scare.ts); e2e result-scare golden",
+          "output": "500 ms, flashes at 0 and 260 ms for 70 ms, ≤2 per second; plays only with outcome flag + Settings on + no reduced motion + direct from scan; Calm locks it off; engine caps via drawOutcome history",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -656,7 +696,15 @@
       "phase": "P4",
       "description": "Scan theatre and result wired to audio and haptics",
       "acceptance": "scan phases, hold, reveal and CRITICAL cues call the engine; L2 asserts the cue order from __audioLog; Settings has sound and haptics toggles",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (audio.spec.ts, 6 tests)",
+          "output": "real scan at speed=8 logs start, scanStart, scanPhase 0..4, hold, reveal in order; SOUND off leaves __audioLog empty; HAPTICS off sends no tap; fault and Calm lock covered",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -664,7 +712,15 @@
       "phase": "P4",
       "description": "EMF needle on the real magnetometer",
       "acceptance": "expo-sensors Magnetometer with HIGH_SAMPLING_RATE_SENSORS if under 200 ms; needle with mass, overshoot and damping per Bible §6 springs; jitter 0.6%; web uses the seeded walk; unit tests on the spring and the mG mapping",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/ui/viewfinder/flux.ts)",
+          "output": "expo-sensors ~57.0.3 Magnetometer at 100 ms, HIGH_SAMPLING_RATE_SENSORS declared; µT→mG, log angle, 0.6% jitter, LED thresholds 15/40/75% tested; Skia needle with persistence and bloom; web keeps the seeded walk; device unverified",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
@@ -672,7 +728,15 @@
       "phase": "P4",
       "description": "Live radar sweep",
       "acceptance": "viewfinder sweep with persistence tail driven by flux and tier; deterministic under ?static=1; golden",
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (sweep.test.ts); viewfinder goldens",
+          "output": "sweep period 5.2 s at GEO centre to 1.8 s off it, persistence tail, frozen at 52° under static",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
       "passes": false
     },
     {
