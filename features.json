@@ -688,8 +688,8 @@
           "date": "2026-10-13"
         }
       ],
-      "passes": false,
-      "refuter": "DISPROVED on the test clause (self-referential rates); fix in round 2; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+      "passes": true,
+      "refuter": "HOLDS after the palette table was hard-coded (two mutations fail: 6→9 and 22→20); D-018"
     },
     {
       "id": "P4-02",
