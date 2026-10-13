@@ -11,6 +11,7 @@ export default defineConfig({
   outputDir: 'test-results',
   snapshotPathTemplate: 'e2e/screenshots/golden/{projectName}/{arg}{ext}',
   reporter: 'list',
+  expect: { toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css' } },
   use: { baseURL: 'http://localhost:4173', trace: 'retain-on-failure' },
   webServer: {
     command: 'node e2e/web/serve.mjs dist',
@@ -26,6 +27,9 @@ export default defineConfig({
       deviceScaleFactor: 1,
       isMobile: true,
       hasTouch: true,
+      launchOptions: {
+        args: ['--font-render-hinting=none', '--disable-font-subpixel-positioning', '--disable-lcd-text'],
+      },
     },
   })),
 });

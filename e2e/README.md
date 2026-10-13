@@ -12,3 +12,7 @@ Command output and screenshots that back a `features.json` entry go in `e2e/evid
 
 ## L3: Maestro on Android
 Lives in `e2e/maestro/`. The Release Manager owns it; do not edit from here.
+
+## Cross-machine goldens
+- `playwright.config.ts` launches Chromium with `--font-render-hinting=none --disable-font-subpixel-positioning --disable-lcd-text`, so host fontconfig does not change glyph pixels.
+- If CI still differs, run the `update-goldens` workflow (Actions tab, manual dispatch). It uploads a `golden-screenshots` artifact; unzip it over `e2e/screenshots/golden/` and commit. CI never commits.

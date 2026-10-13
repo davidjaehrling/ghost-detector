@@ -1,0 +1,25 @@
+name: update-goldens
+
+on:
+  workflow_dispatch:
+
+jobs:
+  update-goldens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm web:export
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test --update-snapshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: golden-screenshots
+          path: e2e/screenshots/golden/
+          if-no-files-found: error
