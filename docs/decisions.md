@@ -146,3 +146,7 @@ Weighted means (Hollow x2, Art): boot 7.38 (min 5.0 shareability), viewfinder 7.
 ## 2026-10-13 · D-020 · Premature round-2 scoring (void)
 - The Director launched the P3 round-2 scoring at fc9053e before Builder A had regenerated the screen goldens; both judges found the screen goldens dated from 1d3f40f (round 1) and scored stale images. Their screen and believability numbers from that run are void and not recorded. Round 2 is re-scored after the golden commit lands. Cost of the void run: 182k subagent tokens.
 - Process rule from this: a scoring run waits for the builder's report that says the goldens were regenerated and `pnpm e2e:web` passed twice; a clean working tree is not enough evidence.
+
+## 2026-10-13 · D-021 · Clamp measured before the warp
+- The 12 over-clamp pixels on outdoors come from the barrel warp resampling the finished screen (a lifted dark pixel blends into its bright neighbour); with the warp off the clamp holds at 0 over-clamp on every fixture across four runs. Ruling: the clamp acceptance is a compositor property and is measured with `warp=0`; the warped pass is reported for information. `measure-ghost.mjs` now captures deterministically (two byte-identical consecutive shots, two runs per fixture). Darkened pixels: 0 everywhere, flat and warped.
+- `POP_ALPHA` 0.4, `POP_LIFT` 40 and `CLAMP_LIFT` 34 are pinned by a test.
