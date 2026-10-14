@@ -3,22 +3,26 @@
  *
  * For a backdrop colour `bg` (0..1 per channel) and ghost alpha `a`:
  * 1. Occlusion: the ghost is hidden where the (slightly blurred) scene luma is above the region's
- *    80th percentile, with a soft ramp of `OCC_RAMP` luma. On a flat scene a synthetic foreground
- *    band (`Band`, `bandVisibility`) hides it instead.
+ *    80th percentile, with a soft ramp of `OCC_RAMP` luma. On a flat interior a synthesised
+ *    foreground mass (`Band`, `bandMass`) hides it as well: a soft, out-of-focus mound in the
+ *    scene's own colour (sampled just under the figure), rising from below into the figure's
+ *    lower third. The mass is part of the scene: it is drawn with or without the ghost.
  * 2. Plus with white at the layer alpha: lift `min(a, 1 - bg)` per channel, so the ghost only adds
  *    light, by about the same amount over a dark or a bright backdrop. (Screen, `a * (1 - bg)`,
  *    adds almost nothing over a bright scene: on the bright fixture it lifted the figure box by
  *    2.4 luma.)
  * 3. Brightness clamp: the lift is scaled so the pixel's luma stays at or under `limit` (clamp
  *    reference + `CLAMP_LIFT` luma). With `peak` the layer's highest alpha and `t = a / peak`, the
- *    lift becomes `min(lift, min(allowed, peak) * t^GAMMA)`: the figure's core lands on the limit,
+ *    lift becomes `min(lift, min(allowed, peak) * t^GAMMA)` (on a near-black scene `allowed` is
+ *    also capped at NEAR_BLACK_LIFT, so no pixel rises more than that): the figure's core lands on the limit,
  *    faint parts pass unchanged, and everything between keeps its gradient (feather, fades,
  *    density). Round 1 used `allowed * (1 - exp(-6 lift / allowed))`, which saturated every pixel
  *    above a third of the core's alpha, so fades and the outline's feather turned into a hard
  *    edge (the cut-out look, D-017). Never negative, never more than the unclamped lift.
  * 3b. Density: the ghost layer carries the figure's coarse interior density (40 to 100%) as its
  *    colour (premultiplied grey under the alpha). The clamped lift is scaled by it, so the patches
- *    show however hard the core sits on the limit. Scaling down never breaks steps 2 and 3.
+ *    show however hard the core sits on the limit. Scaling down never breaks steps 2 and 3. The
+ *    near-black smudge (D-023) drops it (`densAmt` 0): a smudge has no interior to show.
  * 4. Grain after compositing: one signed, seeded FractalNoise value added to every channel over
  *    the whole panel. Adding the same value with and without the ghost keeps the order of pixel
  *    values, so the difference image still never goes negative.
@@ -32,8 +36,16 @@ export const LUMA: readonly [number, number, number] = [0.299, 0.587, 0.114];
  * the clamp curve no longer saturates the mid alphas.
  */
 export const CLAMP_LIFT = 34;
-/** Peak alpha of the figure on the jump-scare pop frame (D-017: 35 to 45%). */
-export const POP_ALPHA = 0.4;
+/**
+ * Most effective alpha the figure reaches on the jump-scare pop frame (D-023: capped at 0.30, so
+ * the pop stays a soft lift, never an opaque cut-out). The layer's stacked peak (figure, copies
+ * and echo) is raised to this and no further, and the clamp curve runs linear on the pop
+ * (`POP_GAMMA`), so the hem's noise dissolve keeps its gradient instead of turning into a hard,
+ * sawtooth edge.
+ */
+export const POP_ALPHA = 0.3;
+/** Clamp curve exponent on the pop frame (1: linear, the hem dissolve passes through unchanged). */
+export const POP_GAMMA = 1;
 /** How far the clamp opens on the pop frame, luma. */
 export const POP_LIFT = 40;
 /** Width of the occlusion ramp above the 80th percentile, in 0..255 luma. */
@@ -52,36 +64,59 @@ export const GRAIN = 0.04;
 export type RGB = [number, number, number];
 
 /**
- * Synthetic foreground band (D-022), for scenes with nothing in front of the figure to cut it: a
- * soft, slightly slanted band across the panel, with ragged top and bottom edges, that hides the
- * ghost (the photo is untouched; the band reads as something dark or bright in the foreground).
- * Panel pixels. `ph` are the phases of the edge noise (three for the top, three for the bottom).
+ * Synthesised foreground mass (D-023), only on a flat interior: a soft mound rising from below
+ * into the figure's lower third, in the scene's own colour (sampled at `sampleY` just under the
+ * figure, blurred across x), that hides the ghost behind it. Panel pixels. Its top edge at x is
+ * `top + hump * ((x - cx) / halfW)^2` plus a gentle noise of peak `rag` (phases `ph`); it fades
+ * out at its sides past `halfW` and below `bottom`. Every edge is a BAND_SOFT ramp either way
+ * (12 px across), so it reads out of focus, never as a hard or dark fringe.
  */
 export interface Band {
-  y0: number;
-  y1: number;
-  /** Panel x the slope pivots on, and dy/dx of both edges. */
+  top: number;
   cx: number;
-  slope: number;
-  /** Peak offset of the ragged edges, px. */
+  halfW: number;
+  hump: number;
+  bottom: number;
   rag: number;
-  ph: readonly [number, number, number, number, number, number];
+  ph: readonly [number, number, number];
+  sampleY: number;
 }
-/** Wavenumbers of the band's edge noise, per px (wavelengths about 30, 13 and 6 px). */
-export const BAND_K: readonly [number, number, number] = [0.21, 0.5, 1.1];
-/** Half width of the band edges' soft ramp, px. */
-export const BAND_SOFT = 2.5;
+/** Wavenumbers of the mass's edge noise, per px (wavelengths about 80, 37 and 18 px: no teeth). */
+export const BAND_K: readonly [number, number, number] = [0.08, 0.17, 0.35];
+/** Half width of the mass's soft edges, px (a 12 px ramp: within the 10 to 16 px of D-023). */
+export const BAND_SOFT = 6;
+/** How much of the sampled colour covers the photo at the mass's core (the rest shows through). */
+export const BAND_MIX = 0.85;
+/** Colour taps across x (px apart) and down (px apart) for the mass's colour. */
+export const BAND_TAP_X = 8;
+export const BAND_TAP_Y = 4;
 
-const raggedEdge = (x: number, a: number, b: number, c: number) =>
+const softEdge = (x: number, a: number, b: number, c: number) =>
   (0.6 * Math.sin(x * BAND_K[0] + a) + 0.3 * Math.sin(x * BAND_K[1] + b) + 0.2 * Math.sin(x * BAND_K[2] + c)) / 1.1;
 
-/** Ghost visibility 0..1 at a panel point under the band (1 outside it, 0 inside). */
+/** Coverage 0..1 of the mass at a panel point (1 inside, 0 outside, soft between). */
+export function bandMass(x: number, y: number, band: Band | null): number {
+  if (!band) return 0;
+  const dx = (x - band.cx) / band.halfW;
+  const top = band.top + band.hump * dx * dx + band.rag * softEdge(x, band.ph[0], band.ph[1], band.ph[2]);
+  const below = smoothstep(top - BAND_SOFT, top + BAND_SOFT, y);
+  const side = 1 - smoothstep(band.halfW - BAND_SOFT, band.halfW + BAND_SOFT, Math.abs(x - band.cx));
+  const end = 1 - smoothstep(band.bottom - 2 * BAND_SOFT, band.bottom + 2 * BAND_SOFT, y);
+  return below * side * end;
+}
+
+/** Ghost visibility 0..1 at a panel point behind the mass (1 outside it, 0 inside). */
 export function bandVisibility(x: number, y: number, band: Band | null): number {
-  if (!band) return 1;
-  const tilt = band.slope * (x - band.cx);
-  const top = band.y0 + tilt + band.rag * raggedEdge(x, band.ph[0], band.ph[1], band.ph[2]);
-  const bot = band.y1 + tilt + band.rag * raggedEdge(x, band.ph[3], band.ph[4], band.ph[5]);
-  return 1 - smoothstep(top - BAND_SOFT, top + BAND_SOFT, y) * (1 - smoothstep(bot - BAND_SOFT, bot + BAND_SOFT, y));
+  return 1 - bandMass(x, y, band);
+}
+
+/**
+ * The mass over the photo at one pixel: the photo mixed toward the mass colour (`col`, the
+ * scene's colour under the figure) by BAND_MIX times the coverage.
+ */
+export function bandOver(bg: readonly number[], col: readonly number[], mass: number): RGB {
+  const k = BAND_MIX * mass;
+  return [bg[0]! + (col[0]! - bg[0]!) * k, bg[1]! + (col[1]! - bg[1]!) * k, bg[2]! + (col[2]! - bg[2]!) * k];
 }
 
 export const luma = (c: readonly number[]) => LUMA[0] * c[0]! + LUMA[1] * c[1]! + LUMA[2] * c[2]!;
@@ -100,13 +135,13 @@ export function occlusion(sceneLuma: number, occLo: number): number {
  * Steps 2 and 3: add the ghost onto `bg` (Plus) and clamp the lift. All values 0..1. `peak` is the
  * highest alpha the ghost layer reaches (default `a`: a lone pixel is its own peak).
  */
-export function plusClamped(bg: readonly number[], a: number, limit: number, peak = a): RGB {
+export function plusClamped(bg: readonly number[], a: number, limit: number, peak = a, o: { gamma?: number; liftCap?: number } = {}): RGB {
   const lift: RGB = [0, 0, 0];
   for (let i = 0; i < 3; i++) lift[i] = Math.min(a, 1 - bg[i]!);
   const l = luma(lift);
-  const allowed = Math.max(0, limit - luma(bg));
+  const allowed = Math.min(o.liftCap ?? 1, Math.max(0, limit - luma(bg)));
   const t = peak > 1e-6 ? Math.min(1, a / peak) : 0;
-  const target = Math.min(allowed, Math.max(peak, a)) * Math.pow(t, GAMMA);
+  const target = Math.min(allowed, Math.max(peak, a)) * Math.pow(t, o.gamma ?? GAMMA);
   const k = l > 1e-6 && allowed > 0 ? Math.min(1, target / l) : 0;
   return [bg[0]! + lift[0] * k, bg[1]! + lift[1] * k, bg[2]! + lift[2] * k];
 }
@@ -120,13 +155,29 @@ export function grainOffset(v: number, amount = GRAIN): number {
 export function compositePixel(
   bg: readonly number[],
   ghostAlpha: number,
-  o: { limit: number; occLo: number; sceneLuma: number; noise: number; strength?: number; density?: number; peak?: number },
+  o: {
+    limit: number;
+    occLo: number;
+    sceneLuma: number;
+    noise: number;
+    strength?: number;
+    density?: number;
+    peak?: number;
+    gamma?: number;
+    liftCap?: number;
+    grain?: number;
+    /** Mass coverage at this pixel (`bandMass`) and its colour. */
+    mass?: number;
+    massColor?: readonly number[];
+  },
 ): RGB {
-  const a = ghostAlpha * (o.strength ?? 1) * occlusion(o.sceneLuma, o.occLo);
-  const k = plusClamped(bg, a, o.limit, (o.peak ?? 1) * (o.strength ?? 1));
+  const m = o.mass ?? 0;
+  bg = m > 0 && o.massColor ? bandOver(bg, o.massColor, m) : bg;
+  const a = ghostAlpha * (o.strength ?? 1) * occlusion(o.sceneLuma, o.occLo) * (1 - m);
+  const k = plusClamped(bg, a, o.limit, (o.peak ?? 1) * (o.strength ?? 1), { gamma: o.gamma, liftCap: o.liftCap });
   const d = Math.min(1, Math.max(0, o.density ?? 1));
   const c = [bg[0]! + (k[0] - bg[0]!) * d, bg[1]! + (k[1] - bg[1]!) * d, bg[2]! + (k[2] - bg[2]!) * d];
-  const g = grainOffset(o.noise);
+  const g = grainOffset(o.noise, o.grain);
   return [Math.min(1, Math.max(0, c[0] + g)), Math.min(1, Math.max(0, c[1] + g)), Math.min(1, Math.max(0, c[2] + g))];
 }
 
@@ -143,56 +194,75 @@ uniform shader occl;
 uniform float useGrid;
 uniform float strength;
 uniform float limit;
+uniform float liftCap;
 uniform float occLo;
 uniform float occRamp;
 uniform float grain;
 uniform float occRadius;
 uniform float gammaK;
 uniform float peak;
+uniform float densAmt;
 uniform float bandOn;
-uniform float bandY0;
-uniform float bandY1;
+uniform float bandTop;
 uniform float bandCx;
-uniform float bandSlope;
+uniform float bandHalfW;
+uniform float bandHump;
+uniform float bandBottom;
 uniform float bandRag;
 uniform float bandSoft;
+uniform float bandSampleY;
+uniform float bandMix;
+uniform float bandTapX;
+uniform float bandTapY;
 uniform float3 bandK;
-uniform float3 bandPhT;
-uniform float3 bandPhB;
+uniform float3 bandPh;
 
 const half3 W = half3(${LUMA.join(', ')});
 
 float L(float2 p) { return dot(photo.eval(p).rgb, W); }
 
-float edgeNoise(float x, float3 ph) {
-  return (0.6 * sin(x * bandK.x + ph.x) + 0.3 * sin(x * bandK.y + ph.y) + 0.2 * sin(x * bandK.z + ph.z)) / 1.1;
+float softEdge(float x) {
+  return (0.6 * sin(x * bandK.x + bandPh.x) + 0.3 * sin(x * bandK.y + bandPh.y) + 0.2 * sin(x * bandK.z + bandPh.z)) / 1.1;
 }
 
-// Twin of bandVisibility: 0 inside the synthetic foreground band, 1 outside.
-float bandVis(float2 xy) {
-  if (bandOn < 0.5) return 1.0;
-  float tilt = bandSlope * (xy.x - bandCx);
-  float top = bandY0 + tilt + bandRag * edgeNoise(xy.x, bandPhT);
-  float bot = bandY1 + tilt + bandRag * edgeNoise(xy.x, bandPhB);
-  return 1.0 - smoothstep(top - bandSoft, top + bandSoft, xy.y) * (1.0 - smoothstep(bot - bandSoft, bot + bandSoft, xy.y));
+// Twin of bandMass: 1 inside the synthesised foreground mass, 0 outside, soft between.
+float bandMass(float2 xy) {
+  if (bandOn < 0.5) return 0.0;
+  float dx = (xy.x - bandCx) / bandHalfW;
+  float top = bandTop + bandHump * dx * dx + bandRag * softEdge(xy.x);
+  float below = smoothstep(top - bandSoft, top + bandSoft, xy.y);
+  float side = 1.0 - smoothstep(bandHalfW - bandSoft, bandHalfW + bandSoft, abs(xy.x - bandCx));
+  float end = 1.0 - smoothstep(bandBottom - 2.0 * bandSoft, bandBottom + 2.0 * bandSoft, xy.y);
+  return below * side * end;
+}
+
+// The mass's colour: the scene just under the figure, averaged across x (out of focus).
+half3 bandColor(float x) {
+  half3 c = half3(0.0);
+  for (int k = -3; k <= 3; k++) {
+    float fx = x + float(k) * bandTapX;
+    c += photo.eval(float2(fx, bandSampleY)).rgb + photo.eval(float2(fx, bandSampleY + bandTapY)).rgb;
+  }
+  return c / 14.0;
 }
 
 half4 main(float2 xy) {
-  half4 bgc = photo.eval(xy);
-  half3 bg = bgc.rgb;
+  half3 bg = photo.eval(xy).rgb;
+  float m = bandMass(xy);
+  if (m > 0.001) bg = mix(bg, bandColor(xy.x), half(bandMix * m));
   float r = occRadius;
   // With the photo's luma grid (blurred, bilinear) the cut follows the scene's shapes in coherent
   // patches; without it, 9 taps of the photo.
   float scene = useGrid > 0.5 ? float(occl.eval(xy).r) : L(xy) * 0.2
     + (L(xy + float2(r, 0)) + L(xy - float2(r, 0)) + L(xy + float2(0, r)) + L(xy - float2(0, r))) * 0.12
     + (L(xy + float2(r, r) * 1.5) + L(xy - float2(r, r) * 1.5) + L(xy + float2(r, -r) * 1.5) + L(xy - float2(r, -r) * 1.5)) * 0.08;
-  float vis = (1.0 - smoothstep(occLo, occLo + occRamp, scene)) * bandVis(xy);
+  float vis = (1.0 - smoothstep(occLo, occLo + occRamp, scene)) * (1.0 - m);
   half4 gc = ghost.eval(xy);
   float a = gc.a * strength * vis;
-  float dens = gc.a > 1e-4 ? clamp(float(gc.r) / float(gc.a), 0.0, 1.0) : 1.0;
+  float dens = mix(1.0, gc.a > 1e-4 ? clamp(float(gc.r) / float(gc.a), 0.0, 1.0) : 1.0, densAmt);
   half3 lift = min(half3(a), 1.0 - bg);
   float l = dot(lift, W);
-  float allowed = max(0.0, limit - dot(bg, W));
+  float allowed = min(liftCap, max(0.0, limit - dot(bg, W)));
   float pk = peak * strength;
   float t = pk > 1e-6 ? min(1.0, a / pk) : 0.0;
   float target = min(allowed, max(pk, a)) * pow(t, gammaK);

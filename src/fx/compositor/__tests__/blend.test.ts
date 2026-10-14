@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { mulberry32 } from '../../../engine';
-import { CLAMP_LIFT, compositePixel, grainOffset, luma, occlusion, OCC_RAMP, plusClamped } from '../blend';
+import { BAND_MIX, bandOver, CLAMP_LIFT, compositePixel, grainOffset, luma, occlusion, OCC_RAMP, plusClamped } from '../blend';
+import { NEAR_BLACK_GRAIN, NEAR_BLACK_LIFT } from '../reference';
 
 const rnd = mulberry32(2024);
 const rgb = () => [rnd(), rnd(), rnd()];
@@ -96,6 +97,35 @@ describe('occlusion and grain', () => {
       const withGhost = compositePixel(bg, rnd() * 0.3, o);
       const without = compositePixel(bg, rnd() * 0.3, { ...o, strength: 0 });
       for (let c = 0; c < 3; c++) expect(Math.round(withGhost[c] * 255)).toBeGreaterThanOrEqual(Math.round(without[c] * 255));
+    }
+  });
+});
+
+describe('near-black ceiling and the foreground mass (D-023)', () => {
+  it('on a near-black scene no pixel is lifted more than NEAR_BLACK_LIFT, nor past mean + NEAR_BLACK_LIFT', () => {
+    expect(NEAR_BLACK_LIFT).toBe(18);
+    expect(NEAR_BLACK_GRAIN).toBe(1.5);
+    for (let i = 0; i < 20000; i++) {
+      const bg = rgb().map((v) => v * 0.05);
+      const mean = rnd() * 12;
+      const peak = 0.05 + rnd() * 0.25;
+      const out = plusClamped(bg, rnd() * peak, (mean + NEAR_BLACK_LIFT) / 255, peak, { liftCap: NEAR_BLACK_LIFT / 255 });
+      expect((luma(out) - luma(bg)) * 255).toBeLessThanOrEqual(NEAR_BLACK_LIFT + 1e-6);
+      expect(luma(out) * 255).toBeLessThanOrEqual(Math.max(mean + NEAR_BLACK_LIFT, luma(bg) * 255) + 1e-6);
+    }
+  });
+
+  it('the mass takes the sampled scene colour, never black, and the ghost behind it still never darkens', () => {
+    const col = [0.3, 0.25, 0.2];
+    const over = bandOver([0.1, 0.1, 0.1], col, 1);
+    for (let c = 0; c < 3; c++) expect(over[c]).toBeCloseTo(0.1 + (col[c]! - 0.1) * BAND_MIX, 9);
+    expect(bandOver([0.5, 0.4, 0.3], col, 0)).toEqual([0.5, 0.4, 0.3]);
+    for (let i = 0; i < 5000; i++) {
+      const bg = rgb();
+      const o = { limit: luma(bg) + (rnd() * 40) / 255, occLo: 1, sceneLuma: 0, noise: rnd(), mass: rnd(), massColor: rgb() };
+      const withGhost = compositePixel(bg, rnd() * 0.3, o);
+      const without = compositePixel(bg, 0.3, { ...o, strength: 0 });
+      for (let c = 0; c < 3; c++) expect(withGhost[c]).toBeGreaterThanOrEqual(without[c]! - 1e-9);
     }
   });
 });

@@ -6,10 +6,10 @@ import { Easing, useDerivedValue, useSharedValue, withTiming } from 'react-nativ
 import type { Tier } from '../../engine';
 import { FIT_H, FIT_W, renderApparition, VARIANT_COUNT } from '../apparition';
 import { stackedAlpha, type Placement, type RegionInput } from '../ghostV0/placement';
-import { BAND_K, BAND_SOFT, CLAMP_LIFT, COMPOSITE_SKSL, GAMMA, GRAIN, OCC_GRID_BLUR, POP_ALPHA, POP_LIFT, type Band } from './blend';
+import { BAND_K, BAND_MIX, BAND_SOFT, BAND_TAP_X, BAND_TAP_Y, CLAMP_LIFT, COMPOSITE_SKSL, GAMMA, GRAIN, OCC_GRID_BLUR, POP_ALPHA, POP_GAMMA, POP_LIFT, type Band } from './blend';
 import { SnapshotCanvas } from '../glass/snapshotRegistry';
 import { buildGhostLayer } from './ghostLayer';
-import { reference } from './reference';
+import { NEAR_BLACK_BLUR, NEAR_BLACK_CAP, NEAR_BLACK_GRAIN, NEAR_BLACK_LIFT, NEAR_BLACK_PEAK, reference, smudgePlacement } from './reference';
 import { occlusionGrid, type LumaGrid } from './regionStats';
 
 const MATTES = {
@@ -69,9 +69,10 @@ export interface CompositeProps {
   /** Apparition variant 0..5, or `'png'` for the v0 matte (`placement.matte`) as the figure. */
   variant?: number | 'png';
   /**
-   * Jump-scare pop, 0..1 (`useScare`'s `pop`; null or 0 is off). At 1 the figure's peak alpha is
-   * raised to POP_ALPHA (35 to 45% band) and the clamp opens by POP_LIFT luma, so the pop reads;
-   * the figure stays the same blurred layer (soft, no sharper edge). Replaces the GhostV0 pop layer.
+   * Jump-scare pop, 0..1 (`useScare`'s `pop`; null is off, 0 armed). At 1 the layer's stacked
+   * peak alpha is raised to POP_ALPHA (0.30, a cap) and the clamp opens by POP_LIFT luma on a
+   * linear curve (POP_GAMMA), so the hem's noise dissolve survives; the pop layer adds a 6 to 10 px
+   * smear along the figure's motion. While armed (0) that layer is built, so the pop frame is ready.
    */
   pop?: number | null;
   testID?: string;
@@ -88,11 +89,22 @@ export interface CompositeInfo {
   p80Luma: number;
   /** Clamp reference and occlusion threshold and ramp the compositor used (`reference.ts`). */
   clampRef: number;
-  /** Most a pixel may be lifted above `clampRef`, luma (CLAMP_LIFT, plus POP_LIFT on the pop frame). */
+  /**
+   * Most a pixel may be lifted above `clampRef`, luma (CLAMP_LIFT, plus POP_LIFT on the pop frame;
+   * NEAR_BLACK_LIFT on a near-black scene, which also caps the lift itself at that).
+   */
   clampLift: number;
+  /** Median luma under the figure and of the whole photo; true on the near-black smudge fallback. */
+  median: number | null;
+  sceneMedian: number | null;
+  nearBlack: boolean;
+  /** Grain amplitude after compositing (GRAIN, x NEAR_BLACK_GRAIN on a near-black scene). */
+  grain: number;
+  /** Highest effective ghost alpha the layer can reach on this frame (POP_ALPHA on the pop). */
+  peakAlpha: number;
   occ: number;
   occRamp: number;
-  /** Mean luma gradient under the figure, the synthetic band (flat scenes) and the share of the figure cut. */
+  /** Mean luma gradient under the figure, the synthesised mass (flat interiors) and the share of the figure cut. */
   gradient: number | null;
   band: Band | null;
   cut: number | null;
@@ -152,13 +164,13 @@ function figureSize(p: Placement, scale: number): { width: number; height: numbe
 /**
  * Compositor v1: the photo and the apparition on one Skia canvas. The ghost layer (figure plus
  * 3 to 5 directional copies, Gaussian-blurred; the photo is not) goes through one runtime shader
- * that hides it where the scene is brighter than the region's 80th percentile (or, on a flat
- * scene, behind a synthetic foreground band), adds it with a
+ * that hides it where the scene is brighter than the region's 80th percentile (and, on a flat
+ * interior, behind a soft synthesised foreground mass in the scene's colour), adds it with a
  * Plus blend (light only), clamps each pixel to the clamp reference + CLAMP_LIFT luma on a smooth curve, and adds 4% seeded grain
  * over the whole panel after compositing.
  */
 export function Composite(props: CompositeProps) {
-  const { width, height, placement, tier, seed, meanLuma, fadeInMs = 1500, testID = 'composite' } = props;
+  const { width, height, tier: tierIn, seed, meanLuma, fadeInMs = 1500, testID = 'composite' } = props;
   const [query] = useState(webQuery);
   const isStatic = props.static || query.isStatic;
   const off = props.disabled || query.off;
@@ -168,8 +180,21 @@ export function Composite(props: CompositeProps) {
   const photo = typeof props.photo === 'string' ? loaded : props.photo;
 
   const png = props.variant === 'png';
-  const matte = useImage(png ? MATTES[placement.matte] : null);
+  const matte = useImage(png ? MATTES[props.placement.matte] : null);
   const variant = typeof props.variant === 'number' ? props.variant : (seed >>> 0) % VARIANT_COUNT;
+
+  const rect = props.photoRect ?? coverRect(photo, width, height);
+  const { x: rx, y: ry, width: rw, height: rh } = rect;
+  const { p80Luma, p90Luma, region, grid } = props;
+  const given = props.placement;
+  const ref = useMemo(
+    () => reference({ meanLuma, p80Luma, p90Luma, region, grid, placement: given, photoRect: { x: rx, y: ry, width: rw, height: rh }, seed: seed >>> 0 }),
+    [meanLuma, p80Luma, p90Luma, region, grid, given, rx, ry, rw, rh, seed],
+  );
+  // Near-black scene (D-023): the TRACE-style smudge, 0.7 scale at the lowest opacity band.
+  const nearBlack = !!ref.nearBlack;
+  const placement = useMemo(() => (nearBlack ? smudgePlacement(given) : given), [nearBlack, given]);
+  const tier: Tier | undefined = nearBlack ? 'trace' : tierIn;
 
   const scale = Platform.OS === 'web' ? 1 : PixelRatio.get();
   const effect = useMemo(() => Skia.RuntimeEffect.Make(COMPOSITE_SKSL), []);
@@ -178,8 +203,14 @@ export function Composite(props: CompositeProps) {
     return renderApparition({ variant, seed: seed >>> 0, ...figureSize(placement, scale) });
   }, [png, matte, variant, seed, placement, scale]);
   const ghost = useMemo(
-    () => (figure ? buildGhostLayer({ figure, padded: !png, placement, width, height, scale, tier, seed: seed >>> 0 }) : null),
-    [figure, png, placement, width, height, scale, tier, seed],
+    () => (figure ? buildGhostLayer({ figure, padded: !png, placement, width, height, scale, tier, seed: seed >>> 0, blur: nearBlack ? NEAR_BLACK_BLUR : 1 }) : null),
+    [figure, png, placement, width, height, scale, tier, seed, nearBlack],
+  );
+  // The pop frame's layer (directional smear), built as soon as a scare is armed.
+  const armed = props.pop !== null && props.pop !== undefined;
+  const popGhost = useMemo(
+    () => (armed && figure ? buildGhostLayer({ figure, padded: !png, placement, width, height, scale, tier, seed: seed >>> 0, pop: true, blur: nearBlack ? NEAR_BLACK_BLUR : 1 }) : null),
+    [armed, figure, png, placement, width, height, scale, tier, seed, nearBlack],
   );
 
   const occl = useMemo(() => gridImage(props.grid), [props.grid]);
@@ -193,43 +224,53 @@ export function Composite(props: CompositeProps) {
     fade.set(withTiming(1, { duration: fadeInMs, easing: Easing.linear }));
   }, [fade, fadeInMs, isStatic, ghost]);
 
-  const rect = props.photoRect ?? coverRect(photo, width, height);
-  const { x: rx, y: ry, width: rw, height: rh } = rect;
-  const { p80Luma, p90Luma, region, grid } = props;
-  const ref = useMemo(
-    () => reference({ meanLuma, p80Luma, p90Luma, region, grid, placement, photoRect: { x: rx, y: ry, width: rw, height: rh }, seed: seed >>> 0 }),
-    [meanLuma, p80Luma, p90Luma, region, grid, placement, rx, ry, rw, rh, seed],
-  );
   const band = ref.band;
   const pop = Math.min(1, Math.max(0, props.pop ?? 0));
-  const limit = Math.min(255, ref.mean + CLAMP_LIFT + pop * POP_LIFT) / 255;
+  // A near-black scene keeps its hard ceiling on the pop too.
+  const clampLift = nearBlack ? NEAR_BLACK_LIFT : CLAMP_LIFT + pop * POP_LIFT;
+  // In the compositor the near-black ceiling sits at NEAR_BLACK_CAP (under the published 18): the
+  // glass over the panel adds a little to what the composite lifts.
+  const limit = Math.min(255, ref.mean + (nearBlack ? NEAR_BLACK_CAP : clampLift)) / 255;
+  const liftCap = nearBlack ? NEAR_BLACK_CAP / 255 : 1;
+  const grain = GRAIN * (nearBlack ? NEAR_BLACK_GRAIN : 1);
   const occLo = Math.min(255, ref.occ) / 255;
   const occRamp = ref.ramp / 255;
-  // On the pop frame the layer alpha (placement.opacity at the figure's core) is scaled up to POP_ALPHA.
-  const gain = 1 + pop * Math.max(0, POP_ALPHA / Math.max(0.01, placement.opacity) - 1);
-  const on = off ? 0 : 1;
   // The ghost layer's highest alpha: the figure under all its copies (and the echo).
-  const peak = stackedAlpha(placement);
+  // On the near-black smudge the heavy blur spreads the layer to about NEAR_BLACK_PEAK of that
+  // bound, so the clamp's reference peak follows it and the smudge's core reaches its ceiling.
+  const peak = stackedAlpha(placement) * (nearBlack ? NEAR_BLACK_PEAK : 1);
+  // On the pop frame the layer's stacked peak goes to POP_ALPHA, a cap (never above it), and the
+  // clamp curve runs linear, so the hem keeps its dissolve.
+  const gain = 1 + pop * (POP_ALPHA / Math.max(0.01, peak) - 1);
+  const gammaK = GAMMA + pop * (POP_GAMMA - GAMMA);
+  const on = off ? 0 : 1;
+  // The smudge has no interior: no density patches on a near-black scene.
+  const densAmt = nearBlack ? 0 : 1;
+  const layer = pop > 0 && popGhost ? popGhost : ghost;
   const useGrid = props.grid && ref.source === 'figure' ? 1 : 0;
   // Synthetic foreground band on a flat scene (reference.ts); off otherwise.
   const bandU = useMemo(
     () => ({
       bandOn: band ? 1 : 0,
-      bandY0: band?.y0 ?? 0,
-      bandY1: band?.y1 ?? 0,
+      bandTop: band?.top ?? 0,
       bandCx: band?.cx ?? 0,
-      bandSlope: band?.slope ?? 0,
+      bandHalfW: band?.halfW ?? 1,
+      bandHump: band?.hump ?? 0,
+      bandBottom: band?.bottom ?? 0,
       bandRag: band?.rag ?? 0,
       bandSoft: BAND_SOFT,
+      bandSampleY: band?.sampleY ?? 0,
+      bandMix: BAND_MIX,
+      bandTapX: BAND_TAP_X,
+      bandTapY: BAND_TAP_Y,
       bandK: [...BAND_K],
-      bandPhT: band ? [band.ph[0], band.ph[1], band.ph[2]] : [0, 0, 0],
-      bandPhB: band ? [band.ph[3], band.ph[4], band.ph[5]] : [0, 0, 0],
+      bandPh: band ? [band.ph[0], band.ph[1], band.ph[2]] : [0, 0, 0],
     }),
     [band],
   );
   const uniforms = useDerivedValue(
-    () => ({ useGrid, strength: on * gain * fade.get(), limit, occLo, occRamp, grain: GRAIN, occRadius: OCC_RADIUS, gammaK: GAMMA, peak, ...bandU }),
-    [useGrid, on, gain, limit, occLo, occRamp, peak, bandU],
+    () => ({ useGrid, strength: on * gain * fade.get(), limit, liftCap, occLo, occRamp, grain, occRadius: OCC_RADIUS, gammaK, peak, densAmt, ...bandU }),
+    [useGrid, on, gain, limit, liftCap, occLo, occRamp, grain, gammaK, peak, densAmt, bandU],
   );
 
   // Harness: publish what was drawn so scripts/measure-ghost.mjs can check the clamp and the box.
@@ -243,7 +284,12 @@ export function Composite(props: CompositeProps) {
       meanLuma,
       p80Luma: props.p80Luma ?? meanLuma,
       clampRef: ref.mean,
-      clampLift: CLAMP_LIFT + pop * POP_LIFT,
+      clampLift,
+      median: ref.median ?? null,
+      sceneMedian: ref.sceneMedian ?? null,
+      nearBlack,
+      grain,
+      peakAlpha: peak * gain,
       occ: ref.occ,
       occRamp: ref.ramp,
       gradient: ref.gradient ?? null,
@@ -254,10 +300,10 @@ export function Composite(props: CompositeProps) {
       tier,
       pop,
     };
-  }, [publish, placement, width, height, meanLuma, props.p80Luma, ref.mean, ref.occ, ref.ramp, ref.gradient, band, ref.cut, variantShown, seed, tier, pop]);
+  }, [publish, placement, width, height, meanLuma, props.p80Luma, ref.mean, clampLift, ref.median, ref.sceneMedian, nearBlack, grain, peak, gain, ref.occ, ref.ramp, ref.gradient, band, ref.cut, variantShown, seed, tier, pop]);
 
   if (!effect) throw new Error('Composite: shader failed to compile');
-  const ready = !!photo && !!ghost && !!occl;
+  const ready = !!photo && !!layer && !!occl;
 
   return (
     <View testID={ready ? testID : undefined} pointerEvents="none" style={{ width, height }}>
@@ -266,7 +312,7 @@ export function Composite(props: CompositeProps) {
           <Rect x={0} y={0} width={width} height={height}>
             <Shader source={effect} uniforms={uniforms}>
               <ImageShader image={photo} fit="fill" rect={rect} tx="clamp" ty="clamp" />
-              <ImageShader image={ghost} fit="fill" rect={{ x: 0, y: 0, width, height }} tx="decal" ty="decal" />
+              <ImageShader image={layer} fit="fill" rect={{ x: 0, y: 0, width, height }} tx="decal" ty="decal" />
               <FractalNoise freqX={GRAIN_FREQ} freqY={GRAIN_FREQ} octaves={2} seed={(seed >>> 0) % 1000} />
               {occl ? <ImageShader image={occl} fit="fill" rect={rect} tx="clamp" ty="clamp" /> : null}
             </Shader>

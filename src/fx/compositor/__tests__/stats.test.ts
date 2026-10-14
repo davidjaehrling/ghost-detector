@@ -3,9 +3,24 @@ import { describe, expect, it } from 'vitest';
 import { placeGhost } from '../../ghostV0/placement';
 import { regionFromRgba } from '../../ghostV0/regionFromPixels';
 import { mulberry32 } from '../../../engine';
-import { bandVisibility, OCC_GRID_BLUR, OCC_RAMP } from '../blend';
+import { BAND_SOFT, bandMass, bandVisibility, OCC_GRID_BLUR, OCC_RAMP } from '../blend';
 import { layerCopies, motionCopies, ghostBlurSigma, MAX_COPIES, MIN_COPIES, SMEAR_PX, smearFor } from '../motion';
-import { BAND_BOTTOM, BAND_H, bandCut, cellsUnderFigure, cutShare, FLAT_GRADIENT, gradientEnergy, OCC_CUT_MIN, OCC_RAMP_MIN, reference, unionBox } from '../reference';
+import {
+  bandCut,
+  cellsUnderFigure,
+  cutShare,
+  FLAT_GRADIENT,
+  gradientEnergy,
+  INTERIOR_LUMA,
+  NEAR_BLACK,
+  OCC_CUT_MIN,
+  OCC_RAMP_MIN,
+  reference,
+  SMUDGE_OPACITY,
+  SMUDGE_SCALE,
+  smudgePlacement,
+  unionBox,
+} from '../reference';
 import { estimateP80, halvingSteps, lumaUnder, occlusionGrid, REGION_GRID, statsFromRgba } from '../regionStats';
 
 const W = 192;
@@ -108,9 +123,9 @@ describe('reference', () => {
     }
   });
 
-  it('on a flat scene (black or bright) a synthetic foreground band cuts at least 10% of the figure (D-022)', () => {
+  it('on a flat interior a soft foreground mass rises from below into the lower third and cuts at least 10% (D-023)', () => {
     const rnd = mulberry32(11);
-    for (const base of [0, 2, 128, 221, 250]) {
+    for (const base of [14, 40, 128, 198]) {
       const width = 72;
       const height = 96;
       const luma = Uint8Array.from({ length: width * height }, () => Math.min(255, base + Math.floor(rnd() * 2)));
@@ -120,33 +135,66 @@ describe('reference', () => {
           const p = placeGhost(null, { w: 318, h: 424 }, seed, { tier });
           const r = reference({ meanLuma: base, p80Luma: base + 1, region: null, grid, placement: p, photoRect, seed });
           const band = r.band!;
-          expect(band, `base ${base} seed ${seed}`).not.toBeNull();
+          const at = `base ${base} seed ${seed} ${tier}`;
+          expect(band, at).not.toBeNull();
+          expect(r.nearBlack).toBe(false);
           expect(r.gradient!).toBeLessThan(FLAT_GRADIENT);
-          // Height 15 to 30% of the figure, centred in its lower third.
-          const h = (band.y1 - band.y0) / p.h;
-          expect(h).toBeGreaterThanOrEqual(BAND_H[0] - 1e-9);
-          expect(h).toBeLessThanOrEqual(BAND_H[1] + 1e-9);
-          const c = ((band.y0 + band.y1) / 2 - p.y) / p.h;
-          expect(c).toBeGreaterThanOrEqual(2 / 3 - 1e-9);
-          expect(c).toBeLessThanOrEqual(1);
-          // Its bottom at or past the end of the hem dissolve: nothing of the figure under it.
-          expect((band.y1 - p.y) / p.h).toBeGreaterThanOrEqual(BAND_BOTTOM[0] - 1e-9);
-          // At least 10% of the figure is hidden, by the band alone.
-          expect(bandCut(band, p), `base ${base} seed ${seed} ${tier}`).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+          // At least 10% of the figure is hidden, by the mass alone.
+          expect(bandCut(band, p), at).toBeGreaterThanOrEqual(OCC_CUT_MIN);
           expect(r.cut!).toBeGreaterThanOrEqual(OCC_CUT_MIN);
-          // Inside it the ghost is gone; well above it untouched; its edge is ragged, not a line.
-          const mid = (band.y0 + band.y1) / 2 + band.slope * (p.x + p.w / 2 - band.cx);
-          expect(bandVisibility(p.x + p.w / 2, mid, band)).toBeLessThan(0.01);
-          expect(bandVisibility(p.x + p.w / 2, p.y + p.h * 0.2, band)).toBe(1);
-          const edgeAt = (x: number) => {
-            let y = p.y;
-            while (bandVisibility(x, y, band) > 0.5 && y < p.y + 2 * p.h) y += 0.25;
-            return y - band.slope * (x - band.cx);
-          };
-          const ys = Array.from({ length: 20 }, (_, i) => edgeAt(p.x + (p.w * i) / 19));
-          expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(band.rag / 2);
+          // Never from above: nothing of it above the figure's lower third (its soft ramp included),
+          // nor at the top of the panel, anywhere across.
+          for (let x = 0; x <= 318; x += 3) {
+            expect(bandMass(x, p.y + (p.h * 2) / 3 - BAND_SOFT, band), `${at} x ${x}`).toBe(0);
+            expect(bandMass(x, 0, band)).toBe(0);
+          }
+          // It comes up from below: under the figure's hem at its centre the ghost is gone.
+          expect(bandVisibility(band.cx, p.y + p.h * 0.97, band), at).toBeLessThan(0.01);
+          // Its colour is sampled from the scene just under the figure.
+          const u = unionBox(p);
+          expect(band.sampleY).toBeGreaterThanOrEqual(Math.min(photoRect.height - 2, u.y + u.h));
+          // Out of focus: its top edge ramps over 10 to 16 px (coverage 2% to 98%).
+          let y = p.y;
+          while (bandMass(band.cx, y, band) < 0.02) y += 0.05;
+          const y0 = y;
+          while (bandMass(band.cx, y, band) < 0.98) y += 0.05;
+          expect(y - y0, at).toBeGreaterThanOrEqual(10 * 0.85);
+          expect(y - y0, at).toBeLessThanOrEqual(16);
         }
       }
+    }
+  });
+
+  it('draws no mass on a near-black or a blown-out flat scene; the scene-edge cut stays (D-023)', () => {
+    const rnd = mulberry32(13);
+    for (const base of [0, 2, 9, 221, 250]) {
+      const width = 72;
+      const height = 96;
+      const luma = Uint8Array.from({ length: width * height }, () => Math.min(255, base + Math.floor(rnd() * 2)));
+      const grid = { luma, width, height };
+      for (let seed = 1; seed < 20; seed++) {
+        const p = placeGhost(null, { w: 318, h: 424 }, seed, { tier: 'active' });
+        const r = reference({ meanLuma: base, p80Luma: base + 1, region: null, grid, placement: p, photoRect, seed });
+        expect(r.band, `base ${base} seed ${seed}`).toBeNull();
+        expect(r.nearBlack).toBe(base + 1 < NEAR_BLACK);
+        expect(base + 1 < INTERIOR_LUMA[0] || base > INTERIOR_LUMA[1]).toBe(true);
+        expect(r.cut!).toBeGreaterThanOrEqual(OCC_CUT_MIN);
+      }
+    }
+  });
+
+  it('the near-black smudge is the figure at 0.7 scale about its centre, at the lowest opacity band (D-023)', () => {
+    for (let seed = 1; seed < 30; seed++) {
+      const p = placeGhost(null, { w: 318, h: 424 }, seed, { tier: 'critical' });
+      const s = smudgePlacement(p);
+      expect(s.w).toBeCloseTo(p.w * SMUDGE_SCALE, 9);
+      expect(s.h).toBeCloseTo(p.h * SMUDGE_SCALE, 9);
+      expect(s.x + s.w / 2).toBeCloseTo(p.x + p.w / 2, 9);
+      expect(s.y + s.h / 2).toBeCloseTo(p.y + p.h / 2, 9);
+      expect(s.opacity).toBe(SMUDGE_OPACITY);
+      expect(SMUDGE_OPACITY).toBeGreaterThanOrEqual(0.08);
+      expect(SMUDGE_OPACITY).toBeLessThanOrEqual(0.1);
+      s.offsetCopies.forEach((c, i) => expect(c.dx).toBeCloseTo(p.offsetCopies[i]!.dx * SMUDGE_SCALE, 9));
     }
   });
 

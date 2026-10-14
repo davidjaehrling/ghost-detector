@@ -19,10 +19,12 @@
 // ghost alone. Differences are computed in the browser from the two screenshots (never by reading
 // pixels back from the Skia canvas).
 //
-// Targets: mean lift in the figure box 8 to 20, darkened 0, union box <= 15% of the panel,
-// figure centre 15 to 40% in from a side edge and 10% clear of the top and bottom, and at least
-// 10% of the figure cut by the scene's edges or, on a flat scene, the synthetic foreground band
-// (the compositor's own figure, published on window.__composite: gradient, band, cut).
+// Targets: mean lift in the figure box 8 to 20 (on a near-black scene, the smudge fallback of
+// D-023: 6 to 12, max lift 18), darkened 0, union box <= 15% of the panel, figure centre 15 to 40%
+// in from a side edge and 10% clear of the top and bottom, at least 10% of the figure cut by the
+// scene's edges or, on a flat interior, the synthesised foreground mass (the compositor's own
+// figure, published on window.__composite: gradient, band, cut), and no mass on an edge-rich
+// (gradient 2.5 or more) or near-black scene.
 import { chromium } from '@playwright/test';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -139,9 +141,10 @@ async function diff(withB64, withoutB64, info) {
       let overLimit = 0;
       const overAt = [];
       // Clamp check: the ghost may lift a pixel to clampRef + clampLift (published; CLAMP_LIFT 34, plus POP_LIFT on
-      // the pop frame) at most. Grain (up to 0.04 * 255) sits on both shots, so the bound carries that slack plus 1
-      // for rounding.
+      // the pop frame, NEAR_BLACK_LIFT 18 on a near-black scene) at most. Grain (published: up to 0.04 * 255, 1.5x
+      // on a near-black scene) sits on both shots, so the bound carries that slack plus 1 for rounding.
       const limit = info ? info.clampRef + (info.clampLift ?? 34) : Infinity;
+      const grainSlack = (info?.grain ?? 0.04) * 255;
       let maxLift = 0;
       let lifted = 0;
       let bx0 = W;
@@ -152,7 +155,7 @@ async function diff(withB64, withoutB64, info) {
         const d = L(da, p * 4) - L(db, p * 4);
         lift[p] = d;
         if (d < -1e-6) darkened++;
-        if (d > 0.5 && d > limit - L(db, p * 4) + 0.04 * 255 + 1) {
+        if (d > 0.5 && d > limit - L(db, p * 4) + grainSlack + 1) {
           overLimit++;
           overAt.push(p);
         }
@@ -240,12 +243,15 @@ async function pass(name, extra, warped) {
       const m = await diff(a.png, b.png, a.info);
       const sideIn = Math.min(m.cx, 1 - m.cx);
       const checks = {
-        lift: m.meanLift >= 8 && m.meanLift <= 20,
+        // Near-black scene (D-023): the smudge fallback, mean lift 6 to 12 and no pixel lifted past 18.
+        lift: a.info?.nearBlack ? m.meanLift >= 6 && m.meanLift <= 12 && m.maxLift <= 18 + 0.5 : m.meanLift >= 8 && m.meanLift <= 20,
         darkened: m.darkened === 0,
         clamp: !!a.info && m.overLimit === 0,
         union: m.union <= 0.15,
         place: sideIn >= 0.15 - 1e-3 && sideIn <= 0.4 + 1e-3 && m.cy >= 0.1 && m.cy <= 0.9,
         cut: !!a.info && typeof a.info.cut === 'number' && a.info.cut >= 0.1,
+        // D-023: never a synthesised mass on an edge-rich scene (gradient at or over 2.5) or off an interior.
+        mass: !!a.info && !(a.info.band && (a.info.gradient >= 2.5 || a.info.nearBlack)),
       };
       runsOut.push({ ...m, info: a.info, settled: a.settled && b.settled, checks });
     }
@@ -284,11 +290,11 @@ if (flag('json')) {
   const f = (v, d = 1) => (typeof v === 'number' ? v.toFixed(d) : String(v));
   const per = (r, fn) => r.runs.map(fn).join(' / ');
   console.log(`\nroute=${route} demo=${demo} viewport 390x844 @1x, ${runs} runs per fixture (values per run)\n`);
-  console.log('| pass | fixture | variant | clamp ref | mean lift | spread | max lift | darkened px | over clamp px | union box | centre (x, y) | gradient | occluder | cut | settled | target |');
-  console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+  console.log('| pass | fixture | variant | clamp ref | mean lift | spread | max lift | darkened px | over clamp px | union box | centre (x, y) | gradient | scene median | occluder | cut | settled | target |');
+  console.log('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const r of all)
     console.log(
-      `| ${r.pass} | ${r.fixture} | ${r.variant} | ${f(r.clampRef)} | ${per(r, (x) => f(x.meanLift))} | ${f(r.spread, 2)} | ${per(r, (x) => f(x.maxLift, 0))} | ${per(r, (x) => x.darkened)} | ${per(r, (x) => (x.info ? x.overLimit : 'n/a'))} | ${per(r, (x) => f(x.union * 100) + '%')} | ${per(r, (x) => `${f(x.cx, 2)}, ${f(x.cy, 2)}`)} | ${f(r.runs[0].info?.gradient, 2)} | ${r.runs[0].info ? (r.runs[0].info.band ? 'band' : 'scene') : 'n/a'} | ${per(r, (x) => (typeof x.info?.cut === 'number' ? f(x.info.cut * 100) + '%' : 'n/a'))} | ${per(r, (x) => (x.settled ? 'y' : 'n'))} | ${r.pass.includes('info') ? 'info' : r.ok ? 'PASS' : `FAIL (${r.failed.join(', ')})`} |`,
+      `| ${r.pass} | ${r.fixture} | ${r.variant} | ${f(r.clampRef)} | ${per(r, (x) => f(x.meanLift))} | ${f(r.spread, 2)} | ${per(r, (x) => f(x.maxLift, 0))} | ${per(r, (x) => x.darkened)} | ${per(r, (x) => (x.info ? x.overLimit : 'n/a'))} | ${per(r, (x) => f(x.union * 100) + '%')} | ${per(r, (x) => `${f(x.cx, 2)}, ${f(x.cy, 2)}`)} | ${f(r.runs[0].info?.gradient, 2)} | ${f(r.runs[0].info?.sceneMedian, 0)}${r.runs[0].info?.nearBlack ? ' (smudge)' : ''} | ${r.runs[0].info ? (r.runs[0].info.band ? 'mass' : 'scene') : 'n/a'} | ${per(r, (x) => (typeof x.info?.cut === 'number' ? f(x.info.cut * 100) + '%' : 'n/a'))} | ${per(r, (x) => (x.settled ? 'y' : 'n'))} | ${r.pass.includes('info') ? 'info' : r.ok ? 'PASS' : `FAIL (${r.failed.join(', ')})`} |`,
     );
   for (const r of all)
     r.runs.forEach((x, i) => {

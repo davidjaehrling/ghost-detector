@@ -391,11 +391,14 @@ P3-03 and P3-04. `ghostV0/` stays as the fallback and is unchanged.
     pixels; `photoRect` is where the photo sits in the panel (default centred cover); `grid` is
     `RegionStats.grid`; `variant` is 0..5 or `'png'` (the v0 matte `placement.matte`), default
     `seed % 6`. Web flags read inside it: `?static=1` (no fade), `?ghost=0` (photo and grain only).
-    `pop` (round 2, 0..1, `useScare`'s value): on the pop frame the peak alpha rises to `POP_ALPHA`
-    0.4 and the clamp opens by `POP_LIFT` 40 luma; the figure stays the same blurred layer.
+    `pop` (0..1, `useScare`'s value; D-023): on the pop frame the layer's stacked peak alpha goes to
+    `POP_ALPHA` 0.30 (a cap), the clamp opens by `POP_LIFT` 40 luma on a linear curve (`POP_GAMMA`
+    1, so the hem dissolve keeps its gradient), and the pop layer (built as soon as the scare is
+    armed) adds a 6 to 10 px smear along the figure's motion (`popSmearFor`) followed by the
+    variants' ragged-edge pass again (`POP_RAG_SKSL`), so the smear never rounds the hem off.
     Under `?static=1` it publishes `window.__composite` (`CompositeInfo`: placement, panel, clamp
-    reference and lift, occlusion threshold and ramp, gradient under the figure, synthetic band,
-    share of the figure cut, variant, seed, tier, pop) for
+    reference and lift, occlusion threshold and ramp, gradient under the figure, synthesised mass,
+    share of the figure cut, medians, near-black flag, grain, peak alpha, variant, seed, tier, pop) for
     `scripts/measure-ghost.mjs`, on the probe and the result route alike.
   - `wantsCompositorV1()`: true when the web URL has `v=1`.
   - `regionFromImage(uri) -> RegionStats | null`: `{ region, meanLuma, p80Luma, p90Luma, grid }`.
@@ -435,16 +438,25 @@ P3-03 and P3-04. `ghostV0/` stays as the fallback and is unchanged.
   figure's footprint (the ellipse in its box) is cut (`OCC_CUT_MIN` 10% is the tested floor); the
   ramp narrows to the scene's spread (3 to 10 luma), so a flat dark scene is cut in patches, not
   dimmed. Without the grid: 9 taps, 3 px radius, 80th percentile, 10 luma ramp, as before.
-- Synthetic foreground band on flat scenes (round 3, D-022): when the mean luma gradient of the
-  raw grid under the figure's ellipse is under `FLAT_GRADIENT` (2.5 luma per cell; black, bright
-  and the cellar's dark corner), lowering the threshold would only cut sensor noise, so the
-  threshold stays at the scene's own level and a soft band hides the ghost instead: seeded height
-  15 to 30% of the figure (`BAND_H`), its bottom 94 to 100% of the way down the figure box
-  (`BAND_BOTTOM`, past the hem dissolve, so nothing comes out under it; its centre in the lower
-  third), a seeded slant up to 0.12, ragged top and bottom edges (three seeded sines, `BAND_K`,
-  amplitude 3.5% of the figure height) with a 2.5 px soft ramp. Grown and then raised until it
-  hides at least 11% of the figure's ellipse. The photo is not touched. Scenes with edges keep
-  the adaptive scene-edge occlusion above.
+- Synthesised foreground mass on flat interiors only (D-023, replacing round 3's band): when the
+  mean luma gradient of the raw grid under the figure's ellipse is under `FLAT_GRADIENT` (2.5) and
+  the photo's median luma is 12 to 200 (`INTERIOR_LUMA`), a soft, out-of-focus mound rises from
+  below into the figure's lower third (`makeBand`: its top edge 76 to 84% down the box, raised
+  until it hides 11% of the ellipse, never above 2/3; crown sinking 4 to 10% of the figure height
+  at its sides; gentle long-wave edge noise; 12 px soft edges, `BAND_SOFT` 6). It is drawn in the
+  scene's own colour, sampled from the photo just under the figure and averaged across 48 px
+  (`BAND_MIX` 0.85), and is part of the scene (drawn with or without the ghost). Edge-rich scenes
+  (outdoors), blown-out frames (bright, median 233) and near-black frames keep only the adaptive
+  scene-edge occlusion above. Note: the dark spiky fringe along the top of the outdoors fixture
+  is the fixture's own tree line (`scripts/gen-fixtures.mjs`), not a compositor layer.
+- Near-black fallback (D-023): when the photo's median luma is under 12 (`NEAR_BLACK`), the figure
+  becomes the TRACE-style smudge (`smudgePlacement`: 0.7 scale about its centre, opacity 0.10,
+  the top of the lowest band; TRACE's blur times `NEAR_BLACK_BLUR` 4; no density patches) under a
+  hard ceiling of the local mean + 18 (`NEAR_BLACK_LIFT`; the shader holds it at 16,
+  `NEAR_BLACK_CAP`, which also caps every pixel's lift, leaving room for the glass laid over the
+  result panel), with the grain after compositing at 1.5x. It is the scene's median, not the
+  median under the figure: the cellar's floor under the figure is 6 to 7 luma in a room whose
+  median is 41, and there the normal figure is right.
 - Grain 4% after compositing, seeded FractalNoise, added equally with and without the ghost, so the
   with/without difference never goes negative.
 
@@ -535,6 +547,20 @@ irregularity at least 1.30 (test: 1.25), mirror at most 0.54, area 39 to 59%, la
 hole under 1%. The grid measures the apparition image; on screen the ghost layer's blur, motion
 copies and smear soften the finest teeth, so the outline reads as lumpy and broken (tendrils, a
 ragged hem, the band's ragged edge) rather than toothed.
+
+Round 4 (D-023 defect fixes), same command and route:
+
+| fixture | variant | clamp ref | mean lift | max lift | darkened px | over clamp px | union box | centre (x, y) | gradient | scene median | occluder | cut | target |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| cellar | 3 | 9.8 | 9.0 | 37 | 0 | 0 | 11.0% | 0.31, 0.62 | 0.84 | 41 | mass | 22.2% | PASS |
+| attic | 5 | 35.2 | 9.4 | 47 | 0 | 0 | 11.0% | 0.60, 0.38 | 4.82 | 35 | scene | 14.2% | PASS |
+| bright | 5 | 220.6 | 11.1 | 58 | 0 | 0 | 11.0% | 0.35, 0.62 | 2.12 | 233 | scene | 11.0% | PASS |
+| black | 5 | 1.5 | 6.2 | 16 | 0 | 0 | 5.4% | 0.60, 0.38 | 0.23 | 1 (smudge) | scene | 11.0% | PASS |
+| outdoors | 2 | 118.4 | 14.4 | 59 | 0 | 0 | 11.0% | 0.78, 0.62 | 11.74 | 114 | scene | 11.0% | PASS |
+
+Two runs, spread 0.00. Black's target is 6 to 12 with max lift 18 (the smudge); 6.2 is near the
+floor of what a 0.7-scale figure at 10% opacity can lift over its box (the Plus blend adds at
+most the layer alpha). The warped pass still shows the 20 px on the outdoors tree edge.
 
 ### What Builder A changes in the result screen
 1. Import from `src/fx/compositor`: `Composite`, `regionFromImage` (it returns a superset of the v0

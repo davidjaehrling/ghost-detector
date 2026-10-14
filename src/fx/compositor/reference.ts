@@ -11,7 +11,7 @@
  */
 import { mulberry32 } from '../../engine';
 import type { Placement, RegionInput } from '../ghostV0/placement';
-import { bandVisibility, OCC_GRID_BLUR, OCC_RAMP, type Band } from './blend';
+import { BAND_SOFT, bandVisibility, OCC_GRID_BLUR, OCC_RAMP, type Band } from './blend';
 import { estimateP80, lumaUnder, occlusionGrid, type LumaGrid } from './regionStats';
 
 /**
@@ -33,19 +33,55 @@ const smooth = (e0: number, e1: number, x: number) => {
 /**
  * Flat scene (D-022): below this mean luma gradient (luma per grid cell, raw grid, over the cells
  * under the figure's ellipse) nothing in the scene can cross the figure, so the adaptive threshold
- * would only cut sensor noise. The compositor then synthesises a foreground band instead.
+ * would only cut sensor noise. On a flat interior the compositor then synthesises a foreground
+ * mass instead (D-023: never on an edge-rich scene).
  */
 export const FLAT_GRADIENT = 2.5;
 /**
- * Band height as a share of the figure height (seeded), and where its bottom edge sits down the
- * figure box (seeded): at or past the end of the hem dissolve, so the figure goes behind it and
- * does not come out under it. Its centre then lies in the lower third.
+ * Near-black scene (D-023): when the scene's median luma (the whole photo's luma grid) is below
+ * this, the figure falls back to the TRACE-style smudge (`smudgePlacement`) under a hard ceiling
+ * of the local mean + NEAR_BLACK_LIFT, and the grain after compositing rises by NEAR_BLACK_GRAIN.
+ * It is the scene's median, not the median under the figure: the defect is a figure that is the
+ * brightest thing in the frame, which only happens when the whole frame is black. A dark corner
+ * of a lit room (the cellar's floor under the figure is 6 to 7 luma, the room's median 41) keeps
+ * the normal figure: the room around it is brighter.
  */
-export const BAND_H: readonly [number, number] = [0.15, 0.3];
-export const BAND_BOTTOM: readonly [number, number] = [0.94, 1.0];
-/** Ragged edge amplitude as a share of the figure height, and the most the band may slant. */
-export const BAND_RAG = 0.035;
-export const BAND_SLOPE = 0.12;
+export const NEAR_BLACK = 12;
+export const NEAR_BLACK_LIFT = 18;
+/**
+ * The compositor's own ceiling for the smudge, luma above the local mean and as a cap on any
+ * pixel's lift: 2 under NEAR_BLACK_LIFT. On the result screen the glass (scanlines and its own
+ * grain) lays light over the panel; where the smudge sits on its ceiling under a bright scanline
+ * and the 1.5x grain peaks, the on-screen pixel would otherwise read 1 to 2 luma over mean + 18.
+ */
+export const NEAR_BLACK_CAP = 16;
+export const NEAR_BLACK_GRAIN = 1.5;
+/** Extra blur on the near-black smudge, over TRACE's: a haze with no head shape left. */
+export const NEAR_BLACK_BLUR = 4;
+/**
+ * The smudge layer's real peak alpha as a share of its stacked bound (`stackedAlpha`) after that
+ * blur: the clamp curve's reference peak follows it, so the haze reaches its (low) ceiling.
+ */
+export const NEAR_BLACK_PEAK = 0.2;
+/** Smudge scale (about the figure's centre) and opacity: the top of the lowest band (TRACE's, 0.08 to 0.10). */
+export const SMUDGE_SCALE = 0.7;
+export const SMUDGE_OPACITY = 0.1;
+/**
+ * The synthesised mass is only drawn on an interior: the scene's median luma (whole photo) within
+ * these bounds. Darker is the near-black fallback, brighter a blown-out frame.
+ */
+export const INTERIOR_LUMA: readonly [number, number] = [12, 200];
+/**
+ * Synthesised foreground mass (D-023): a soft, out-of-focus mound rising from below into the
+ * figure's lower third. Its top edge starts BAND_TOP of the way down the figure box (seeded) and
+ * is raised, never above 2/3, until it hides OCC_CUT_TARGET of the figure's ellipse. Its crown
+ * sinks by BAND_HUMP of the figure height at its sides; its gentle edge noise peaks at BAND_RAG.
+ */
+export const BAND_TOP: readonly [number, number] = [0.76, 0.84];
+export const BAND_HUMP: readonly [number, number] = [0.04, 0.1];
+export const BAND_RAG = 0.03;
+/** The mass reaches this share of the figure height below the box, then fades out. */
+export const BAND_BELOW = 0.12;
 
 /**
  * Mean absolute luma gradient (central differences, half the x plus half the y step) over the grid
@@ -81,22 +117,23 @@ export function bandCut(band: Band, box: { x: number; y: number; w: number; h: n
 }
 
 /**
- * The synthetic foreground band for a figure box: a seeded height (BAND_H of the figure) with its
- * bottom BAND_BOTTOM of the way down it (its centre in the lower third), a seeded slant and ragged
- * edges. Grown about its centre (up to BAND_H's top) and then moved up (to the top of the lower
- * third) until it hides OCC_CUT_TARGET of the figure's ellipse.
+ * The synthesised foreground mass for a figure (`box`, and `union` with its copies): a mound
+ * centred near the figure (seeded offset), wide enough to take every copy, whose top edge sits in
+ * the figure's lower third (BAND_TOP, raised until it hides OCC_CUT_TARGET of the ellipse, never
+ * above 2/3 of the box) and which reaches BAND_BELOW under the box before fading out. Its colour
+ * is sampled from the scene at `sampleY` (panel px, just under the figure), so it reads as
+ * something out of focus in the room's own colour, never a dark fringe.
  */
-export function makeBand(box: { x: number; y: number; w: number; h: number }, seed: number): Band {
+export function makeBand(box: { x: number; y: number; w: number; h: number }, seed: number, union = box, sampleY = box.y + box.h): Band {
   const rnd = mulberry32((seed ^ 0x2545f491) >>> 0);
-  let hb = BAND_H[0] + (BAND_H[1] - BAND_H[0]) * rnd();
-  let c = BAND_BOTTOM[0] + (BAND_BOTTOM[1] - BAND_BOTTOM[0]) * rnd() - hb / 2;
-  const slope = (rnd() * 2 - 1) * BAND_SLOPE;
-  const ph = [0, 0, 0, 0, 0, 0].map(() => rnd() * Math.PI * 2) as unknown as Band['ph'];
-  const at = (): Band => ({ y0: box.y + box.h * (c - hb / 2), y1: box.y + box.h * (c + hb / 2), cx: box.x + box.w / 2, slope, rag: BAND_RAG * box.h, ph });
-  for (let i = 0; i < 40 && bandCut(at(), box) < OCC_CUT_TARGET; i++) {
-    if (hb < BAND_H[1]) hb = Math.min(BAND_H[1], hb + 0.01);
-    else c = Math.max(2 / 3, c - 0.01);
-  }
+  let top = BAND_TOP[0] + (BAND_TOP[1] - BAND_TOP[0]) * rnd();
+  const hump = (BAND_HUMP[0] + (BAND_HUMP[1] - BAND_HUMP[0]) * rnd()) * box.h;
+  const cx = box.x + box.w / 2 + (rnd() * 2 - 1) * 0.15 * box.w;
+  const ph = [0, 0, 0].map(() => rnd() * Math.PI * 2) as unknown as Band['ph'];
+  const halfW = Math.max(cx - union.x, union.x + union.w - cx) + BAND_SOFT;
+  const bottom = Math.max(union.y + union.h, box.y + box.h * (1 + BAND_BELOW));
+  const at = (): Band => ({ top: box.y + box.h * top, cx, halfW, hump, bottom, rag: BAND_RAG * box.h, ph, sampleY });
+  for (let i = 0; i < 40 && bandCut(at(), box) < OCC_CUT_TARGET; i++) top = Math.max(2 / 3, top - 0.01);
   return at();
 }
 
@@ -171,12 +208,12 @@ export interface ReferenceInput {
   placement: Placement;
   /** Where the photo sits in the panel, in panel pixels. */
   photoRect: { x: number; y: number; width: number; height: number };
-  /** Seeds the synthetic band on a flat scene. */
+  /** Seeds the synthesised foreground mass on a flat interior. */
   seed?: number;
 }
 
 export interface Reference {
-  /** Clamp reference: no ghost pixel is lifted above this + `CLAMP_LIFT`. 0..255. */
+  /** Clamp reference: no ghost pixel is lifted above this + `CLAMP_LIFT` (+ NEAR_BLACK_LIFT on a near-black scene). 0..255. */
   mean: number;
   /** Occlusion threshold: the ghost is hidden where the blurred scene is brighter. 0..255. */
   occ: number;
@@ -185,10 +222,15 @@ export interface Reference {
   source: 'figure' | 'region';
   /** Mean luma gradient under the figure (`gradientEnergy`), when the grid is known. */
   gradient?: number;
-  /** Synthetic foreground band on a flat scene (gradient under FLAT_GRADIENT), else null. */
+  /** Synthesised foreground mass on a flat interior (D-023), else null. */
   band: Band | null;
   /** Share of the figure's ellipse hidden by the scene threshold and the band together. */
   cut?: number;
+  /** Median luma under the figure's ellipse, and of the whole photo (grid), when the grid is known. */
+  median?: number;
+  sceneMedian?: number;
+  /** True on a near-black scene (the photo's median below NEAR_BLACK): the smudge fallback. */
+  nearBlack?: boolean;
 }
 
 /** Figure plus motion copies (and the CRITICAL echo), in panel pixels. */
@@ -200,6 +242,33 @@ export function unionBox(p: Placement): { x: number; y: number; w: number; h: nu
   return { x, y, w: p.w + Math.max(...xs) - Math.min(...xs), h: p.h + Math.max(...ys) - Math.min(...ys) };
 }
 
+const median = (v: ArrayLike<number>): number => {
+  if (!v.length) return 0;
+  const s = Array.from(v).sort((a, b) => a - b);
+  return s[s.length >> 1]!;
+};
+
+/**
+ * The TRACE-style smudge a near-black scene falls back to (D-023): the figure scaled by
+ * SMUDGE_SCALE about its centre (copies and echo with it) at the lowest opacity band (SMUDGE_OPACITY).
+ */
+export function smudgePlacement(p: Placement): Placement {
+  const k = SMUDGE_SCALE;
+  const w = p.w * k;
+  const h = p.h * k;
+  const out: Placement = {
+    ...p,
+    x: p.x + (p.w - w) / 2,
+    y: p.y + (p.h - h) / 2,
+    w,
+    h,
+    opacity: SMUDGE_OPACITY,
+    offsetCopies: p.offsetCopies.map((c) => ({ ...c, dx: c.dx * k, dy: c.dy * k })),
+  };
+  if (p.echo) out.echo = { ...p.echo, dx: p.echo.dx * k, dy: p.echo.dy * k };
+  return out;
+}
+
 export function reference(i: ReferenceInput): Reference {
   const p80 = i.p80Luma ?? estimateP80(i.meanLuma, i.p90Luma);
   const regionOcc = i.region === null ? Math.max(p80, i.p90Luma ?? p80) : p80;
@@ -209,19 +278,28 @@ export function reference(i: ReferenceInput): Reference {
     const local = lumaUnder(i.grid, { x: (u.x - r.x) / r.width, y: (u.y - r.y) / r.height, w: u.w / r.width, h: u.h / r.height });
     if (local) {
       const cells = cellsUnderFigure(occlusionGrid(i.grid, OCC_GRID_BLUR), i.placement, r);
+      const raw = cellsUnderFigure(i.grid, i.placement, r);
+      const med = median(raw);
+      const sceneMedian = median(i.grid.luma);
+      const nearBlack = sceneMedian < NEAR_BLACK;
       const occ0 = Math.max(regionOcc, local.p80);
       const gradient = gradientEnergy(i.grid, i.placement, r);
       const mean = Math.max(i.meanLuma, local.mean);
-      if (gradient < FLAT_GRADIENT) {
-        // Flat: keep the scene's own threshold (no lowering into the noise) and add the band.
+      const interior = sceneMedian >= INTERIOR_LUMA[0] && sceneMedian <= INTERIOR_LUMA[1];
+      const common = { mean, source: 'figure' as const, gradient, median: med, sceneMedian, nearBlack };
+      if (gradient < FLAT_GRADIENT && interior && !nearBlack) {
+        // Flat interior: keep the scene's own threshold (no lowering into the noise) and add the
+        // out-of-focus mass, its colour sampled just under the figure.
         const ramp = Math.min(OCC_RAMP, Math.max(OCC_RAMP_MIN, rampOf(cells)));
-        const band = makeBand(i.placement, i.seed ?? 0);
+        const sampleY = Math.min(r.y + r.height - 2, u.y + u.h + 4);
+        const band = makeBand(i.placement, i.seed ?? 0, u, sampleY);
         const sceneCut = cutShare(cells, occ0, ramp);
         const cut = 1 - (1 - sceneCut) * (1 - bandCut(band, i.placement));
-        return { mean, occ: occ0, ramp, source: 'figure', gradient, band, cut };
+        return { ...common, occ: occ0, ramp, band, cut };
       }
+      // Edge-rich (outdoors), near-black or blown-out: the scene-edge occlusion only.
       const a = adaptOcclusion(cells, occ0);
-      return { mean, occ: a.occ, ramp: a.ramp, source: 'figure', gradient, band: null, cut: cutShare(cells, a.occ, a.ramp) };
+      return { ...common, occ: a.occ, ramp: a.ramp, band: null, cut: cutShare(cells, a.occ, a.ramp) };
     }
   }
   return { mean: i.meanLuma, occ: regionOcc, ramp: OCC_RAMP, source: 'region', band: null };
