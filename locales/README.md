@@ -61,9 +61,16 @@ two rows. `scan.fault` is two sentences; a narrow glass sets one per row, split 
 ## Disclosure keys
 
 `src/i18n/disclosures.ts` lists the keys that never fall back to English: `sticker.head1`,
-`sticker.body`, `about.line`, `result.strip.mark`, `deep.sub`, `relay.body`, `relay.channelName`. The
-test checks each one exists in every language file present, differs from `en`, and carries the marker
-words (simulated, "detects nothing", video and an advertising word).
+`sticker.head2`, `sticker.body`, `about.line`, `result.strip.mark`, `deep.arm` (was `deep.sub`; the
+armed sentence above key 4), `deep.offline`, `relay.body`, `relay.channelName`, `share.card.mark`,
+`share.card.footer`, `engine.notify.prefix`. The test checks each one exists in every language file
+present, differs from `en`, and carries the marker words (simulated, "detects nothing", video and an
+advertising word).
+
+`deep.arm` is a sentence, so it stays in sentence case (`DEEP SCAN` is the only capitalised run). It must
+keep the D-038 sublabel words verbatim: EN `Sponsored video plays first`, DE `Werbevideo läuft zuerst`,
+ES `Video publicitario primero`, PT `Vídeo publicitário primeiro`. It sets on two lines at 360; the
+most it may hold is about 80 characters (EN 78, DE 80, ES 75, PT 76).
 
 ## Not here yet
 
@@ -101,7 +108,7 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 | `result.back` | NEW SCAN (8) | NEUER SCAN (10, two lines) |
 | `share.key` | SHARE (5) | TEILEN (6) |
 | `onboarding.unsure` | NOT SURE (8) | UNSICHER (8) |
-| `onboarding.skip` | SKIP (4) | WEITER (6) |
+| `onboarding.skip` | SKIP (4) | SKIP (4) |
 | `relay.fit` | FIT RELAY (9) | EINBAUEN (8) |
 | `relay.notNow` | NOT NOW (7) | SPÄTER (6) |
 | `history.emptyLegend` | VIEW FINDER (11) | SUCHER (6) |
@@ -137,7 +144,7 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 | `relay.notNow` | NOT NOW (7) | AHORA NO (8) |
 | `history.emptyLegend` | VIEW FINDER (11) | VISOR (5) |
 | `settings.open`, `legal.open` | OPEN (4) | ABRIR (5) |
-| `tag.short.*` | CELLAR ATTIC BEDROOM HALL OUTSIDE | SÓTANO DESVÁN DORM. PASIL. FUERA |
+| `tag.short.*` | CELLAR ATTIC BEDROOM HALL OUTSIDE | SÓTANO DESVÁN DORM. PASIL. EXTERIOR |
 
 - Over budget on purpose, rewritten shorter instead of shrunk: `history.unlogged` is `SIN REG.`; `viewfinder.hud.stored` is `VS · GUARD.`; `tag.short.hallway` is `PASIL.` (6 against `HALL` 4, +2).
 - `legal.impressum` stays `IMPRESSUM`: it opens the German document.
@@ -180,6 +187,43 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 3. `onboarding.skip` is a key-row legend in all four languages; the DE `WEITER` reads as "next", which matches what the key does (skip to the next screen).
 4. The share-card keys `share.card.*` were added to `en.json` by the FX Engineer while this work ran; all three languages carry them with the disclosure wording from `docs/localisation-rules.md` section 1. `share.card.mark` and `share.card.footer` are not in `DISCLOSURE_KEYS` yet; Compliance should add them to the contract test.
 5. A second-model review (P7-04) should look at: `INSTALAR` for `FIT` (relay), `STORY`/`HISTORIA`, `IRRLICHT` as a class name, `QUIT`, `CONDUTA`.
+
+## P8 wave 2 review (D-045)
+
+Builders A and B added keys with their own de, es and pt drafts. Copy reviewed every one against D-038
+(register), the +2 width budget, the disclosure words, the claim lists and the banned list. New keys:
+
+| Keys | Where |
+| --- | --- |
+| `fault.unit.code`, `fault.unit.cause`, `fault.optics.code`, `fault.optics.cause`, `fault.next`, `fault.reset`, `fault.resetLabel` | in-fiction FAULT screen (impersonal; codes `E-60`, `E-52` fixed) |
+| `viewfinder.window.open`, `viewfinder.window.inHours`, `viewfinder.window.inMinutes` | 03:00 countdown in the top strip, no seconds |
+| `scan.hold` | HOLD tag on the held thermal row |
+| `result.dtAvg`, `result.coldSpotMin`, `result.strip.a`, `result.strip.min`, `result.strip.avg` | named temperatures: row `ΔT AVG`, cold spot and strip `ΔT MIN` |
+| `deep.arm`, `deep.keyWarming`, `deep.keyOffline` | two-step arm line and key 4 states (replace `deep.sub`) |
+| `engine.notify.t4.body`, `engine.notify.t4.body.untagged` | template 4 with the case clock time and tag |
+| `relay.settingsHelp` (changed) | Settings help names the CALM effect (A-71) |
+
+Dropped: `result.coldSpot`, `deep.sub`.
+
+Choices:
+
+- `HOLD` stays English in all four languages. It is the printed legend on hold-function instruments in every market, and `SPI`, `IDX`, `EVP` are kept the same way.
+- DE `ΔT MW` (Mittelwert) for the average. The builder's `ΔT MITT` is not a word or an abbreviation. `ΔT MITTEL` is 9 and the label column holds 8. `Ø` was not used: the glyph is not in the cmap check.
+- DE `deep.arm` opens with `Dekodiert`, the verb the app already uses for the signature (`SIGNATUR 58% DEKODIERT`). `Löst ... auf` also reads as "dissolves". `erneut` replaces the colloquial `nochmal`. `Ermittelt` was not used: `ermittelt*` is a claim word.
+- ES and PT `deep.arm` end `iniciar` (verb), not `inicio` (noun), so the last clause is an instruction like `Pulsar CAPTURAR`.
+- DE `ANZEIGEMODUL` and `ANZEIGEPROZESS` replace `ANZEIGEKERN` and `BILDSCHIRMPROZESS`: one word for the display, and `-kern` read as "nucleus".
+- PT `deep.keyWarming` is `ESPERA`, the same noun as ES and as `viewfinder.hud.wait`. `AGUARDE` was an imperative. DE `WARTEN` already matches `SU · WARTEN`.
+- ES `viewfinder.window.open` is `03:00 ABIERTA` (13 against 10, +3). It is shorter than the longest state, `03:00 EN 12 H 59 MIN`, so the strip width does not move. PT `ABERTA` likewise.
+- ES `share.storySub` is `STORY` (was `HISTORIA`, 8 against 5, +3, and one letter from the HISTORIAL screen). DE and PT already print `STORY`.
+- DE `onboarding.skip` is `SKIP` (A-14). `WEITER` means continue and `NOT SURE` already covers that. DE has no skip word inside the 6 character budget (`ÜBERSPRINGEN` 12, `ÜBERSPR.` 8); `SKIP` is the legend on German players and streaming apps. ES `OMITIR` and PT `SALTAR` already mean skip.
+- `legal.code` drops the mode number in all four languages (`LEGAL`, `RECHTLICHES`), as A-72 did for History and Settings. `MODE 5` was then printed on Legal beside a Settings screen that no longer carried it.
+- A-25: the short tag set is the one set at every width: EN `CELLAR ATTIC BEDROOM HALL OUTSIDE`, DE `KELLER DACH SCHLAFZ. FLUR AUSSEN`, ES `SÓTANO DESVÁN DORM. PASIL. EXTERIOR`, PT `CAVE SÓTÃO QUARTO CORR. FORA`. The long set cannot fit five chips at 360 in EN (239.8 px against 232 for 12 px gaps). `tag.*` (long) stays for notifications and sentences, where `Dorm.` would read badly.
+- A-71: `relay.settingsHelp` ends `CALM sends fewer.` / `RUHIG sendet weniger.` / `CALMA envía menos.` / `CALMA envia menos.` The words are the `intensity.calm` values. Builder B's `notify.test.ts` proves it: Calm sends templates 2 and 5 only, cap 1 a week against 2 and 3.
+- A-82: `relay.body` carries the catalogue in all four languages (Builder A's text kept, no change). Compliance re-reads.
+- A-84: template 4 DE opens `Protokolliert` (was drafted `Erfasst`, which says captured). `{tag}` stays lowercase as the engine passes it. German nouns need a capital, so DE needs `{Tag}`; see the open item in the commit report.
+- Register: fault, window, temperature, strip and key keys are impersonal; the deep arm line and relay copy need no pronoun, so none was added.
+
+Width: DE `deep.arm` (80 characters) and all others fit two lines at an estimated 43 characters a line at 360 (VT323 16 px, 6.4 px advance); the bounding-box test decides.
 
 ## Checks
 

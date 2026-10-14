@@ -1,5 +1,5 @@
 {
-  "legal.code": "MODE 5 · LEGAL",
+  "legal.code": "LEGAL",
   "legal.next": "BACK",
   "legal.nextLabel": "Back to settings",
   "legal.open": "OPEN",
@@ -193,7 +193,7 @@
   "relay.fitted": "Relay fitted. Change in Settings.",
   "relay.notFitted": "Relay not fitted. Change in Settings.",
   "relay.settingsLabel": "FIELD LOG RELAY",
-  "relay.settingsHelp": "Max 1 line a night. 18:00 to 22:00.",
+  "relay.settingsHelp": "Max 1 line a night. 18:00 to 22:00. CALM sends fewer.",
   "relay.blocked": "RELAY BLOCKED BY SYSTEM. OPEN SYSTEM SETTINGS.",
   "relay.channelName": "Field log",
   "settings.calm": "CALM MODE. SCARE CIRCUIT DISABLED.",
