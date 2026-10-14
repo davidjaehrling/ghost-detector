@@ -1041,6 +1041,70 @@
       ],
       "passes": true,
       "refuter": "HOLDS; Refuter P5 sweep at 007b584 and re-check at 6d44350 (D-029, D-030)"
+    },
+    {
+      "id": "P6-01",
+      "phase": "P6",
+      "description": "Share card renderer",
+      "acceptance": "`src/fx/share/`: an offscreen Skia render of the field card from a scan record in two PNG formats, story 1080x1920 and square 1080x1080, laid out per docs/p6-brief.md §1.4 (nameplate, the composite photo with the data strip burned under the grain and gaining the field `SIMULATED`, reading row with the tier and either `SIGNATURE [n]% DECODED` or the class and EVP line after a Deep Scan, footer `[STORE NAME] · READINGS ARE SIMULATED` with the store name in one constant filled at Gate 1); the ghost keeps the opacity the user saw; no ad, key, QR code, arrow or claim word on the card; the SIMULATED mark has cap height at least 2% of the card height, contrast at least 4.5:1, opacity 100%, present on both formats (unit tests measure both from the rendered pixels); deterministic for a seed; native output via `makeImageSnapshot` to a file, web via the same path into a data URL; a probe route renders both formats for goldens at 390; `src/fx/README.md` documents it",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P6-02",
+      "phase": "P6",
+      "description": "Share flow on the result screen",
+      "acceptance": "A SHARE key on the result screen works on any result once the SPI digit lands; the proactive line `Field card ready. CASE [n].` appears only on ACTIVE and above, 3.0 s after the reveal settles, once per result, and once more as `Field card updated. Class and EVP added.` after a Deep Scan; it never shows while a rewarded ad loads or plays or within 3 s after; the format choice `Print field card. Format?` offers keys 9:16 and 1:1; the system share sheet opens through expo-sharing with the title `Send field card · CASE [n]` and a text that says the readings are simulated; no ad on the screen while the share flow is open; the interstitial is skipped on the next return after a share; `track('share_card', { format })`; web stub records the share in `window.__shareLog`; goldens for the offer line and the format choice at 390; TRACE results get the key but no proactive line",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P6-03",
+      "phase": "P6",
+      "description": "Investigation log",
+      "acceptance": "The history screen becomes the log per docs/p6-brief.md §3: cases grouped by location tag with a record row per tag (`[TAG] · [n] CASES · PEAK [spi] [tier] · [date time]`), case rows with case ID, SPI, tier and `UNRESOLVED [n]%` where the signature is not decoded, a `NIGHTS LOGGED [n]` count that only rises, no streaks that reset, no badges, nags or countdowns; a case row opens the stored result with its standing DEEP SCAN key (no DEEP SCAN key in the list itself, never next to the banner); decodes never expire; the banner slot keeps 24 dp from every row and from any clear control, re-asserted by the banner spec against the real rows; goldens for an empty log, a log with three tags, and a reopened case at 390; unit tests for the grouping and the counts",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P6-04",
+      "phase": "P6",
+      "description": "Notification scheduler (pure engine)",
+      "acceptance": "`src/engine/notify.ts`: pure, seeded scheduler that, from the install state (intensity, belief, session count, opted-in flag, scan records, logged tags, now), returns the next notification to schedule or none: templates 1 to 5 from docs/p6-brief.md §2.4 with their values filled, delivery window 18:00 to 22:00 local only, never in the first session or before opt-in, at most one per night, weekly caps Brave 3, Standard 2, Calm 1, Calm limited to the moon and catalogue templates, template 4 once per case and never for a declined case and never on Calm, back-off (two ignored in a row drop one cap level; 7 days with no open stop scheduling), no EVP quote in any notification, no template text that claims activity now; property tests over 10,000 random states assert every rule; `src/engine/README.md` documents it",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P6-05",
+      "phase": "P6",
+      "description": "Opt-in module and local notifications",
+      "acceptance": "The FIELD LOG RELAY module (header, body and keys `FIT RELAY` / `NOT NOW` exactly as docs/p6-brief.md §2.2) appears once, on the first return to the viewfinder after the third scan or the first STRONG, never on a result screen and never on a return that shows an interstitial; FIT RELAY requests the Android 13+ notification permission through expo-notifications and reports `Relay fitted. Change in Settings.` or `Relay not fitted. Change in Settings.`; NOT NOW is final apart from a RELAY toggle in Settings; notifications are local only on a `Field log` channel at default importance, scheduled from `src/engine/notify.ts`, cancelled and rescheduled at once when the intensity changes to Calm; no notification poses as a system alert or alarm; web stub records schedules in `window.__notifyLog`; e2e spec walks the opt-in moment and the Settings toggle; unit tests for the trigger condition",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P6-06",
+      "phase": "P6",
+      "description": "Compliance sign-off on P6",
+      "acceptance": "Compliance reviews docs/p6-brief.md before the build (template 4 as a notification that leads toward a rewarded ad under AdMob incentive rules, the SIMULATED mark spec, the notification wording against the §7 red line, the Data safety rows for the notification permission) and the P6 diff before merge; every VETO is fixed before merge; docs/data-safety.md updated for notifications; logged in docs/decisions.md",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P6-07",
+      "phase": "P6",
+      "description": "P6 panel scoring",
+      "acceptance": "Dr. Hollow (x2) and the Art Director score both card formats, the share flow, the opt-in module, each template and the log on the docs/p6-brief.md §5.1 rubric (shareability, curiosity gap, honesty, intrusiveness with 10 meaning none) from fresh goldens; exit at a weighted mean of 8 with no dimension under 7; honesty under 7 blocks that surface; at most two rounds in P6, leftovers to P8",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P6-08",
+      "phase": "P6",
+      "description": "Refuter sweep of P6",
+      "acceptance": "The Refuter (a model other than the builders') tries to disprove P6-01 to P6-06 from command outputs, rendered cards, goldens and the diff, including the SIMULATED mark measurement and the scheduler's property-test generator; every HOLD is flipped by the Director; every DISPROVED is fixed and re-checked",
+      "evidence": [],
+      "passes": false
     }
   ]
 }

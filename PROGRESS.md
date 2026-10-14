@@ -3,11 +3,12 @@
 Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what is next, what blocks.
 
 ## Current phase
-**P5 Monetization & consent** on branch `claude/p5-monetization` (from `main` at 208dbbe, the P3 squash merge). P6 (share card, notifications, log) starts in parallel once P5 wave 1 lands. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
+**P6 Retention & share** on branch `claude/p6-retention` (from `main` at c4e8954, the P5 squash merge). P7 localisation follows; P8 carries the design-loop leftovers and the believability loop on real photographs. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
 
-P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4 (2026-10-14). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
+P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4, P5 as PR #5 (2026-10-14). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
 
 ## Last thing done
+- P5 merged as PR #5 (c4e8954). P6 contract P6-01 to P6-08 written from docs/p6-brief.md (D-031); wave 1 launched: Compliance pre-review, share card renderer, notification scheduler, investigation log and opt-in module.
 - P5 verified: Compliance diff review (D-028, veto fixed), Refuter sweep and re-check (D-029, D-030), boot flake fixed with readiness signals and a spec wait verified at CPU throttle x12 (D-027). P5-01..06, 08, 09, 11 flipped; P5-07 facade built, native backend owner-blocked; P5-10 owner-blocked. PR #5 ready; merge on CI green at 9f08f1a. Dr. Hollow's P6 brief in docs/p6-brief.md.
 - P5 waves 1a and 1b committed (aea4a25..0d7d771): consent-gated ads facade with web no-op backend, analytics allowlist, LEGAL/ABOUT, production gate, cadence machine (441d782), rewarded DEEP SCAN, interstitial runtime, banner on history; 435 unit tests, 242 e2e x2. PR #5 open (draft). Boot golden flake diagnosed (D-027), FX signals landed (e3f1b26); Builder A wiring the boot screen, Compliance diff review running.
 - P3 merged as PR #4 (208dbbe). P5 contract P5-01 to P5-11 written (D-025); Compliance contract review and Builder B cadence machine launched.
@@ -27,7 +28,7 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Merge PR #5 on CI green; open `claude/p6-retention` with the P6 contract from docs/p6-brief.md (share card, opt-in notifications, investigation log; Compliance pre-review of template 4 and the SIMULATED mark).
+1. P6 wave 1 (renderer, scheduler, log, opt-in, Compliance pre-review), then the share flow and notifications wiring, panel scoring, Compliance diff review, Refuter sweep, merge.
 2. P6 share card, notifications and investigation log (parallel with P5 once wave 1 lands); P7 localisation after.
 3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase; plus 5 to 8 real dark-room photos for `e2e/fixtures/real/` (D-023).
 
@@ -47,3 +48,4 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 | P3 | ~4.3M | Subagents: Skia 106k, glass 208k, apparition/compositor 343k, thermal 167k, Builder A integration 376k + 274k, round 2 FX 531k + 94k + Builder A 385k, round 3 FX 361k + defects, scoring 167k + 182k (void) + 168k + 135k, Refuter 167k + 141k; Director context ~0.3M |
 | P4 | ~0.25M (engine 133k, test fix 61k; the screen wiring is counted under P3) | P4-07 phone check waits on the owner |
 | P5 | ~2.3M | Subagents: compliance 76k+147k+151k, cadence 76k, Builder A 140k+286k+79k+85k+84k, release 60k, QA diagnosis 126k + fix 102k, FX 84k, Refuter 148k+69k, Hollow P6 brief 106k; Director context ~0.15M |
+| P6 | (running) | |
