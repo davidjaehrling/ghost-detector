@@ -39,7 +39,7 @@ Maps every shipped SDK to the answers in Play Console, Data safety form. Status:
 | same | App info and performance: Diagnostics (crash logs, performance) | Collected and shared | Analytics; Fraud prevention, security and compliance | No | No |
 | same | Location: Approximate location (derived from IP) [U] | Collected and shared | Advertising or marketing | No | Yes (not stored in app) |
 | `@react-native-firebase/app` + `@react-native-firebase/analytics` 26.x (only when `google-services.json` is present and consent is given) [U] | Device or other IDs (app instance ID; advertising ID not used, `google_analytics_adid_collection_enabled` false) | Collected | Analytics | Yes, off until consent | No |
-| same | App activity: App interactions (the six allowlisted events) | Collected | Analytics | Yes, off until consent | No |
+| same | App activity: App interactions (the seven allowlisted events; the seventh, `fault`, carries a fixed code, E-52 or E-60, only) | Collected | Analytics | Yes, off until consent | No |
 | same | App info and performance: Diagnostics [U] | Collected | Analytics | Yes | No |
 | same | Location: Approximate location (country from IP) [U] | Collected | Analytics | Yes | No |
 | `expo-localization` (reads the device locale to choose the UI language) | none | Not collected. The locale is read on the device and nothing is transmitted. | n/a | n/a | n/a |
@@ -78,3 +78,4 @@ Not collected by any shipped SDK: name, email, address, phone, precise location,
 10. Localised store listings: each locale's title, short description, first sentence of the full description, feature graphic and first screenshot say plainly in that language that readings are simulated. No title carries echt, real, verdadero, auténtico or wirklich. PT store locale is pt-PT.
 11. Card profile line: localise the leftover English `TO` in `ÄRA EST. 1880 TO 1934` and `ÉPOCA EST. 1880 TO 1934` (in-fiction text, not a disclosure).
 12. Notification channel name: Android keeps the name from channel creation. After an in-app language switch, update or recreate the `field-log` channel so the name follows, or accept the stale name (every localised name passes).
+13. `fault` is crash-code telemetry, not Play's Crash logs category. If Firebase Crashlytics is ever added, add a Diagnostics row.

@@ -52,6 +52,7 @@ Only these events are sent:
 | `deep_scan_rewarded` | none |
 | `interstitial_shown` | none |
 | `share_card` | none |
+| `fault` | `code` (E-52 or E-60, the instrument fault code shown on screen). No message, stack or screen name. |
 
 No photo, image data, scan result text or location is part of these events. Firebase also processes an app instance ID and basic device and app information (device model, OS version, app version, country derived from the IP address) to deliver the service. The advertising ID is not used for analytics in this app. Provider: Google Ireland Limited. See https://firebase.google.com/support/privacy.
 
