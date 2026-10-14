@@ -25,7 +25,8 @@ import {
 } from '../src/ui/boot/parts';
 import { dayKey } from '../src/ui/boot/seed';
 import { selfTestReadings } from '../src/ui/boot/selftest';
-import { PrimingTransient, usePrimingTransient } from '../src/ui/boot/Transient';
+import { bootSpike } from '../src/fx/scope';
+import { PrimingTransient, transientLine, usePrimingTransient } from '../src/ui/boot/Transient';
 import { Readout } from '../src/ui/Readout';
 import { composeFields } from '../src/ui/readoutFields';
 import { Housing } from '../src/ui/screens/Housing';
@@ -139,7 +140,10 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
   }, [actFontReady, isStatic]);
   const actPeak = actFontReady && !isStatic && !peakDone;
   const [warmDone, setWarmDone] = useState(isStatic);
-  const transient = usePrimingTransient({ armed: warmDone, still: isStatic, peak: spike });
+  // The transient varies per launch (A-11); the harness (static or peak) freezes it so goldens stay fixed.
+  const [launchSeed] = useState(() => Date.now());
+  const spikeParams = useMemo(() => bootSpike(launchSeed, isStatic || spike), [launchSeed, isStatic, spike]);
+  const transient = usePrimingTransient({ armed: warmDone, still: isStatic, peak: spike, fires: spikeParams.fires });
 
   const goOn = () => router.push('/viewfinder');
   const onAcknowledge = () => {
@@ -197,7 +201,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
           <>
             <Graticule w={w} h={h} rows={rows} />
             <IdleTrace w={w} seed={dayKey(date) + 1} rows={rows} />
-            <PrimingTransient w={w} rows={rows} amp={transient.amp} still={isStatic} reduceMotion={reduceMotion} />
+            <PrimingTransient w={w} rows={rows} amp={transient.amp} still={isStatic} reduceMotion={reduceMotion} spike={spikeParams} />
             <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} rows={rows} />
 
             <View style={[s.readout, { left: snap4(gridLeft), top: snap4(gridBottom + READOUT_GAP) }]} testID="readout">
@@ -214,7 +218,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
               {calibrating ? null : <Text style={s.stM}>{copy.selftestOk.slice(0, Math.max(0, typed - lineLen.reduce((n, p) => n + p, 0)))}</Text>}
               {calibrating ? null : (
                 <Text style={[s.transient, { opacity: transient.logged ? 1 : 0 }]} testID="transient">
-                  {copy.transient}
+                  {transientLine(copy.transient, spikeParams.count)}
                 </Text>
               )}
               <View style={s.activity}>
