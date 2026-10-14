@@ -1,9 +1,10 @@
 import { Canvas, Group, ImageShader, Rect, Shader, Skia, type SkImage } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { color, fx } from '../../ui/tokens';
 import { hexToRgb } from './color';
 import { GlassLayers, GlassOverlay, GrainCanvas, type GlassLayersProps } from './GlassOverlay';
+import { afterFrames } from './ready';
 import { useBarrelEffect } from './shaders';
 import { snapshotView } from './snapshotView';
 import { useStaticDefault } from './useGlassClock';
@@ -17,7 +18,10 @@ export type GlassWarpProps = Omit<GlassLayersProps, 'width' | 'height'> & {
   radius?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
-  onSnapshot?: (ok: boolean) => void;
+  // Fired with String(refreshKey) once each snapshot has landed: two animation frames after the
+  // warped canvas mounted, so the barrel pass has drawn. Not fired when a snapshot fails (the
+  // flat overlay stays). On web the `${testID}-warped` node also carries data-warped="<key>".
+  onSnapshot?: (key: string) => void;
 };
 
 // Barrel curvature for static-ish screens (boot, result). An overlay cannot bend the views
@@ -36,6 +40,11 @@ export function GlassWarp({ children, refreshKey = 0, barrel = fx.barrel, radius
   const effect = useBarrelEffect();
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [snap, setSnap] = useState<{ image: SkImage; key: string | number } | null>(null);
+  const [landed, setLanded] = useState<string | null>(null);
+  const onSnapshotRef = useRef(onSnapshot);
+  useEffect(() => {
+    onSnapshotRef.current = onSnapshot;
+  });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
     setBox((b) => (b.w === width && b.h === height ? b : { w: width, h: height }));
@@ -51,11 +60,9 @@ export function GlassWarp({ children, refreshKey = 0, barrel = fx.barrel, radius
           (image) => {
             if (!live) return;
             if (image) setSnap({ image, key: refreshKey });
-            onSnapshot?.(image !== null);
           },
           (err: unknown) => {
             console.warn('GlassWarp: snapshot failed, showing the flat overlay', err);
-            if (live) onSnapshot?.(false);
           },
         );
       });
@@ -64,15 +71,25 @@ export function GlassWarp({ children, refreshKey = 0, barrel = fx.barrel, radius
       live = false;
       cancelAnimationFrame(raf1);
     };
-    // onSnapshot is a notification only; a new closure must not trigger a new snapshot.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, box.w, box.h]);
+
+  // The landed signal: two frames after the warped canvas mounted with this snapshot.
+  useEffect(() => {
+    if (!snap) return;
+    const key = String(snap.key);
+    return afterFrames(2, () => {
+      setLanded(key);
+      onSnapshotRef.current?.(key);
+    });
+  }, [snap]);
 
   const clip = useMemo(
     () => (radius > 0 && box.w > 0 ? Skia.RRectXY(Skia.XYWHRect(0, 0, box.w, box.h), radius, radius) : undefined),
     [radius, box.w, box.h],
   );
   const fresh = snap !== null && snap.key === refreshKey;
+  // Web only: react-native-web turns dataSet into data-* attributes (not in RN's View types).
+  const warpedData = (Platform.OS === 'web' && fresh && landed === String(snap.key) ? { dataSet: { warped: landed } } : {}) as Record<string, unknown>;
 
   return (
     <View testID={testID} style={[styles.root, style]} onLayout={onLayout}>
@@ -80,7 +97,7 @@ export function GlassWarp({ children, refreshKey = 0, barrel = fx.barrel, radius
         {children}
       </View>
       {fresh && box.w > 0 ? (
-        <View testID={testID ? `${testID}-warped` : undefined} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View testID={testID ? `${testID}-warped` : undefined} pointerEvents="none" style={StyleSheet.absoluteFill} {...warpedData}>
           <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
             <Group clip={clip}>
               <Rect x={0} y={0} width={box.w} height={box.h}>

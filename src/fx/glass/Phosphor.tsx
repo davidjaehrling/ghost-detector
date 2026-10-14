@@ -2,6 +2,7 @@ import { Blur, Group, Paint, Text, useFont, type SkFont } from '@shopify/react-n
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { fx } from '../../ui/tokens';
 import { PHOSPHOR, type PhosphorStep } from './color';
+import { createReadySignal } from './ready';
 import { effectiveTau, trailLifetime, trailStyle } from './persistence';
 import { useStaticDefault } from './useGlassClock';
 
@@ -99,6 +100,9 @@ export type PhosphorTextProps = {
   lingerMs?: number;
   static?: boolean;
   reduceMotion?: boolean;
+  // Fired once per mount, one animation frame after the font has loaded (the Skia frame with
+  // the glyphs has been drawn). For a parent that snapshots the canvas (boot warp).
+  onReady?: () => void;
 };
 
 const LINGER_MS = 90;
@@ -111,9 +115,19 @@ function alignedX(font: SkFont, text: string, x: number, align: PhosphorTextProp
 
 // VT323 drawn in Skia with bloom and the digit-change linger. Draw nothing until the font
 // has loaded (one frame on native, a fetch on web).
-export function PhosphorText({ text, x, y, size = 72, step = 4, align = 'left', bloom = true, lingerMs = LINGER_MS, static: isStaticProp, reduceMotion = false }: PhosphorTextProps) {
+export function PhosphorText({ text, x, y, size = 72, step = 4, align = 'left', bloom = true, lingerMs = LINGER_MS, static: isStaticProp, reduceMotion = false, onReady }: PhosphorTextProps) {
   const isStatic = useStaticDefault(isStaticProp);
   const font = useVT323(size);
+  const [ready] = useState(createReadySignal);
+  const onReadyRef = useRef(onReady);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  });
+  const wantsReady = onReady !== undefined;
+  useEffect(() => {
+    if (!wantsReady) return;
+    return ready.arm(font !== null, () => onReadyRef.current?.());
+  }, [font, wantsReady, ready]);
   const [ghost, setGhost] = useState<string | null>(null);
   const prev = useRef(text);
   useEffect(() => {

@@ -13,6 +13,8 @@ export type GlassProps = GlassLayerFlags & {
   warp?: boolean;
   // With `warp`: change it to re-snapshot the children.
   refreshKey?: string | number;
+  // With `warp`: see GlassWarp `onSnapshot` (String(refreshKey) once each snapshot has landed).
+  onSnapshot?: (key: string) => void;
   // Play the 900 ms power-on over the glass (boot). Change `warmUpKey` to play it again.
   warmUp?: boolean;
   warmUpKey?: string | number;
@@ -37,6 +39,7 @@ export function Glass({
   children,
   warp = false,
   refreshKey,
+  onSnapshot,
   warmUp = false,
   warmUpKey,
   onWarmUpDone,
@@ -53,7 +56,7 @@ export function Glass({
   if (warp) {
     return (
       <View testID={testID} style={[styles.window, { borderRadius: radius }, style]}>
-        <GlassWarp testID={testID ? `${testID}-warp` : undefined} refreshKey={refreshKey} radius={radius} style={StyleSheet.absoluteFill} {...layers}>
+        <GlassWarp testID={testID ? `${testID}-warp` : undefined} refreshKey={refreshKey} onSnapshot={onSnapshot} radius={radius} style={StyleSheet.absoluteFill} {...layers}>
           {children}
         </GlassWarp>
         {burn}

@@ -262,6 +262,9 @@ web through CanvasKit. Import from `src/fx/glass`.
     copied with `toDataURL` (RN Skia web canvases are WebGL and come out blank that way: use
     `SnapshotCanvas` for every Skia canvas under a warped glass). Cross-origin images and sheets
     are skipped.
+  - `onSnapshot(key)` (also on `<Glass warp>`): called with `String(refreshKey)` two frames after each
+    snapshot lands (barrel drawn); not called on failure. On web the `${testID}-warped` node then
+    carries `data-warped="<key>"`, so the harness waits on that attribute instead of sleeping.
 - Phosphor (`Phosphor.tsx`, `persistence.ts`):
   - `usePersistence(value, { tau, step, static, reduceMotion })` returns the trail oldest first,
     ending with the live sample: `{ value, step, color, opacity }[]`. A sample drops one phosphor
@@ -274,6 +277,8 @@ web through CanvasKit. Import from `src/fx/glass`.
     `@expo-google-fonts/vt323` TTF via `useFont`, with bloom; on a change the old text lingers
     at p1 for 90 ms (Bible §6). Draws nothing until the font is loaded. `useVT323(size)` gives
     the font for other Skia text.
+    `onReady()`: called once per mount, one frame after the font has loaded (glyphs drawn); a
+    warped parent bumps its `refreshKey` on it so the snapshot never misses the row.
 - `<WarmUp durationMs static reduceMotion runKey onDone>`: the 900 ms power-on: an n0 veil that
   lifts with an ease-out cubic while a 2 px p5 band rolls down once, then nothing. Each frame
   advances at most 50 ms, so a start-up stall slows it instead of skipping it. `static` and
