@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { plateSerial } from '../serial';
 import { color, font, radius, space, type } from '../tokens';
@@ -8,7 +9,7 @@ const GUTTER = 14;
 
 // The riveted aluminium strip: maker left, serial right (one rule for every screen, src/ui/serial.ts).
 // Kept apart from Housing so the FAULT screen can draw it without pulling in the glass stack.
-export function Nameplate({ serial }: { serial: string }) {
+export const Nameplate = memo(function Nameplate({ serial }: { serial: string }) {
   const { width: windowW } = useWindowDimensions();
   // 360 px: 0.4 tracking, so maker and the full serial fit one line (33 characters in 288 px).
   const tight = windowW < 380 ? s.plateTight : null;
@@ -21,7 +22,7 @@ export function Nameplate({ serial }: { serial: string }) {
       <View style={[s.rivet, { right: 8 }]} />
     </View>
   );
-}
+});
 
 const s = StyleSheet.create({
   nameplate: {

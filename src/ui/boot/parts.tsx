@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
 import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout, legendFit } from '../keyLayout';
 import { stickerShowsSerial } from '../serial';
 import { GRID_TOP } from './layout';
 import { mulberry32 } from './seed';
-import { copyOf } from '../../i18n';
+import { copyOf, useLocale } from '../../i18n';
 
 // ---------- typed self-test ----------
 
@@ -45,7 +45,7 @@ const screwAngles = [0, 38, 14, 62];
 
 // 10 px bezel screw. Placed by the parent in the bezel margin so it clears the
 // glass and the nameplate.
-export function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burred?: boolean }) {
+export const Screw = memo(function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burred?: boolean }) {
   const a = burred ? 24 : screwAngles[corner];
   return (
     <View style={[st.screw, corner === 0 && st.tl, corner === 1 && st.tr, corner === 2 && st.bl, corner === 3 && st.br]}>
@@ -56,23 +56,23 @@ export function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burre
       {burred ? <View style={st.notch} /> : null}
     </View>
   );
-}
+});
 
 const PLATE_SCREW = 6;
 
-export function PlateScrew({ style }: { style: object }) {
+export const PlateScrew = memo(function PlateScrew({ style }: { style: object }) {
   return (
     <View style={[st.tiny, style]}>
       <View style={st.tinySlot} />
     </View>
   );
-}
+});
 
 // ---------- thumb wear ----------
 
 // Paint rubbed through to n4 where thumbs grip: a tapered 1 to 2 px streak,
 // low alpha. `side` picks the housing edge.
-export function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${number}%`; length: number }) {
+export const Wear = memo(function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${number}%`; length: number }) {
   const end = Math.round(length * 0.25);
   const mid = length - end * 2;
   return (
@@ -82,7 +82,7 @@ export function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${nu
       <View style={[st.wearSeg, { height: end, width: 1, opacity: 0.12 }]} />
     </View>
   );
-}
+});
 
 // ---------- graticule ----------
 
@@ -177,13 +177,16 @@ export function GridLabels({ w, fw, trig, tb, sens, rows = GRID_ROWS }: { w: num
 
 // Bible section 3: lit LEDs differ by brightness only (p3, p4, p4, p5, then red
 // for CRITICAL). `lit` counts from the bottom; boot shows only the power LED.
+// Module-level so the memoised PlateScrew sees the same style object on every render.
+const TOP_SCREW = { top: 2 };
+const BOTTOM_SCREW = { bottom: 2 };
 const LED_COLORS = [color.p3, color.p4, color.p4, color.p5, color.red] as const;
 
-export function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
+export const LedLadder = memo(function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
   const leds = [0, 1, 2, 3, 4];
   return (
     <View style={st.plate}>
-      <PlateScrew style={{ top: 2 }} />
+      <PlateScrew style={TOP_SCREW} />
       <View style={st.ledCol}>
         {leds.map((i) => {
           const lit = i < Math.max(1, litCount);
@@ -198,10 +201,10 @@ export function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
           );
         })}
       </View>
-      <PlateScrew style={{ bottom: 2 }} />
+      <PlateScrew style={BOTTOM_SCREW} />
     </View>
   );
-}
+});
 
 // ---------- calibration sticker ----------
 
@@ -263,7 +266,8 @@ export function Sticker({
 // the paper is as wide as its longest line.
 export const MINI_STICKER_H = 41;
 
-export function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string; pruef: string; bg?: string; style?: object }) {
+export const MiniSticker = memo(function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string; pruef: string; bg?: string; style?: object }) {
+  useLocale(); // memoised: re-render on a language change only
   const meta = `CAL ${cal} · PRÜF ${pruef}`;
   return (
     <View style={[st.mini, style]} pointerEvents="none" testID="sticker-mini" accessibilityLabel={`${copy.head1} ${copy.head2} ${meta}`}>
@@ -280,7 +284,7 @@ export function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string;
       <View style={st.miniFlap} />
     </View>
   );
-}
+});
 
 // ---------- key row ----------
 
@@ -301,7 +305,7 @@ export type KeySlot = {
   backlit?: boolean;
 };
 
-export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
+export const KeyRow = memo(function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
   const { width } = useWindowDimensions();
   const { gap, left } = keyLayout(width - KEY_GUTTER * 2);
   return (
@@ -314,12 +318,12 @@ export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
       </View>
     </View>
   );
-}
+});
 
 // Blank moulded cap: same footprint as a live key, no legend and no glyph. The only mark is a 1 px
 // recess ring inset from the edge, which reads as moulding and never as a dash, a dot or an icon.
 // It is not focusable, has no label and takes no press.
-export function DummyCap() {
+export const DummyCap = memo(function DummyCap() {
   return (
     <View
       testID="key-dummy"
@@ -333,11 +337,11 @@ export function DummyCap() {
       <View style={st.ring} />
     </View>
   );
-}
+});
 
 // Rubber key: darker n2 face, 1 px n4 top highlight. Legend is lbM (Bible
 // section 5 sets key legends at 13 px). Long legends wrap on the space.
-export function Key({ testID, label, legend, onPress, inert = false, primary = false, backlit = false }: KeySlot) {
+export const Key = memo(function Key({ testID, label, legend, onPress, inert = false, primary = false, backlit = false }: KeySlot) {
   const fit = legendFit(legend);
   return (
     <Pressable
@@ -353,7 +357,7 @@ export function Key({ testID, label, legend, onPress, inert = false, primary = f
       </Text>
     </Pressable>
   );
-}
+});
 
 const st = StyleSheet.create({
   screw: {

@@ -6,10 +6,10 @@ import { Readout } from '../Readout';
 import type { GlassSize } from '../screens/Housing';
 import { color, type } from '../tokens';
 import { BLOCKS, BlockBar, RATE_MAX_H } from './BlockBar';
+import { type ScanClock, useClockFrame } from './clock';
 import {
   faultLine,
   type Phase,
-  type ScanFrame,
   barBlocks,
   faultOn,
   heldThermal,
@@ -53,8 +53,9 @@ const FAULT_INDENT = 'E-07 '.length * CH_S;
 // sweep stay where they stopped at p2, the last telemetry line stays dimmed at
 // p3, a block blinks where the percentage was, and the live rows go blank.
 // The fault beat flattens the trace, stalls the bar and blinks the E-07 line.
-export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: GlassSize; seed: number; frame: ScanFrame; cap: number; still?: boolean }) {
+export function TheatreGlass({ size, seed, clock, cap, still = false }: { size: GlassSize; seed: number; clock: ScanClock; cap: number; still?: boolean }) {
   useLocale();
+  const frame = useClockFrame(clock);
   const { w, h } = size;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
@@ -170,7 +171,7 @@ const StaticGridLabels = memo(GridLabels);
 // straight after it, the unit at rdXS on the value's baseline. rdL advances 19.2 px a character, so for
 // ΔT the value starts 57 px from the label's left edge (it used to start about 100 px away).
 const LIVE_CH = 19.2;
-function LiveRow({ label, value, unit, tone }: { label: string; value: string; unit: string; tone?: string }) {
+const LiveRow = memo(function LiveRow({ label, value, unit, tone }: { label: string; value: string; unit: string; tone?: string }) {
   return (
     <View style={s.liveRow}>
       <Text style={[s.liveLabel, tone ? { color: tone } : null]} numberOfLines={1}>
@@ -184,7 +185,7 @@ function LiveRow({ label, value, unit, tone }: { label: string; value: string; u
       </Text>
     </View>
   );
-}
+});
 
 const s = StyleSheet.create({
   pct: { ...type.rdXS, position: 'absolute', color: color.p4, textAlign: 'right' },

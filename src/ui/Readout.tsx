@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { composeFields } from './readoutFields';
 import { color, type } from './tokens';
@@ -27,7 +28,8 @@ export type ReadoutProps = {
   testID?: string;
 };
 
-export function Readout(props: ReadoutProps) {
+// Memoised: props are strings and numbers, so a row re-renders only when its text or tone changes.
+export const Readout = memo(function Readout(props: ReadoutProps) {
   const { size = 'rdS', typed, testID } = props;
   const { labelColor = color.p3, valueColor = color.p4, unitColor = color.p3, statusColor = color.p4 } = props;
   const fields = composeFields(props);
@@ -48,7 +50,7 @@ export function Readout(props: ReadoutProps) {
       </Text>
     </View>
   );
-}
+});
 
 // Row heights on the 4 px grid.
 const ROW_H: Record<Size, number> = { rdXS: 20, rdS: 24, rdM: 28, rdL: 44 };

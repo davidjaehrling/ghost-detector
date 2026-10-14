@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { color } from '../tokens';
 
@@ -8,7 +9,8 @@ export const BLOCKS = 20;
 export const RATE_MIN_H = 4;
 export const RATE_MAX_H = 14;
 
-export function BlockBar({
+// Memoised: every prop is a primitive, so the bar re-renders only when a block changes state.
+export const BlockBar = memo(function BlockBar({
   lit,
   left,
   top,
@@ -45,7 +47,7 @@ export function BlockBar({
       })}
     </View>
   );
-}
+});
 
 const s = StyleSheet.create({
   ramp: { position: 'absolute', height: RATE_MAX_H, flexDirection: 'row', alignItems: 'flex-end' },

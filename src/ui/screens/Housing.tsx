@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, memo, useMemo, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Glass, type GlassProps } from '../../fx/glass';
@@ -19,14 +19,14 @@ export type HousingGlass = Partial<Pick<GlassProps, 'warp' | 'refreshKey' | 'war
 // Bible section 2 housing for the live screens: nameplate with serial, screen
 // window with four screws, LED ladder plate on the right, key band below.
 // `children` draws on the glass and receives its measured size.
-export function Housing({
+export const Housing = memo(function Housing({
   testID,
   leds,
   fixedIdentity,
   glassLabel,
   keys,
   identity: given,
-  glass = {},
+  glass = NO_GLASS,
   sticker = true,
   slot,
   children,
@@ -97,7 +97,9 @@ export function Housing({
       </View>
     </View>
   );
-}
+});
+
+const NO_GLASS: HousingGlass = {};
 
 export { Key };
 
