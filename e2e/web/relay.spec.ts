@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { waitPrinted } from './relay';
+import { startClockAtEvening, waitPrinted } from './relay';
 
 // P6-05 part 1. The FIELD LOG RELAY opt-in on the viewfinder and the Settings RELAY row.
 // The log demo seeds six cases (session=1 lifts the first-session rule), so the first return from a
@@ -31,6 +31,7 @@ async function toSettings(page: Page) {
 const start = (page: Page, extra = '') => page.goto(`/history?static=1&log=demo3&session=1${extra}`);
 
 test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result line, once only', async ({ page }) => {
+  await startClockAtEvening(page);
   await start(page, '&notify=granted');
   await backFromACase(page);
   const mod = page.getByTestId('relay-module');
