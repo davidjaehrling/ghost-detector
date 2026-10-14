@@ -1,3 +1,5 @@
+import { forecastIndex } from '../../engine';
+
 // Tonight's activity index (docs/psych-brief.md section 4): base 2, +1 within
 // 2 days of a full moon, +1 from 22:00 to 04:00, +2 from 03:00 to 03:59.
 // Moon phase is a simple synodic-month model, good to a day or so.
@@ -23,19 +25,10 @@ function moonAge(date: Date): number {
   return ((days % SYNODIC_DAYS) + SYNODIC_DAYS) % SYNODIC_DAYS;
 }
 
+// The engine owns the formula (src/engine/notify.ts, tested equal), so the screens and the
+// notification lines quote the same number.
 export function activityIndex(date: Date): Activity {
-  const age = moonAge(date);
-  const phase = age / SYNODIC_DAYS;
-  const moonPct = Math.round(((1 - Math.cos(2 * Math.PI * phase)) / 2) * 100);
-
-  let score = 2;
-  if (Math.abs(age - SYNODIC_DAYS / 2) <= 2) score += 1;
-  const h = date.getHours();
-  if (h === 3) score += 2;
-  else if (h >= 22 || h < 4) score += 1;
-
-  const index = Math.max(1, Math.min(5, score)) as Activity['index'];
-  return { index, moonPct };
+  return forecastIndex(date.getTime(), -date.getTimezoneOffset());
 }
 
 // Whole days from `date` until the next full moon (0 on the day itself).
