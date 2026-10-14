@@ -5,14 +5,17 @@ import type { Lang } from './core';
 // text for every one of them, and it must pass the marker table below.
 export const DISCLOSURE_KEYS = [
   'sticker.head1',
+  'sticker.head2',
   'sticker.body',
   'about.line',
   'result.strip.mark',
   'deep.sub',
+  'deep.offline',
   'relay.body',
   'relay.channelName',
   'share.card.mark',
   'share.card.footer',
+  'engine.notify.prefix',
 ] as const;
 export type DisclosureKey = (typeof DISCLOSURE_KEYS)[number];
 
@@ -24,6 +27,10 @@ const NOTHING = {
   es: /no detecta nada/iu,
   pt: /não dete[c]?ta nada/iu,
 } satisfies Record<Lang, RegExp>;
+const GENERATED = { en: /generated/iu, de: /erzeugt/iu, es: /genera/iu, pt: /geradas/iu } satisfies Record<Lang, RegExp>;
+const FICTION = { en: /FICTION/iu, de: /FIKTION/iu, es: /FICTICIO/iu, pt: /FICT[IÍ]CIO/iu } satisfies Record<Lang, RegExp>;
+const FIELD_LOG = { en: /FIELD LOG/iu, de: /FELDPROTOKOLL/iu, es: /REGISTRO DE CAMPO/iu, pt: /REGISTO DE CAMPO/iu } satisfies Record<Lang, RegExp>;
+const ENTERTAINMENT = { en: /ENTERTAINMENT/iu, de: /UNTERHALTUNG/iu, es: /ENTRETENIMIENTO/iu, pt: /ENTRETENIMENTO/iu } satisfies Record<Lang, RegExp>;
 const AD = { en: /SPONSORED/iu, de: /WERBE/iu, es: /PUBLICIT/iu, pt: /PUBLICIT/iu } satisfies Record<Lang, RegExp>;
 const VIDEO = /VIDEO|VÍDEO/iu;
 
@@ -31,10 +38,12 @@ const VIDEO = /VIDEO|VÍDEO/iu;
 export function markersFor(lang: Lang): Partial<Record<DisclosureKey, RegExp[]>> {
   return {
     'sticker.head1': [SIM[lang]],
-    'sticker.body': [NOTHING[lang]],
-    'about.line': [SIM[lang]],
+    'sticker.head2': [ENTERTAINMENT[lang]],
+    'sticker.body': [GENERATED[lang], NOTHING[lang]],
+    'about.line': [SIM[lang], FICTION[lang]],
     'result.strip.mark': [SIM[lang]],
     'deep.sub': [VIDEO, AD[lang]],
+    'engine.notify.prefix': [FIELD_LOG[lang]],
     'relay.body': [SIM[lang]],
     'share.card.mark': [SIM_STEM[lang]],
     'share.card.footer': [SIM_STEM[lang]],

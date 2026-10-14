@@ -72,16 +72,16 @@ describe('locales/en.json and the code', () => {
 
 describe('disclosure contract (D-038)', () => {
   it('every disclosure key exists in en', () => {
-    for (const k of DISCLOSURE_KEYS) expect(en[k], k).toBeTypeOf('string');
+    for (const k of DISCLOSURE_KEYS) expect(resourcesOf('en')[k], k).toBeTypeOf('string');
   });
   for (const lang of LANGS) {
     it(`${lang}: disclosures carry their marker words${lang === 'en' ? '' : ' and differ from en'}`, () => {
-      if (!hasLanguage(lang)) return; // runs over the files present
+      expect(hasLanguage(lang), `${lang} locale file is missing`).toBe(true);
       const dict = resourcesOf(lang);
       const markers = markersFor(lang);
       for (const k of DISCLOSURE_KEYS) {
         expect(dict[k], `${lang} ${k} missing (disclosure keys do not fall back)`).toBeTypeOf('string');
-        if (lang !== 'en') expect(dict[k], `${lang} ${k} equals en`).not.toBe(en[k]);
+        if (lang !== 'en') expect(dict[k], `${lang} ${k} equals en`).not.toBe(resourcesOf('en')[k]);
         for (const re of markers[k] ?? []) expect(dict[k], `${lang} ${k} lacks ${re}`).toMatch(re);
       }
     });
