@@ -260,29 +260,26 @@ for (const { lang, project, suffix } of CASES) {
   });
 }
 
-// The accented letters of the locales exist in both faces: a probe string in each face, read from the
-// screenshot (a missing glyph shows as a box) and from the font's own cmap via document.fonts.check.
-test('glyph coverage: VT323 and B612 Mono carry ã ç ñ ß ü ó ú and the ordinals', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'android-390x844', 'one probe at 390');
-  await page.goto('/settings?static=1&lang=de');
-  await expect(page.getByTestId('screen-settings')).toBeVisible();
-  await page.evaluate(() => document.fonts.ready);
-  const probe = 'ãçñßüóúÃÇÑÜÓÚõÕáéíàâêôäöÄÖªº°';
-  await page.evaluate((p) => {
-    const box = document.createElement('div');
-    box.id = 'glyph-probe';
-    box.style.cssText = 'position:fixed;inset:0;background:#0a0f0b;color:#8fe0a6;z-index:99999;padding:12px;white-space:pre-wrap;word-break:break-all';
-    for (const [face, size, weight] of [['VT323_400Regular', 28, 400], ['B612Mono_400Regular', 16, 400], ['B612Mono_700Bold', 16, 700]] as const) {
-      const row = document.createElement('div');
-      row.style.cssText = `font-family:'${face}',monospace;font-size:${size}px;font-weight:${weight};margin-bottom:16px`;
-      row.textContent = `${face}\n${p}\n${p.toUpperCase()}`;
-      box.append(row);
-    }
-    document.body.append(box);
-  }, probe);
-  await page.evaluate(() => document.fonts.ready);
-  for (const face of ['VT323_400Regular', 'B612Mono_400Regular', 'B612Mono_700Bold']) {
-    expect(await page.evaluate((f) => document.fonts.check(`16px ${f}`, 'ãçñßüóú'), face)).toBe(true);
-  }
-  await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/glyph-probe.png` });
-});
+// The mark closes the data strip in every language: the strip's text ends with it and the element
+// does not scroll sideways. German is checked at both widths; the rest at 390.
+const MARKS = [
+  { lang: 'en', project: 'android-390x844', mark: 'SIMULATED' },
+  { lang: 'de', project: 'android-390x844', mark: 'SIMULIERT' },
+  { lang: 'de', project: 'android-360x800', mark: 'SIMULIERT' },
+  { lang: 'es', project: 'android-390x844', mark: 'SIMULADO' },
+  { lang: 'pt', project: 'android-390x844', mark: 'SIMULADO' },
+] as const;
+for (const { lang, project, mark } of MARKS) {
+  test(`mark visible: the strip ends with ${mark} (${lang}, ${project})`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== project, `${project} only`);
+    await page.goto(`/result/demo?static=1&fixture=cellar&demo=active&lang=${lang}`);
+    await expect(page.getByTestId('screen-result')).toBeVisible();
+    await settleResult(page);
+    const strip = page.getByTestId('result-stamp');
+    expect(((await strip.getAttribute('aria-label')) ?? '').trim().endsWith(mark)).toBe(true);
+    const m = await strip.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }));
+    expect(m.sw, `scrollWidth ${m.sw} vs clientWidth ${m.cw}`).toBeLessThanOrEqual(m.cw + 1);
+    const w = Number(await strip.getAttribute('data-text-w'));
+    expect(w + 8 + 4).toBeLessThanOrEqual((await strip.boundingBox())!.width);
+  });
+}

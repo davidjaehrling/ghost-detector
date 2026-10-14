@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Word lists come from scripts/claim-words.json (Compliance, D-038): per language `claim` and
 // `framing` lists, plus `exempt` literals. An entry ending in `*` is a stem; matching is Unicode-aware
-// (`\b` fails on accented letters) and case-insensitive. Until the file exists the inline English
+// (`\b` fails on accented letters) and case-insensitive; `exempt` matching is case-sensitive. Until the file exists the inline English
 // lists below stand in.
 const LANGS = ['en', 'de', 'es', 'pt'];
 const FALLBACK = {
@@ -44,13 +44,19 @@ for (const lang of haveLists ? LANGS : ['en']) {
 const claimRe = Object.fromEntries(LANGS.filter((l) => lists[l]?.claim?.length).map((l) => [l, listRe(lists[l].claim)]));
 const framingListRe = Object.fromEntries(LANGS.filter((l) => lists[l]?.framing?.length).map((l) => [l, listRe(lists[l].framing)]));
 
-const exemptRes = exempt.filter((e) => e.startsWith('re:')).map((e) => new RegExp(e.slice(3)));
+// Exemption matching is case-sensitive. `re:` entries are regexes tried on each whitespace-separated
+// token (and on the whole trimmed text); plain entries are literals.
+const exemptRes = exempt.filter((e) => e.startsWith('re:')).map((e) => new RegExp(e.slice(3), 'u'));
 const exemptWords = exempt.filter((e) => !e.startsWith('re:'));
-const exemptWordRe = exemptWords.length ? new RegExp(exemptWords.map(escapeRe).join('|'), 'giu') : null;
+const exemptWordRe = exemptWords.length ? new RegExp(exemptWords.map(escapeRe).join('|'), 'gu') : null;
 /** The text with exempt literals (tier names, codes, units, the negations) taken out. */
 function withoutExempt(text) {
-  if (exemptRes.some((re) => re.test(text.trim()))) return '';
-  return exemptWordRe ? text.replace(exemptWordRe, ' ') : text;
+  const t = text.trim();
+  if (exemptRes.some((re) => re.test(t))) return '';
+  const rest = exemptRes.length
+    ? t.split(/\s+/).map((tok) => (exemptRes.some((re) => re.test(tok)) ? ' ' : tok)).join(' ')
+    : text;
+  return exemptWordRe ? rest.replace(exemptWordRe, ' ') : rest;
 }
 
 // Banned AI-tell words (plan section 6), English and ASCII, so \b is safe. The engine test reads this line.

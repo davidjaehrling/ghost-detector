@@ -27,6 +27,14 @@ describe('lint-copy', () => {
     expect(r.stderr).not.toContain('claims.ts:5');
   });
 
+  it('applies re: exemptions per token, case-sensitively, and literal exemptions as written', () => {
+    const r = run('scripts/__fixtures__/claims.ts');
+    expect(r.stderr).not.toContain('claims.ts:6'); // whole-token regexes, code and case number
+    expect(r.stderr).toContain('claims.ts:7: claim word "real"'); // the code does not hide a neighbouring word
+    expect(r.stderr).toContain('claims.ts:8: claim word "detected"'); // lowercase e-12 is not exempt, the claim stays
+    expect(r.stderr).not.toContain('claims.ts:9'); // plain entries stay literal
+  });
+
   it('passes on app/', () => {
     expect(run('app').status).toBe(0);
   });
