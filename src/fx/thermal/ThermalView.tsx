@@ -11,7 +11,6 @@ import { formatDelta, sampleField, type ThermalField } from './thermalField';
 
 // Bundled TTFs, loaded into Skia (RN `Text` fonts are not visible to a Skia canvas).
 const VT323_TTF = require('@expo-google-fonts/vt323/400Regular/VT323_400Regular.ttf');
-const B612_TTF = require('@expo-google-fonts/b612-mono/400Regular/B612Mono_400Regular.ttf');
 
 /** Live view refresh, Hz (FLIR-class sensors export at about 9 Hz). */
 export const LIVE_HZ = 9;
@@ -61,7 +60,6 @@ export function spotReadout(field: ThermalField, delta = 'ΔT'): string | null {
 
 export function ThermalView({ field, width, height, top, static: isStatic = false, testID = 'thermal-view' }: ThermalViewProps) {
   const vt = useFont(VT323_TTF, 16);
-  const lb = useFont(B612_TTF, 10);
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
@@ -135,7 +133,6 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
   }, [field, spot, lo, hi, barX, barY, barH, width, imgH, y0]);
 
   const readW = textW(vt, readout ?? '') + 10;
-  const palW = textW(lb, PALETTE_NAME) + 10;
   const plateX = width - BAR_INSET - PLATE_W;
 
   return (
@@ -181,18 +178,14 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
           </Group>
         ) : null}
 
-        {/* Spot readout box top-left, palette name bottom-left (Bible section 3). */}
+        {/* Spot readout box top-left (Bible section 3). No palette name: the view has one fixed palette,
+            so the corner label reported a constant the scale bar already shows, and the result screen's
+            data strip covers that corner. The name stays in the accessibility label. */}
         {vt && readout ? (
           <Group>
             <Rect x={8} y={8} width={readW} height={20} color={color.n0} />
             <Rect x={8.5} y={8.5} width={readW - 1} height={19} color={color.n4} style="stroke" strokeWidth={1} />
             <Text x={13} y={23} text={readout} font={vt} color={color.p4} />
-          </Group>
-        ) : null}
-        {lb ? (
-          <Group>
-            <Rect x={8} y={height - 24} width={palW} height={16} color={color.n0} />
-            <Text x={13} y={height - 12} text={PALETTE_NAME} font={lb} color={color.p3} />
           </Group>
         ) : null}
       </SnapshotCanvas>
