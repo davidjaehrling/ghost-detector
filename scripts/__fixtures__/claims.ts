@@ -1,5 +1,5 @@
-const a = 'Signature confirmed.';
-const b = "DETECTED";
-const c = 'confirmed';
+export const a = 'Signature confirmed.';
+export const b = "DETECTED";
+export const c = 'confirmed';
 // The reading is verified here, in a comment.
-const d = 'Readings are simulated.';
+export const d = 'Readings are simulated.';
