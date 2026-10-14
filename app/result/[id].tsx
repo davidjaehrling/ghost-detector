@@ -532,13 +532,16 @@ const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
 function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value?: string; maskW?: number; valueTestID?: string }) {
   // A value longer than its box (a narrow phone) tightens its tracking to fit instead of cutting the end.
-  const [boxW, setBoxW] = useState(0);
+  // The room is measured on the row (minus the label column), never on the text itself: a text's own
+  // width is its content width, which sits a sub-pixel under len * CHAR_XS and would tighten every row.
+  const [rowW, setRowW] = useState(0);
+  const boxW = rowW - LABEL_W;
   const need = (value?.length ?? 0) * CHAR_XS;
-  const tight = boxW > 0 && need > boxW ? { letterSpacing: Math.max(-0.6, Math.floor((boxW / (value?.length ?? 1) - (CHAR_XS - 0.5)) * 10) / 10) } : null;
+  const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(-0.6, Math.floor((boxW / (value?.length ?? 1) - (CHAR_XS - 0.5)) * 10) / 10) } : null;
   return (
-    <View style={s.profRow}>
+    <View style={s.profRow} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
       <Text style={s.profLabel}>{label}</Text>
-      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, tight]} numberOfLines={1} testID={valueTestID} onLayout={(e) => setBoxW(e.nativeEvent.layout.width)}>{value}</Text>}
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, tight]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
     </View>
   );
 }
