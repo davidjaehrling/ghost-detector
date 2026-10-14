@@ -115,3 +115,88 @@ test('the first session never shows the module, even with cases on file', async 
   await page.waitForTimeout(300);
   await expect(page.getByTestId('relay-module')).toHaveCount(0);
 });
+
+// P6-05 part 2. Scheduling: the engine's lines land in window.__notifyLog (schedule and cancel entries).
+// ?relay=on fits the relay at load; ?clock=<iso> fixes the scheduler's now; the demo log seeds the cases.
+
+type Entry = { call: string; id?: string; templateId?: number; fireAtMs?: number; title?: string; body?: string };
+const log = (page: Page) => page.evaluate(() => (window.__notifyLog ?? []) as Entry[]);
+const sched = async (page: Page) => (await log(page)).filter((e) => e.call === 'schedule');
+const NOON = '2026-10-13T12:00:00';
+const fit = (clock: string, notify = 'granted') => `&notify=${notify}&relay=on&clock=${encodeURIComponent(clock)}`;
+
+const localParts = (page: Page, ms: number) =>
+  page.evaluate((t) => {
+    const d = new Date(t);
+    return { day: d.getDate(), minutes: d.getHours() * 60 + d.getMinutes() };
+  }, ms);
+
+test('relay on: a field-log line is scheduled inside 18:00 to 22:00 local, titled FIELD LOG', async ({ page }) => {
+  await start(page, fit(NOON));
+  await backFromACase(page);
+  await expect.poll(async () => (await sched(page)).length).toBeGreaterThan(0);
+  const lines = await sched(page);
+  const now = await page.evaluate((c) => new Date(c).getTime(), NOON);
+  for (const l of lines) {
+    expect(l.title!.startsWith('FIELD LOG')).toBe(true);
+    expect(l.fireAtMs!).toBeGreaterThan(now);
+    expect(l.fireAtMs! - now).toBeLessThan(7 * 86_400_000);
+    const p = await localParts(page, l.fireAtMs!);
+    expect(p.minutes).toBeGreaterThanOrEqual(18 * 60);
+    expect(p.minutes).toBeLessThan(22 * 60);
+  }
+  // No second pass reschedules the same lines.
+  await page.getByTestId('key-log').last().click();
+  await backFromACase(page);
+  await page.waitForTimeout(300);
+  expect((await sched(page)).length).toBe(lines.length);
+});
+
+test('relay on late at night: the first line waits for the next window', async ({ page }) => {
+  await start(page, fit('2026-10-13T23:30:00'));
+  await backFromACase(page);
+  await expect.poll(async () => (await sched(page)).length).toBeGreaterThan(0);
+  for (const l of await sched(page)) {
+    const p = await localParts(page, l.fireAtMs!);
+    expect(p.day).toBeGreaterThanOrEqual(14);
+    expect(p.minutes).toBeGreaterThanOrEqual(18 * 60);
+    expect(p.minutes).toBeLessThan(22 * 60);
+  }
+});
+
+// Calm sends the full-moon and catalogue lines only, so this night sits in the full-moon window.
+const FULL_MOON = '2026-10-25T12:00:00';
+
+test('switching to CALM cancels the pending lines, then schedules the full-moon line again', async ({ page }) => {
+  await start(page, fit(FULL_MOON));
+  await backFromACase(page);
+  await expect.poll(async () => (await sched(page)).length).toBeGreaterThan(0);
+  const before = await log(page);
+  const first = before.filter((e) => e.call === 'schedule').map((e) => e.id);
+  await page.evaluate(() => (window as unknown as { __setIntensity: (i: string) => Promise<void> }).__setIntensity('calm'));
+  const after = (await log(page)).slice(before.length);
+  const calls = after.map((e) => e.call);
+  expect(after.filter((e) => e.call === 'cancel').map((e) => e.id).sort()).toEqual([...first].sort());
+  expect(calls.indexOf('cancel')).toBe(0);
+  expect(calls).toContain('schedule');
+  expect(calls.indexOf('schedule')).toBeGreaterThan(calls.lastIndexOf('cancel'));
+});
+
+test('RELAY off in Settings cancels every pending line', async ({ page }) => {
+  await start(page, fit(NOON));
+  await backFromACase(page);
+  await expect.poll(async () => (await sched(page)).length).toBeGreaterThan(0);
+  const ids = (await sched(page)).map((e) => e.id).sort();
+  await toSettings(page);
+  await expect(page.getByTestId('setting-relay-state')).toHaveText('ON');
+  await page.getByTestId('setting-relay').click();
+  await expect(page.getByTestId('setting-relay-state')).toHaveText('OFF');
+  await expect.poll(async () => (await log(page)).filter((e) => e.call === 'cancel').map((e) => e.id).sort()).toEqual(ids);
+});
+
+test('a system denial schedules nothing', async ({ page }) => {
+  await start(page, fit(NOON, 'denied'));
+  await backFromACase(page);
+  await page.waitForTimeout(500);
+  expect((await log(page)).filter((e) => e.call === 'schedule' || e.call === 'cancel')).toEqual([]);
+});

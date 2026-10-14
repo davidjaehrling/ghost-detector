@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { type RefObject, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { cadenceStore } from '../src/state/cadence';
+import { syncRelay } from '../src/state/notifyRuntime';
 import { relayDue, relayStore } from '../src/state/relay';
 import { listScans } from '../src/state/scans';
 import { sessionActivity } from '../src/state/session';
@@ -114,6 +115,7 @@ function Viewfinder({
   const [relayOpen, setRelayOpen] = useState(false);
   useFocusEffect(
     useCallback(() => {
+      void syncRelay('focus');
       const note = takeReturnNote();
       if (!note) return;
       const scans = listScans();

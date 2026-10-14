@@ -65,6 +65,20 @@ export type NotifyBackend = {
   openSystemSettings(): Promise<void>;
 };
 
+/** What the scheduler hands the platform for one local notification. */
+export type ScheduledLine = { id: string; templateId: number; fireAtMs: number; title: string; body: string; caseId?: number };
+
+/** What a tap on a posted line carries back. */
+export type TapData = { id: string; templateId: number; caseId?: number };
+
+/** Scheduling side of the notification backend. Local notifications only, on the `Field log` channel. */
+export type ScheduleBackend = {
+  schedule(line: ScheduledLine): Promise<void>;
+  cancel(id: string): Promise<void>;
+  /** Taps on a line, including the one that cold-started the app. Returns the unsubscribe. */
+  onTap(handler: (tap: TapData) => void): () => void;
+};
+
 const KEY = 'fs4.relay.v1';
 const DEFAULT: RelayState = { offered: false, enabled: false, system: 'unknown' };
 

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { showPrivacyOptions } from '../src/ads';
 import { notifyBackend } from '../src/state/notifyBackend';
+import { syncRelay } from '../src/state/notifyRuntime';
 import { refreshRelay, relayCopy, relayOn, relayStore, toggleRelay } from '../src/state/relay';
 import { useRelay } from '../src/state/useRelay';
 import { CALM_LINE, setHaptics, setJumpScares, setSound } from '../src/state/settings';
@@ -48,11 +49,14 @@ export default function Settings() {
       label: copy.scares,
       on: settings.jumpScares,
       // On Calm the switch springs back to OFF and the instrument says why (sound palette section 6).
-      toggle: () => setCalmNote(!setJumpScares(!settings.jumpScares) && !settings.jumpScares),
+      toggle: () => {
+        setCalmNote(!setJumpScares(!settings.jumpScares) && !settings.jumpScares);
+        void syncRelay('settings');
+      },
     },
     // Off by default; on only with the notification permission granted. After a system denial the
     // row opens the system notification settings instead of asking again.
-    { id: 'relay', label: relayCopy.settingsLabel, on: relayOn(relay), toggle: () => void toggleRelay(relayStore, notifyBackend).catch(() => {}) },
+    { id: 'relay', label: relayCopy.settingsLabel, on: relayOn(relay), toggle: () => void toggleRelay(relayStore, notifyBackend).catch(() => {}).then(() => syncRelay('settings')) },
   ];
 
   return (
