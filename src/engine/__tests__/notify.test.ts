@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   ALLOWED_TEMPLATES, BACKOFF_IGNORED, CAP_PER_WEEK, CATALOGUE_SIZE, CLAIM_WORDS,
-  MIN_AFTER_INSTALL_MS, PRIORITY, STALE_AFTER_MS, WEEK_MS, WINDOW_END_MIN, WINDOW_START_MIN,
+  MIN_AFTER_INSTALL_MS, PRIORITY, STALE_AFTER_MS, WEEK_MS, WINDOW_END_MIN, WINDOW_START_MIN, DELIVERY_END_MIN,
   applyIntensityChange, deliveryMinute, effectiveCap, forecastIndex, localDayNumber, localMinuteOfDay,
   nextNotification, withinWeeklyCap,
   type Notification, type NotifyState, type ScanSummary, type SentItem, type TemplateId,
@@ -74,6 +74,7 @@ describe('constants pinned', () => {
     expect(ALLOWED_TEMPLATES.calm).toEqual([2, 5]);
     expect(PRIORITY).toEqual([2, 3, 1, 5, 4]);
     expect([WINDOW_START_MIN, WINDOW_END_MIN]).toEqual([1080, 1320]);
+    expect(DELIVERY_END_MIN).toBe(1290);
     expect(MIN_AFTER_INSTALL_MS).toBe(20 * HOUR_MS);
     expect(STALE_AFTER_MS).toBe(7 * DAY_MS);
     expect(BACKOFF_IGNORED).toBe(2);
@@ -94,11 +95,11 @@ describe('rules over 10000 random states', () => {
   it('opt-in and not in the first session', () => {
     for (const c of cases) if (!c.s.optedIn || c.s.sessionCount < 2) expect(c.n).toBeNull();
   });
-  it('fires only in 18:00 to 22:00 local, in the future', () => {
+  it('fires only in 18:00 to 21:30 local, in the future', () => {
     for (const { s, n } of fired) {
       const m = localMinuteOfDay(n.fireAtMs, s.utcOffsetMin);
       expect(m).toBeGreaterThanOrEqual(WINDOW_START_MIN);
-      expect(m).toBeLessThan(WINDOW_END_MIN);
+      expect(m).toBeLessThanOrEqual(DELIVERY_END_MIN);
       expect(n.fireAtMs).toBeGreaterThan(s.nowMs);
     }
   });
@@ -187,10 +188,11 @@ function firstOf(id: TemplateId, mk: (extra: number) => NotifyState): Notificati
 const day = (k: number) => T0 + k * DAY_MS;
 
 describe('templates', () => {
-  it('1: index title and 03:00 body', () => {
+  it('1: index title with time, all-number body', () => {
     const n = firstOf(1, (k) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 5 * DAY_MS }));
-    expect(n.title).toMatch(/^FIELD LOG · IDX [45]\/5$/);
-    expect(n.body).toMatch(/^Forecast index [45]\/5 after 22:00\. Moon \d+%\. 03:00 window peaks\.$/);
+    expect(n.title).toMatch(/^FIELD LOG · IDX [45]\/5 AT 22:00$/);
+    expect(n.body).toMatch(/^Moon \d+%\. Forecast [45]\/5 after 22:00\. [45]\/5 at 03:00\.$/);
+    expect(n.body).not.toMatch(/window peaks/);
     expect(n.body).not.toMatch(/favourable/i);
   });
   it('2: full moon forecast wording, once per cycle', () => {
@@ -320,11 +322,11 @@ describe('quoted numbers come from the forecast index and the moon', () => {
       const i03 = forecastIndex(dayStart + 27 * HOUR_MS, s.utcOffsetMin).index;
       const moon = forecastIndex(n.fireAtMs, s.utcOffsetMin).moonPct;
       for (const m of n.title.matchAll(/IDX (\d+)\/5/g)) { expect(+m[1]!).toBe(i22); checked++; }
-      for (const m of n.body.matchAll(/index (\d+)\/5/g)) { expect(+m[1]!).toBe(i22); checked++; }
+      for (const m of n.body.matchAll(/(?:index|Forecast) (\d+)\/5/g)) { expect(+m[1]!).toBe(i22); checked++; }
       for (const m of n.body.matchAll(/(\d+)\/5 at 03:00/g)) { expect(+m[1]!).toBe(i03); checked++; }
       for (const m of `${n.title} ${n.body}`.matchAll(/(?:MOON|Moon) (\d+)%/g)) { expect(+m[1]!).toBe(moon); checked++; }
       const slashes = (`${n.title} ${n.body}`.match(/\d+\/5/g) ?? []).length;
-      const covered = (n.title.match(/IDX \d+\/5/g) ?? []).length + (n.body.match(/index \d+\/5/g) ?? []).length + (n.body.match(/\d+\/5 at 03:00/g) ?? []).length;
+      const covered = (n.title.match(/IDX \d+\/5/g) ?? []).length + (n.body.match(/(?:index|Forecast) \d+\/5/g) ?? []).length + (n.body.match(/\d+\/5 at 03:00/g) ?? []).length;
       expect(slashes).toBe(covered);
     }
     expect(checked).toBeGreaterThan(100);
@@ -338,7 +340,7 @@ describe('delivery minute', () => {
       const installMs = T0 + i * 7_919_000;
       const m = deliveryMinute(installMs);
       expect(m).toBeGreaterThanOrEqual(WINDOW_START_MIN);
-      expect(m).toBeLessThan(WINDOW_END_MIN);
+      expect(m).toBeLessThanOrEqual(DELIVERY_END_MIN);
       expect(deliveryMinute(installMs)).toBe(m);
     }
     const spread = new Set(Array.from({ length: 200 }, (_, i) => deliveryMinute(T0 + i * 86_413_000)));

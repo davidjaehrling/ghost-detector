@@ -14,6 +14,8 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 export const WINDOW_START_MIN = 18 * 60;
 export const WINDOW_END_MIN = 22 * 60;
+/** Latest delivery minute (21:30, inclusive): slack before 22:00 for inexact Android alarms (D-035). */
+export const DELIVERY_END_MIN = 21 * 60 + 30;
 export const WEEK_MS = 7 * DAY_MS;
 export const MIN_AFTER_INSTALL_MS = 20 * HOUR_MS;
 export const STALE_AFTER_MS = 7 * DAY_MS;
@@ -197,13 +199,13 @@ const pad4 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(4, '0');
 interface Ctx { s: NotifyState; t: number; moonPct: number; idx: number; idx03: number }
 
 /**
- * Minute of the local day (inside the 18:00 to 22:00 window) this install is always notified at.
+ * Minute of the local day (18:00 to 21:30 inclusive, `WINDOW_START_MIN` to `DELIVERY_END_MIN`) this install is always notified at.
  * Seeded from `installMs` so the relay is predictable and not drawn again each night.
  */
 export function deliveryMinute(installMs: number): number {
   const r = mulberry32(Math.floor(installMs / 1000) >>> 0);
   r();
-  return WINDOW_START_MIN + Math.floor(r() * (WINDOW_END_MIN - WINDOW_START_MIN));
+  return WINDOW_START_MIN + Math.floor(r() * (DELIVERY_END_MIN - WINDOW_START_MIN + 1));
 }
 
 function build(id: TemplateId, c: Ctx): Notification | null {
@@ -214,8 +216,8 @@ function build(id: TemplateId, c: Ctx): Notification | null {
       if (idx < HIGH_INDEX || idx03 < HIGH_INDEX) return null;
       return {
         templateId: 1, fireAtMs: t,
-        title: `FIELD LOG · IDX ${idx}/5`,
-        body: `Forecast index ${idx}/5 after 22:00. Moon ${moonPct}%. 03:00 window peaks.`,
+        title: `FIELD LOG · IDX ${idx}/5 AT 22:00`,
+        body: `Moon ${moonPct}%. Forecast ${idx}/5 after 22:00. ${idx03}/5 at 03:00.`,
       };
     case 2:
       if (!isFullMoonWindow(t, s.utcOffsetMin)) return null;
