@@ -65,7 +65,8 @@ export type OfferInput = {
 export function useShareOffer(o: OfferInput) {
   const { tier, stable, deep, adClosedAt, frozen, initial } = o;
   const wide = OFFER_TIERS.includes(tier);
-  const [line, setLine] = useState<OfferKind | null>(initial);
+  // `at` is when the line went up; a line from before the last rewarded ad closed is never shown again.
+  const [up, setUp] = useState<{ kind: OfferKind; at: number } | null>(initial ? { kind: initial, at: Infinity } : null);
   const r = useRef<{
     stableAt: number | null;
     unlockAt: number | null;
@@ -82,28 +83,30 @@ export function useShareOffer(o: OfferInput) {
     if (frozen || !wide || !stable) return;
     // A rewarded ad is loading or playing: no line, and any line already up goes.
     if (deep === 'running' || deep === 'warming') {
-      const clear = setTimeout(() => setLine(null), 0);
-      return () => clearTimeout(clear);
+      return;
     }
     const kind: OfferKind = st.unlockAt !== null ? 'updated' : 'ready';
-    if (st.done[kind]) return;
+    // A line that an ad took off the screen did not count: it is offered again, clear of the ad.
+    const taken = up !== null && adClosedAt !== null && up.at < adClosedAt && up.kind === kind;
+    if (st.done[kind] && !taken) return;
     const at = offerDueAt(kind, { stableAt: st.stableAt!, unlockAt: st.unlockAt, closedAt: adClosedAt });
     const timer = setTimeout(() => {
       st.done.ready = true;
       if (kind === 'updated') st.done.updated = true;
-      setLine(kind);
+      setUp({ kind, at: Date.now() });
     }, Math.max(0, at - now));
     return () => clearTimeout(timer);
-  }, [stable, deep, wide, frozen, adClosedAt]);
+  }, [stable, deep, wide, frozen, adClosedAt, up]);
 
   // The line goes after its life; the harness (`frozen`) keeps it up for the golden.
   useEffect(() => {
-    if (line === null || frozen || initial !== null) return;
-    const timer = setTimeout(() => setLine(null), OFFER_LIFE_MS);
+    if (up === null || frozen || initial !== null) return;
+    const timer = setTimeout(() => setUp(null), OFFER_LIFE_MS);
     return () => clearTimeout(timer);
-  }, [line, frozen, initial]);
+  }, [up, frozen, initial]);
 
-  const dismiss = useCallback(() => setLine(null), []);
+  const dismiss = useCallback(() => setUp(null), []);
   const busy = deep === 'running' || deep === 'warming';
-  return { line: busy && !frozen ? null : line, dismiss };
+  const stale = up !== null && adClosedAt !== null && up.at < adClosedAt;
+  return { line: up === null || stale || (busy && !frozen) ? null : up.kind, dismiss };
 }

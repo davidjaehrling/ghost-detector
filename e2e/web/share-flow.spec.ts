@@ -102,37 +102,70 @@ test('ACTIVE: the line comes 3.0 s after the reveal settles, once, and goes afte
   check();
 });
 
+// In-page event log (performance.now): every change of the result line, the first appearance of the
+// Deep Scan done line, and every press of the DEEP SCAN key. Playwright's own polling is too slow and
+// too uneven under load to time a 3.0 s rule.
+type Ev = { t: number; text: string };
+type Log = { lines: Ev[]; done: number | null; presses: number[] };
+
+async function logLines(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __log: { lines: { t: number; text: string }[]; done: number | null; presses: number[] } };
+    w.__log = { lines: [], done: null, presses: [] };
+    let last = '';
+    new MutationObserver(() => {
+      const now = performance.now();
+      const text = document.querySelector('[data-testid="result-line"]')?.textContent ?? '';
+      if (text !== last) {
+        last = text;
+        w.__log.lines.push({ t: now, text });
+      }
+      if (w.__log.done === null && document.querySelector('[data-testid="deepscan-done"]')) w.__log.done = now;
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+    document.addEventListener('click', (e) => {
+      if ((e.target as Element | null)?.closest('[data-testid="deepscan-key"]')) w.__log.presses.push(performance.now());
+    }, true);
+  });
+}
+const readLog = (page: Page) => page.evaluate(() => (window as unknown as { __log: Log }).__log);
+
 test('no proactive line while a rewarded ad plays, nor within 3 s after it closes', async ({ page }) => {
   test.setTimeout(60_000);
   const check = watch(page);
+  await logLines(page);
   await page.goto(`${STRONG}&share=timer&adReady=1&reward=0`);
   await expect(page.getByTestId('deepscan-key')).toBeEnabled();
-  const t0 = Date.now();
-  await page.waitForTimeout(1200);
-  const closed = Date.now();
+  await page.waitForTimeout(500);
   await page.getByTestId('deepscan-key').click();
-  // The line was due at about 3.0 s; the ad closed at about 1.3 s, so the line waits for ~4.3 s.
-  await page.waitForTimeout(Math.max(0, t0 + 3700 - Date.now()));
-  await offerAt(page, 'Strong. Signature resolving.');
-  await expect(page.getByText(/Field card/)).toHaveCount(0);
-  await offerAt(page, 'Field card ready. CASE 0003.');
-  expect(Date.now() - closed).toBeGreaterThanOrEqual(3000);
+  // The line was due about 3.0 s after the settle; the ad closed right after the press, so it waits.
+  await expect(page.getByTestId('result-line')).toHaveText('Field card ready. CASE 0003.', { timeout: 15_000 });
+  const log = await readLog(page);
+  const press = log.presses[0]!;
+  // A line that was up just before the press is taken off by the ad; the one that follows is the one counted.
+  const offers = log.lines.filter((l) => l.text.startsWith('Field card') && l.t > press);
+  expect(offers).toHaveLength(1);
+  // The press closes the ad within a frame or two (static): the line is at least 3.0 s clear of it.
+  expect(offers[0]!.t - press).toBeGreaterThanOrEqual(3000);
   check();
 });
 
 test('after a Deep Scan the card line comes back once as updated', async ({ page }) => {
   test.setTimeout(60_000);
   const check = watch(page);
+  await logLines(page);
   await page.goto(`${STRONG}&share=timer`);
   await expect(page.getByTestId('deepscan-key')).toBeEnabled();
   await page.waitForTimeout(500);
   await page.getByTestId('deepscan-key').click();
   await expect(page.getByTestId('deepscan-done')).toBeVisible();
-  const done = Date.now();
-  await page.waitForTimeout(2800);
-  await expect(page.getByText(/Field card/)).toHaveCount(0);
-  await offerAt(page, 'Field card updated. Class and EVP added.');
-  expect(Date.now() - done).toBeGreaterThanOrEqual(3000);
+  await expect(page.getByTestId('result-line')).toHaveText('Field card updated. Class and EVP added.', { timeout: 15_000 });
+  const log = await readLog(page);
+  const updated = log.lines.filter((l) => l.text === 'Field card updated. Class and EVP added.');
+  expect(updated).toHaveLength(1);
+  // 3.0 s after the high-resolution figure has faded in, which is after the Deep Scan finished.
+  expect(updated[0]!.t - log.done!).toBeGreaterThanOrEqual(3000);
+  // After the press the plain line does not come: the Deep Scan came first, so the updated one is the line.
+  expect(log.lines.filter((l) => l.text.startsWith('Field card ready') && l.t > log.presses[0]!)).toHaveLength(0);
   check();
 });
 
