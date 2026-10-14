@@ -44,8 +44,19 @@ const TAG_SHORT: Record<LocationTag, string> = copyOf({
   outdoors: 'tag.short.outdoors',
 });
 
+const ALL_TAGS = Object.keys(TAG_LABEL) as LocationTag[];
+
+// The long legends are used from TAG_SHORT_BELOW up, and only while they still leave 12 px between
+// the hit areas: a language with longer words (DACHBODEN, DORMITORIO) falls back to its short forms.
+export function longLegendsFit(windowW: number): boolean {
+  if (windowW < TAG_SHORT_BELOW) return false;
+  const widths = ALL_TAGS.map((tg) => Math.max(TAG_HIT, TAG_LABEL[tg].length * tagChWidth(windowW)));
+  const free = glassWidth(windowW) - TAG_ROW_PAD * 2 - widths.reduce((a, b) => a + b, 0);
+  return free / (ALL_TAGS.length - 1) >= TAG_GAP_MIN;
+}
+
 export function tagLegend(tag: LocationTag, windowW: number): string {
-  return windowW < TAG_SHORT_BELOW ? TAG_SHORT[tag] : TAG_LABEL[tag];
+  return longLegendsFit(windowW) ? TAG_LABEL[tag] : TAG_SHORT[tag];
 }
 
 // B612 Mono 10 px advances 6.5 px; with 1 px tracking that is 7.5 px per character (measured). Under

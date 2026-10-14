@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Rect as SkRect, Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
+import { Group as SkGroup, Rect as SkRect, Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { track } from '../../src/analytics';
@@ -531,10 +531,14 @@ const SPI_PAD = 12; // canvas margin around the digit so the bloom is not clippe
 const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
 function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value?: string; maskW?: number; valueTestID?: string }) {
+  // A value longer than its box (a narrow phone) tightens its tracking to fit instead of cutting the end.
+  const [boxW, setBoxW] = useState(0);
+  const need = (value?.length ?? 0) * CHAR_XS;
+  const tight = boxW > 0 && need > boxW ? { letterSpacing: Math.max(-0.6, Math.floor((boxW / (value?.length ?? 1) - (CHAR_XS - 0.5)) * 10) / 10) } : null;
   return (
     <View style={s.profRow}>
       <Text style={s.profLabel}>{label}</Text>
-      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, tight]} numberOfLines={1} testID={valueTestID} onLayout={(e) => setBoxW(e.nativeEvent.layout.width)}>{value}</Text>}
     </View>
   );
 }
@@ -842,15 +846,22 @@ const STRIP_X = 8;
 const STRIP_SCRIM = 0.4;
 function DataStrip({ text, width, height, font }: { text: string; width: number; height: number; font: SkFont | null }) {
   const base = STRIP_H - 8;
-  const scrimW = font ? Math.min(width, font.measureText(text).width + 2 * STRIP_X) : 0;
+  const textW = font ? font.measureText(text).width : 0;
+  // A longer line (a long locale, a narrow phone) is scaled down so the mark at its end is never cut off.
+  const k = textW > 0 ? Math.min(1, (width - 2 * STRIP_X) / textW) : 1;
+  const scrimW = font ? Math.min(width, textW * k + 2 * STRIP_X) : 0;
+  // Web only (`data-*`): the drawn text width after scaling, so the layout goldens can assert the mark fits the strip.
+  const web = { dataSet: { textW: String(Math.ceil(textW * k)) } } as object;
   return (
-    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null}>
+    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null} {...web}>
       <SnapshotCanvas style={{ width, height: STRIP_H }} pointerEvents="none">
         {font ? (
           <>
             <SkRect x={0} y={4} width={scrimW} height={STRIP_H - 6} color={color.n0} opacity={STRIP_SCRIM} />
-            <SkText font={font} text={text} x={STRIP_X + 1} y={base + 1} color={color.n0} />
-            <SkText font={font} text={text} x={STRIP_X} y={base} color={color.p3} />
+            <SkGroup transform={[{ translateX: STRIP_X }, { scale: k }]}>
+              <SkText font={font} text={text} x={1 / k} y={(base + 1) / k} color={color.n0} />
+              <SkText font={font} text={text} x={0} y={base / k} color={color.p3} />
+            </SkGroup>
           </>
         ) : null}
       </SnapshotCanvas>
