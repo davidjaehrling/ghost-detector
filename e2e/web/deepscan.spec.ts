@@ -107,7 +107,7 @@ test('reward earned: the ad plays on the tap only, the scan unlocks and stays un
   check();
 });
 
-test('dismissed without the reward: nothing changes and the ad is not offered again', async ({ page }) => {
+test('dismissed without the reward: nothing changes and a second tap may play a fresh ad', async ({ page }) => {
   const check = watch(page);
   await page.goto('/scan?static=1&seed=41&speed=8&fixture=cellar&reward=0');
   await expect(page.getByTestId('screen-result')).toBeVisible({ timeout: 15_000 });
@@ -120,12 +120,24 @@ test('dismissed without the reward: nothing changes and the ad is not offered ag
   await expect(page.getByTestId('deepscan-sub')).toHaveText(SUB);
   await expect(page.getByTestId('profile-mask')).toHaveCount(3);
   await expect(page.getByTestId('result-decoded')).toContainText('SIGNATURE PARTIALLY DECODED:');
-  // A second tap in the same session does not play a second ad or load another.
-  await key.click();
+  // No automatic re-offer: one fresh ad is requested for the dismissed slot and nothing is shown
+  // until the person taps again.
   await page.waitForTimeout(700);
-  const log = await adsLog(page);
+  let log = await adsLog(page);
   expect(log.filter((c) => c === 'rewardedShow')).toHaveLength(1);
-  expect(log.filter((c) => c === 'rewardedLoad')).toHaveLength(1);
+  expect(log.filter((c) => c === 'rewardedLoad')).toHaveLength(2);
+  await expect(key).toBeEnabled();
+  await expect(key).toHaveText('DEEP SCAN');
+  await expect(page.getByTestId('deepscan-done')).toHaveCount(0);
+  await expect(page.getByTestId('profile-mask')).toHaveCount(3);
+  // A second, explicit tap plays the fresh ad; the scan stays locked because no reward is earned.
+  await key.click();
+  await expect.poll(async () => (await adsLog(page)).filter((c) => c === 'rewardedShow').length).toBe(2);
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('deepscan-done')).toHaveCount(0);
+  await expect(page.getByTestId('profile-mask')).toHaveCount(3);
+  log = await adsLog(page);
+  expect(log.filter((c) => c === 'rewardedShow')).toHaveLength(2);
   check();
 });
 
