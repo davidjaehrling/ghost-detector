@@ -102,15 +102,18 @@ Locales: DE, ES, PT. Each is written for its culture and checked by a separate r
 Carries over unchanged:
 - Codes and serials: `E-07`, `CASE 0041`, `FW 3.1.7`, model and serial text.
 - Units and symbols: mG, ΔT °C, Hz, dBFS, `%`. Decimal marks follow the locale (`61,5%` in DE, ES, PT) while code strings keep the original.
-- Tier names QUIET, TRACE, ACTIVE, STRONG and CRITICAL stay in English as instrument labels, with a short local gloss only where a screen has room.
+- Tier names QUIET, TRACE, ACTIVE, STRONG and CRITICAL stay in English as instrument labels, with a short local gloss only where a screen has room. `CASE` and the mode name `DEEP SCAN` stay English too.
 - Timestamps stay 24 h and ISO dates.
 
 Rewritten per culture:
-- No idiom is translated. Lore notes, profile lines and the onboarding question are composed again in each language from the intent.
-- DE: use the impersonal infinitive or noun style of a technical manual (`Langsam schwenken.`, `Kalibrierung läuft.`). Where the user must be addressed, use du, since the audience is 16 to 30, and keep it flat. Avoid the long compounds that break the HUD; split them.
-- ES: neutral Latin American Spanish with tú forms in imperatives (`Barre lento.`). Spain-specific slang and vosotros forms are out. Instrument labels stay short, so use infinitives for HUD text.
-- PT: Brazilian Portuguese is the base (você, imperative in 3rd person: `Varra devagar.`). European Portuguese needs a separate pass before any PT-PT release.
-- Uncertainty and tone rules (rules 7 to 11) apply in full. The disclosure keeps the same meaning and stays under 25 words in each language.
+- No idiom is translated. Lore notes, profile lines and the onboarding question are composed again in each language from the intent. Entity classes, location tags, housing references and folklore nouns are chosen from each culture, with the same number of bank entries and the same 24-class order as EN.
+- Register (D-038). Two registers, never mixed on one screen.
+  - Instrument surfaces (boot, viewfinder, scan, result, history, share, labels, legends, profile lines): impersonal instrument voice in every language. DE uses the infinitive or noun style of a technical manual (`Langsam schwenken.`, `Kalibrierung läuft.`). ES uses infinitives and impersonal forms (`Barrer despacio.`). PT uses impersonal forms and infinitives (`Varrer devagar.`).
+  - Consequence surfaces (Deep Scan offer, permission rationale, relay opt-in, consent, Settings help, legal): DE `Sie`, ES `usted`, PT the polite third person (`o utilizador`, `pode`). A consequence surface that needs no pronoun stays impersonal. No `du`, no `tú`, no `vosotros`, no `você`.
+  - EN is unchanged.
+- ES: neutral Spanish. Avoid regional device words (`móvil`, `celular`); write `dispositivo`. Avoid Spain-only slang.
+- PT: European Portuguese (pt-PT, store locale pt-PT). Write `utilizador`, `registo`, `deteta`, `ecrã`, `descodificar`, `partilhar`, `a` plus infinitive for progressive actions. Brazilian Portuguese needs its own pass and Play locale (P10 decision).
+- Uncertainty and tone rules (rules 7 to 11) apply in full. The disclosure keeps the same meaning and stays under 25 words in each language. The disclosure wording is fixed by `docs/localisation-rules.md`.
 
 String length allowances against EN:
 
