@@ -1,15 +1,13 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import { type LayoutChangeEvent, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Glass, type GlassProps } from '../../fx/glass';
 import { FIXED_SEED, type InstallIdentity, getInstallIdentity, readInstallSeed } from '../boot/install';
 import { Key, type KeySlot, KeyRow, LedLadder, MiniSticker, Screw, Wear } from '../boot/parts';
 import { readHarness } from '../harness';
-import { plateSerial } from '../serial';
-import { color, font, radius, space, type } from '../tokens';
+import { Nameplate } from './Nameplate';
+import { color } from '../tokens';
 import { useReduceMotion } from '../useReduceMotion';
-
-export const MAKER = 'VELDEN  FS-4/87-P';
 
 export type GlassSize = { w: number; h: number };
 
@@ -96,20 +94,6 @@ export function Housing({
   );
 }
 
-// The riveted aluminium strip: maker left, serial right (one rule for every screen, src/ui/serial.ts).
-export function Nameplate({ serial }: { serial: string }) {
-  const { width: windowW } = useWindowDimensions();
-  return (
-    <View style={s.nameplate}>
-      <View style={[s.rivet, { left: 8 }]} />
-      <Text style={s.plateText}>{MAKER}</Text>
-      <View style={s.scuff} />
-      <Text style={s.plateText}>{plateSerial(serial, windowW)}</Text>
-      <View style={[s.rivet, { right: 8 }]} />
-    </View>
-  );
-}
-
 export { Key };
 
 const GUTTER = 14;
@@ -125,27 +109,6 @@ const s = StyleSheet.create({
     paddingHorizontal: GUTTER,
     overflow: 'hidden',
   },
-  nameplate: {
-    marginHorizontal: space.gutter - GUTTER,
-    height: 28,
-    backgroundColor: color.n5,
-    borderRadius: radius.plate,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  plateText: {
-    ...type.lbS,
-    fontFamily: font.labelBold,
-    color: color.n2,
-    textShadowColor: color.n6,
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0,
-  },
-  rivet: { position: 'absolute', top: 12, width: 4, height: 4, borderRadius: 2, backgroundColor: color.n4 },
-  // The scuff sits in the left half of the plate, under the maker text's baseline, never on a letter.
-  scuff: { position: 'absolute', left: 64, top: 22, width: 6, height: 2, backgroundColor: color.n4, opacity: 0.5 },
   windowRow: { flex: 1, flexDirection: 'row', marginTop: 18, marginBottom: 18 },
   windowWrap: { flex: 1 },
   glassBox: { flex: 1 },

@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FIXED_SEED, getInstallIdentity } from '../boot/install';
 import { Graticule, type KeySlot, KeyRow, Screw } from '../boot/parts';
 import { readHarness } from '../harness';
-import { Nameplate } from './Housing';
+import { Nameplate } from './Nameplate';
 import { color, radius, type } from '../tokens';
 
 export type KeySpec = KeySlot;

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
+import { ensureConsent } from '../../ads';
 import { track } from '../../analytics';
 import { copyOf, useLocale } from '../../i18n';
 import { clearFaults } from '../../state/faults';
@@ -24,7 +25,8 @@ const CODE = { unit: 'E-60', optics: 'E-52' } as const;
 export function FaultScreen({ kind, onReset }: { kind: FaultKind; onReset: () => void }) {
   useLocale();
   useEffect(() => {
-    track('fault', { code: CODE[kind] });
+    // The facade drops events until the consent check has resolved, so wait for it.
+    void ensureConsent().then(() => track('fault', { code: CODE[kind] }));
   }, [kind]);
   const code = kind === 'unit' ? copy.unitCode : copy.opticsCode;
   const cause = kind === 'unit' ? copy.unitCause : copy.opticsCause;
