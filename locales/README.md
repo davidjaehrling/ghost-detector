@@ -113,7 +113,7 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 
 ### ES
 
-- Variant: neutral Spanish. Instrument surfaces use infinitives and impersonal forms (`Barrer despacio.`, `Pulsar CAPTURAR`). `usted` on the camera rationale (`su dispositivo`) and the relay opt-in (`Usted recibe`). No `tú`, no `vosotros`. Device words are neutral: `dispositivo`, never `móvil` or `celular`.
+- Variant: neutral Spanish. Instrument surfaces use infinitives and impersonal forms (`Barrer despacio.`, `Pulsar CAPTURAR`). `usted` on the camera rationale (`su dispositivo`) and the relay opt-in (no pronoun after review round 1). No `tú`, no `vosotros`. Device words are neutral: `dispositivo`, never `móvil` or `celular`.
 - Rewritten, not translated: location tags and lore (`desván`, `caballete`, `rasante`, `marcos de puerta`), the 24 class names (`IMPRONTA`, `POSIMAGEN`, `OQUEDAD`, `MURMULLO`, `GUARDIÁN` ...), attachments (`alacena`, `fogón`, `estancia`), the EVP fragments, `FICHA DE CAMPO` for the field card, `PUNTO FRÍO`, `CONDUCTA`.
 - `PRESENCE` became `APARICIÓN` because `presencia*` is on the claim list.
 - `ON` and `OFF` stay as printed on Spanish devices.
@@ -185,3 +185,36 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 
 `pnpm test` fails when code uses a key that `en.json` lacks, when an `en.json` key is not referenced,
 or when a dynamic key uses a prefix outside the allowlist. `pnpm lint:copy` scans every file here.
+
+## Review round 1
+
+P7-04: three native reviewers (DE technical-manual editor, ES editor from Spain, pt-PT editor) went through the files. Verdicts were block with 2, 2 and 1 block findings and the rest polish (DE 37 findings, ES 46, PT 35). All five block fixes are applied verbatim. Polish fixes are applied unless listed under "Kept or changed" below. Key parity, placeholders and the disclosure keys are unchanged in meaning; lint and the i18n tests pass.
+
+### Applied
+
+- Block, DE: `result.line.strong` is `Stark. Signatur wird schärfer.` (`löst sich auf` meant the opposite); `viewfinder.hud.wait` is `SU · WARTEN`.
+- Block, ES: `viewfinder.permission.camera` states the purpose again (`Cámara necesaria para capturar. ...`); `relay.header` is `RELÉ DE REGISTRO`.
+- Block, PT: `relay.header` is `RELÉ DO REGISTO DE CAMPO`.
+- Polish, keys changed (DE 42, ES 41, PT 45, engine keys carry the `engine.` prefix):
+  - DE: `legal.privacy`, `settings.scares`, `settings.legal`, `viewfinder.permission.camera`, `viewfinder.permission.denied.cause`, `viewfinder.permission.denied.next`, `viewfinder.hud.wait`, `result.line.trace`, `result.line.strong`, `deep.warming`, `share.printing`, `history.logged`, `history.nightsLine`, `history.moonsLine`, `scan.phase.2`, `lore.cellar.1`, `lore.bedroom.0`, `lore.hallway.1`, `lore.outdoors.0`, `lore.outdoors.1`, `relay.body`, `relay.settingsLabel`, `settings.calm`, `boot.key`, `onboarding.intensitySet`, `onboarding.skipLabel`, `engine.profile.class.00`, `engine.profile.class.10`, `engine.profile.temperament.07`, `engine.profile.attachment.07`, `engine.profile.attachment.16`, `engine.profile.attachment.23`, `engine.profile.behaviour.01`, `engine.profile.behaviour.02`, `engine.profile.behaviour.03`, `engine.profile.behaviour.06`, `engine.profile.behaviour.13`, `engine.profile.timing.07`, `engine.profile.timing.13`, `engine.profile.era`, `engine.notify.lore.hall`, `engine.notify.lore.kitchen`
+  - ES: `settings.haptics`, `viewfinder.permission.camera`, `viewfinder.permission.denied.head`, `viewfinder.permission.denied.cause`, `result.missingTitle`, `result.missingLine`, `result.thermal`, `result.back`, `result.line.trace`, `result.line.strong`, `deep.offline`, `deep.done`, `deep.evp.0`, `history.relayLabelOn`, `history.relayLabelOff`, `history.relayOn`, `history.relayOff`, `scan.phase.4`, `tag.short.outdoors`, `lore.cellar.1`, `lore.attic.1`, `lore.hallway.1`, `lore.outdoors.0`, `boot.selftest.therm`, `relay.header`, `relay.body`, `relay.fitted`, `relay.notFitted`, `relay.settingsLabel`, `onboarding.intensitySet`, `onboarding.skipLabel`, `engine.profile.class.00`, `engine.profile.temperament.21`, `engine.profile.temperament.22`, `engine.profile.attachment.09`, `engine.profile.attachment.17`, `engine.profile.behaviour.20`, `engine.profile.timing.07`, `engine.profile.era`, `engine.notify.t3.body`, `engine.notify.lore.kitchen`
+  - PT: `legal.nextLabel`, `settings.haptics`, `history.next`, `history.nextLabel`, `scan.glass`, `viewfinder.permission.camera`, `viewfinder.permission.denied.cause`, `viewfinder.permission.denied.next`, `viewfinder.hud.live`, `result.missingLine`, `result.line.trace`, `result.line.strong`, `result.hidden.behaviour`, `log.recordLine`, `history.peak`, `scan.phase.0`, `scan.phase.4`, `tag.short.hallway`, `lore.hallway.1`, `lore.outdoors.0`, `lore.outdoors.1`, `relay.header`, `relay.fitted`, `relay.notFitted`, `boot.keyLabel`, `onboarding.intensitySet`, `onboarding.skipLabel`, `engine.profile.class.08`, `engine.profile.class.10`, `engine.profile.class.18`, `engine.profile.temperament.04`, `engine.profile.temperament.06`, `engine.profile.temperament.08`, `engine.profile.temperament.09`, `engine.profile.temperament.13`, `engine.profile.temperament.16`, `engine.profile.temperament.22`, `engine.profile.behaviour.01`, `engine.profile.behaviour.02`, `engine.profile.behaviour.03`, `engine.profile.behaviour.04`, `engine.profile.behaviour.05`, `engine.profile.behaviour.15`, `engine.profile.behaviour.17`, `engine.profile.detail.04`
+- ES relay naming: the toggle, history lines and spoken labels now say `RELÉ DE REGISTRO`, so the name no longer matches the notification prefix `REGISTRO DE CAMPO`.
+- PT: the app screen `Definições` is capitalised wherever a row names the app screen; `definições do dispositivo` stays lowercase.
+- DE finding 36 (`engine.notify.t3.*` printing the English tag id) is a code-side item; no string change. Builder A already passes `tag.<id>` (commit 5a73973).
+
+### Kept or changed from the proposal
+
+| Language and key | Reviewer proposal | What the file has | Reason |
+| --- | --- | --- | --- |
+| DE `relay.body` | `... Index, Mond oder ein offener Fall. Zwischen 18:00 und 22:00. ...` | `Höchstens ein Eintrag pro Nacht: Index und Mond oder ein offener Fall. Zwischen 18:00 und 22:00.` | `Sie erhalten` dropped and `Zwischen` added as proposed. Index and moon stay a pair plus one alternative, because a bare three-item list breaks the voice guide ban on always-three lists. |
+| DE `relay.blocked` | `RELAIS VOM SYSTEM GESPERRT. ...` | `RELAIS GESPERRT. GERÄTEEINSTELLUNGEN ÖFFNEN.` | Relay copy must not pose as an OS message (D-039); ES and PT drop the cause the same way. The second sentence already sends the user to the device settings. |
+| ES `onboarding.question`, `onboarding.questionHead` | `¿Ha vivido alguna vez algo que no pudo explicar?` | `¿Alguna vez hubo algo que no se pudo explicar?` | The `usted`-implied verb moves the onboarding question onto the consequence register. D-038 keeps the question impersonal. |
+| PT `onboarding.question`, `onboarding.questionHead` | `Já lhe aconteceu algo que não conseguiu explicar?` | `Alguma vez houve algo que não se conseguiu explicar?` | `lhe` is the polite third person, which D-038 restricts to consequence surfaces. Same reason as ES. |
+| ES `tag.short.hallway` | `PASILLO` | `PASIL.` | 7 against `HALL` 4 is +3, over the key-cap budget of +2. A layout check can lift this; `PASILLO` fits if the window already holds `BEDROOM`. |
+| ES `viewfinder.hud.live` | `VS · DIRECTO` | `VS · VIVO` | 12 against 9 is +3, over the HUD budget. PT takes `VS · DIRETO` (11, +2). |
+| ES `profile.class.10` | `HUÉSPED` | `APARICIÓN` | The reviewer calls `APARICIÓN` acceptable. `HUÉSPED` reads as guest or host organism first. |
+
+### Layout watch
+
+Over the +25% allowance for status lines after review: ES `scan.phase.4` and PT `scan.phase.4` (26 characters against 18). Both were already over (24); the gerund and `A` plus infinitive carry the register the reviewers asked for. DE `legal.privacy` is `DATENSCHUTZERKLÄRUNG` (21 against 14) on a Legal row, not a key cap. Check all three in the L2 screenshots.
