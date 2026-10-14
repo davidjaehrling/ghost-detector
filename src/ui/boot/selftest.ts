@@ -1,3 +1,4 @@
+import { fmtFixed, getLocale, t } from '../../i18n';
 import { mulberry32 } from './seed';
 
 // Self-test lines with seeded readings, in fixed columns:
@@ -14,9 +15,9 @@ export function selfTestReadings(seed: number): SelfTestLine[] {
   const therm = Math.round((r() * 2 - 1) * 10) / 10; // dT, 0.1 C
   const acoust = -(45 + Math.floor(r() * 15)); // dBFS
   return [
-    { label: 'FLUX', value: String(flux), unit: 'mG', status: 'OK' },
-    { label: 'THERM', value: `${sign(therm)}${Math.abs(therm).toFixed(1)}`, unit: '°C', status: 'OK' },
-    { label: 'ACOUST', value: String(acoust), unit: 'dBFS', status: 'OK' },
+    { label: t('boot.selftest.flux'), value: String(flux), unit: 'mG', status: t('boot.selftest.ok') },
+    { label: t('boot.selftest.therm'), value: `${sign(therm)}${fmtFixed(Math.abs(therm), 1, getLocale())}`, unit: '°C', status: t('boot.selftest.ok') },
+    { label: t('boot.selftest.acoust'), value: String(acoust), unit: 'dBFS', status: t('boot.selftest.ok') },
   ];
 }
 

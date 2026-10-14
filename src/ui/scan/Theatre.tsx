@@ -7,7 +7,7 @@ import type { GlassSize } from '../screens/Housing';
 import { color, type } from '../tokens';
 import { BLOCKS, BlockBar, RATE_MAX_H } from './BlockBar';
 import {
-  FAULT_LINE,
+  faultLine,
   type Phase,
   type ScanFrame,
   barBlocks,
@@ -18,12 +18,19 @@ import {
   phaseLine,
   rateAt,
 } from './timeline';
+import { copyOf, t, useLocale } from '../../i18n';
 
-const copy = {
-  firmware: 'FW 3.1.7 · ROM C2-8811',
-  trig: 'TRIG AUTO',
-  timebase: '50 ms/DIV',
-  sens: '10 mG/DIV',
+const copy = copyOf({
+  firmware: 'hud.firmware',
+  trig: 'hud.trig',
+  timebase: 'hud.timebase',
+  sens: 'hud.sens',
+});
+
+// The fault line is two sentences; a narrow glass sets one per row.
+const faultRows = (line: string): [string, string] => {
+  const i = line.indexOf('. ');
+  return i < 0 ? [line, ''] : [line.slice(0, i + 1), line.slice(i + 2)];
 };
 
 const CH_S = 8.5; // rdS advance: 0.4 em plus 0.5 tracking
@@ -45,6 +52,7 @@ const FAULT_INDENT = 'E-07 '.length * CH_S;
 // p3, a block blinks where the percentage was, and the live rows go blank.
 // The fault beat flattens the trace, stalls the bar and blinks the E-07 line.
 export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: GlassSize; seed: number; frame: ScanFrame; cap: number; still?: boolean }) {
+  useLocale();
   const { w, h } = size;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
@@ -69,7 +77,7 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
 
   const lines = logBefore(seed, phase);
   const faultVisible = fault && faultOn(frame.faultT);
-  const status = fault ? (faultVisible ? FAULT_LINE : '') : phaseLine(seed, phase);
+  const status = fault ? (faultVisible ? faultLine() : '') : phaseLine(seed, phase);
   const statusColor = hold ? color.p3 : frame.final || fault ? color.p5 : color.p4;
   // The fault line hangs its second row under the text after `E-07 ` on a narrow glass.
   const rate = live ? rateAt(seed, frame.tick, frame.activeFrac, cap) : 0;
@@ -94,7 +102,7 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
         dim={hold}
         still={still}
       />
-      <BlockBar lit={lit} left={barLeft} top={gridBottom + 24} width={gw - 48} hideLast={fault && !faultVisible} testID="scan-bar" label={`Progress ${pct} percent`} />
+      <BlockBar lit={lit} left={barLeft} top={gridBottom + 24} width={gw - 48} hideLast={fault && !faultVisible} testID="scan-bar" label={t('scan.progressLabel', { pct })} />
       {hold ? (
         <View style={[s.holdBlock, { left: gridLeft + gw - 10, top: gridBottom + 26, opacity: blink ? 1 : 0 }]} testID="scan-percent" />
       ) : (
@@ -110,9 +118,9 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
           </Text>
         ))}
         {fault && narrow ? (
-          <View style={{ height: 48 }} testID="scan-status" accessibilityLabel={FAULT_LINE}>
-            <Text style={[s.status, { color: statusColor, opacity: faultVisible ? 1 : 0 }]}>{'E-07 SENSOR DRIFT.'}</Text>
-            <Text style={[s.status, { color: statusColor, opacity: faultVisible ? 1 : 0, marginLeft: FAULT_INDENT }]}>{'RECALIBRATING.'}</Text>
+          <View style={{ height: 48 }} testID="scan-status" accessibilityLabel={faultLine()}>
+            <Text style={[s.status, { color: statusColor, opacity: faultVisible ? 1 : 0 }]}>{faultRows(faultLine())[0]}</Text>
+            <Text style={[s.status, { color: statusColor, opacity: faultVisible ? 1 : 0, marginLeft: FAULT_INDENT }]}>{faultRows(faultLine())[1]}</Text>
           </View>
         ) : (
           <Text style={[s.status, { color: statusColor, height: narrow ? 48 : 24 }]} numberOfLines={narrow ? 2 : 1} testID="scan-status">
@@ -145,7 +153,7 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
           {/* The label stays through the hold and the fault beat; only the value goes blank. */}
           <Readout
             size="rdS"
-            label="RATE"
+            label={t('scan.rate')}
             value={live ? String(rate) : '--'}
             unit="c/s"
             labelCh={5}
@@ -157,7 +165,7 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
           />
         </View>
       </View>
-      <BlockBar variant="rate" lit={rateLit} left={gridLeft} bottom={RATE_BAR_BOTTOM} width={gw} litColor={frame.final ? color.p5 : color.p4} testID="scan-rate-bar" label="Event rate" />
+      <BlockBar variant="rate" lit={rateLit} left={gridLeft} bottom={RATE_BAR_BOTTOM} width={gw} litColor={frame.final ? color.p5 : color.p4} testID="scan-rate-bar" label={t('scan.rateLabel')} />
     </>
   );
 }

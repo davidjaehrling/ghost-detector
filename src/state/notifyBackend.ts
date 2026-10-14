@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import * as Notifications from 'expo-notifications';
 import { Linking, Platform } from 'react-native';
 import { FIELD_LOG_CHANNEL, type NotifyBackend, type ScheduleBackend, type SystemPermission, type TapData } from './relay';
@@ -41,7 +42,7 @@ export const notifyBackend: NotifyBackend & ScheduleBackend = {
   async ensureChannel() {
     if (Platform.OS !== 'android') return;
     await Notifications.setNotificationChannelAsync(FIELD_LOG_CHANNEL, {
-      name: 'Field log',
+      name: t('relay.channelName'),
       importance: Notifications.AndroidImportance.DEFAULT,
       sound: null,
       showBadge: false,

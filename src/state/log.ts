@@ -2,6 +2,8 @@ import { forecastIndex, isFullMoonWindow, NEW_MOON_REF_MS, SYNODIC_DAYS, type Ti
 import { CLASSES, PREFIXES } from '../engine/profileBank';
 import type { KeyValueStore, ScanRecord } from './scans';
 import { platformStorage } from './storage';
+import { hasKey, t } from '../i18n';
+import { tierWord } from './tierWord';
 
 // Investigation log (docs/p6-brief.md section 3). Pure grouping over the scan records, plus the
 // cumulative night counter. Nothing here resets, expires or counts days: no streaks.
@@ -55,7 +57,7 @@ export function unresolvedPct(r: ScanRecord): number | null {
 export function caseStatus(r: ScanRecord): string | null {
   const pct = unresolvedPct(r);
   if (pct === null) return null;
-  return `${r.declined ? 'ARCHIVED' : 'UNRESOLVED'} ${pct}%`;
+  return t(r.declined ? 'log.status.archived' : 'log.status.unresolved', { pct });
 }
 
 const NIGHT_CUT_HOURS = 6;
@@ -171,12 +173,12 @@ export function createMoonsStore(storage: KeyValueStore | null = platformStorage
 
 export type MoonsStore = ReturnType<typeof createMoonsStore>;
 
-export const tagLabel = (tag: string) => tag.toUpperCase();
-export const casesLabel = (n: number) => `${n} ${n === 1 ? 'CASE' : 'CASES'}`;
+export const tagLabel = (tag: string) => (hasKey(`tag.${tag}`) ? t(`tag.${tag}`) : tag.toUpperCase());
+export const casesLabel = (n: number) => t('log.cases', { n });
 
 /** `CELLAR · 7 CASES · PEAK 84 STRONG · 2026-10-13 23:41` (brief section 3.1). */
 export function recordLine(tag: string, count: number, peak: ScanRecord): string {
-  return `${tagLabel(tag)} · ${casesLabel(count)} · PEAK ${peak.outcome.spi} ${peak.outcome.tier.toUpperCase()} · ${stamp(peak.createdAt)}`;
+  return t('log.recordLine', { tag: tagLabel(tag), cases: casesLabel(count), spi: peak.outcome.spi, tier: tierWord(peak.outcome.tier), stamp: stamp(peak.createdAt) });
 }
 
 /** `22:48`, local time, 24 h. */

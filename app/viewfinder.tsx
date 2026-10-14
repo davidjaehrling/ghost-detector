@@ -31,26 +31,27 @@ import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier
 import { useFlux } from '../src/ui/viewfinder/useFlux';
 import { useLiveThermal } from '../src/ui/viewfinder/useLiveThermal';
 import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend, tagTracking } from '../src/ui/viewfinder/lore';
+import { copyOf, fmtFixed, t, useLocale } from '../src/i18n';
 
 // Copy keys follow docs/voice-guide.md section 3. The denied-permission strings are
 // placeholders in the same voice: Copy will add their keys to the voice guide.
-const copy = {
-  'permission.camera': 'Camera access required for capture. Frames stay on this device.',
-  'permission.denied.head': 'CAMERA OFFLINE.',
-  'permission.denied.cause': 'Access denied. Stored frame in use.',
-  'permission.denied.next': 'Allow access in system settings.',
-  'hud.mode': 'Viewfinder',
-  'hud.live': 'VF · LIVE',
-  'hud.stored': 'VF · STORED',
-  'hud.wait': 'VF · WAIT',
-  'hud.tagLabel': 'Location tag, step to the next',
-  'hud.allow': 'ALLOW',
-  'hud.allowLabel': 'Allow camera access',
-  'hud.log': 'LOG',
-  'hud.logLabel': 'Open history',
-  'hud.capture': 'CAPTURE',
-  'hud.captureLabel': 'Capture photo',
-};
+const copy = copyOf({
+  permissionCamera: 'viewfinder.permission.camera',
+  permissionDeniedHead: 'viewfinder.permission.denied.head',
+  permissionDeniedCause: 'viewfinder.permission.denied.cause',
+  permissionDeniedNext: 'viewfinder.permission.denied.next',
+  hudMode: 'viewfinder.hud.mode',
+  hudLive: 'viewfinder.hud.live',
+  hudStored: 'viewfinder.hud.stored',
+  hudWait: 'viewfinder.hud.wait',
+  hudTagLabel: 'viewfinder.hud.tagLabel',
+  hudAllow: 'viewfinder.hud.allow',
+  hudAllowLabel: 'viewfinder.hud.allowLabel',
+  hudLog: 'viewfinder.hud.log',
+  hudLogLabel: 'viewfinder.hud.logLabel',
+  hudCapture: 'viewfinder.hud.capture',
+  hudCaptureLabel: 'viewfinder.hud.captureLabel',
+});
 
 // Harness: a fixed capture time so the scan seed, and the result golden, repeat.
 const STATIC_CAPTURE_MS = Date.UTC(2026, 9, 13, 12);
@@ -100,6 +101,7 @@ function Viewfinder({
   request?: () => Promise<PermissionResponse>;
   camera?: RefObject<CameraView | null>;
 }) {
+  const locale = useLocale();
   const router = useRouter();
   const { width: windowW } = useWindowDimensions();
   const { isStatic } = harness;
@@ -197,7 +199,7 @@ function Viewfinder({
 
   const canCapture = source === 'camera' || source === 'fixture' || source === 'denied';
   const showAllow = source === 'ask' || source === 'denied';
-  const state = source === 'denied' ? copy['hud.stored'] : source === 'ask' || source === 'loading' ? copy['hud.wait'] : copy['hud.live'];
+  const state = source === 'denied' ? copy.hudStored : source === 'ask' || source === 'loading' ? copy.hudWait : copy.hudLive;
   const lore = hasSeenTag(tag) ? null : LORE[tag];
 
   // While the relay module is up its keys take slots 1 and 2; CAPTURE stays live in slot 4 and pressing
@@ -205,11 +207,11 @@ function Viewfinder({
   const relayKeys = relayOpen ? relayModule.keys : null;
   const keySlots: (KeySlot | null)[] = [
     // History is one tap from here (the result screen's key row carries THERM instead).
-    relayKeys?.[0] ?? { testID: 'key-log', label: copy['hud.logLabel'], legend: copy['hud.log'], onPress: () => router.push('/history') },
+    relayKeys?.[0] ?? { testID: 'key-log', label: copy.hudLogLabel, legend: copy.hudLog, onPress: () => router.push('/history') },
     relayKeys ? (relayKeys[1] ?? null) : null,
-    !relayKeys && showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
+    !relayKeys && showAllow ? { testID: 'key-allow', label: copy.hudAllowLabel, legend: copy.hudAllow, onPress: onAllow } : null,
     canCapture
-      ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => { if (relayOpen) closeRelay(); void capture(); }, backlit: true }
+      ? { testID: 'key-capture', label: copy.hudCaptureLabel, legend: copy.hudCapture, onPress: () => { if (relayOpen) closeRelay(); void capture(); }, backlit: true }
       : null,
   ];
 
@@ -218,7 +220,7 @@ function Viewfinder({
       testID="screen-viewfinder"
       leds={liveLeds(sample.mg)}
       fixedIdentity={isStatic}
-      glassLabel={`${copy['hud.mode']}. ${flux}. Activity index ${index} of 5. Location ${TAG_LABEL[tag]}.`}
+      glassLabel={t('viewfinder.glassLabel', { mode: copy.hudMode, flux, index, tag: TAG_LABEL[tag] })}
       keys={keySlots}
     >
       {({ w, h }) => {
@@ -248,19 +250,19 @@ function Viewfinder({
 
             <View style={s.topScrim} pointerEvents="none" />
             <View style={s.topLeft} pointerEvents="none" testID="hud-top">
-              <Readout label="IDX" value={`${index}/5`} labelCh={3} valueCh={5} unitCh={0} {...HUD} />
+              <Readout label={t('viewfinder.idx')} value={`${index}/5`} labelCh={3} valueCh={5} unitCh={0} {...HUD} />
             </View>
 
             {source === 'ask' ? (
               <View style={[s.notice, { bottom: bandH }]} testID="permission-ask">
-                <Text style={s.noticeText}>{copy['permission.camera']}</Text>
+                <Text style={s.noticeText}>{copy.permissionCamera}</Text>
               </View>
             ) : null}
             {source === 'denied' ? (
               <View style={[s.notice, { bottom: bandH }]} testID="permission-denied">
-                <Text style={s.noticeHead}>{copy['permission.denied.head']}</Text>
-                <Text style={s.noticeText}>{copy['permission.denied.cause']}</Text>
-                <Text style={s.noticeText}>{copy['permission.denied.next']}</Text>
+                <Text style={s.noticeHead}>{copy.permissionDeniedHead}</Text>
+                <Text style={s.noticeText}>{copy.permissionDeniedCause}</Text>
+                <Text style={s.noticeText}>{copy.permissionDeniedNext}</Text>
               </View>
             ) : null}
 
@@ -295,7 +297,7 @@ function Viewfinder({
               ) : null}
               <View style={s.fluxBlock}>
                 <View style={s.fluxRow} testID="hud-flux" accessibilityLabel={flux}>
-                  <Text style={s.fluxLabel}>FLUX</Text>
+                  <Text style={s.fluxLabel}>{t('viewfinder.fluxLabel')}</Text>
                   <Text style={s.fluxValue}>{String(sample.mg).padStart(4, ' ')}</Text>
                   <Text style={s.fluxUnit}>mG</Text>
                 </View>
@@ -304,8 +306,8 @@ function Viewfinder({
                     {formatGeo(sample.mg)}
                   </Text>
                   <Text style={[s.dt, narrow && s.dtNarrow]} testID="hud-dt" accessibilityLabel={formatThermal(dT)}>
-                    <Text style={s.dtLabel}>{narrow ? 'ΔT' : 'ΔT '}</Text>
-                    {`${dT.toFixed(1)}${narrow ? '' : ' '}°C`}
+                    <Text style={s.dtLabel}>{narrow ? t('viewfinder.dtLabel') : `${t('viewfinder.dtLabel')} `}</Text>
+                    {`${fmtFixed(dT, 1, locale)}${narrow ? '' : ' '}°C`}
                   </Text>
                 </View>
                 <Text style={s.state} testID="hud-state">

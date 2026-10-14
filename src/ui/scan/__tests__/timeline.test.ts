@@ -3,7 +3,7 @@ import {
   BAR_BLOCKS,
   FAULT_MS,
   HOLD_MS,
-  FAULT_LINE,
+  faultLine,
   phaseLine,
   RATE_CAP,
   barBlocks,
@@ -128,7 +128,7 @@ describe('scan round 2', () => {
     expect(faultOn(500)).toBe(false);
     expect(faultOn(999)).toBe(false);
     expect(faultOn(1000)).toBe(true);
-    expect(FAULT_LINE).toBe('E-07 SENSOR DRIFT. RECALIBRATING.');
+    expect(faultLine()).toBe('E-07 SENSOR DRIFT. RECALIBRATING.');
   });
 
   it('the fault beat drops the ladder to LED 1 and the scan then resumes', () => {

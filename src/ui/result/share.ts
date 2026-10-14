@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Tier } from '../../engine';
 import type { DeepState } from './deepScan';
@@ -6,22 +7,50 @@ import type { DeepState } from './deepScan';
 // timing rules live in `useShareOffer`, the render and the system sheet in `runShare`.
 
 export const shareCopy = {
-  key: 'SHARE',
-  keyLabel: 'Share result',
-  cancel: 'CANCEL',
-  cancelLabel: 'Cancel',
-  ready: (id: string) => `Field card ready. CASE ${id}.`,
-  updated: 'Field card updated. Class and EVP added.',
-  format: 'Print field card. Format?',
-  story: '9:16',
-  storySub: 'STORY',
-  storyLabel: 'Print as 9 by 16',
-  square: '1:1',
-  squareSub: 'SQUARE',
-  squareLabel: 'Print as 1 by 1',
-  printing: 'PRINTING FIELD CARD. STAND BY.',
-  fault: 'E-31 PRINTER FAULT. CARD NOT SAVED.',
-  title: (id: string) => `Send field card · CASE ${id}`,
+  get key() {
+    return t('share.key');
+  },
+  get keyLabel() {
+    return t('share.keyLabel');
+  },
+  get cancel() {
+    return t('share.cancel');
+  },
+  get cancelLabel() {
+    return t('share.cancelLabel');
+  },
+  ready: (id: string) => t('share.ready', { id }),
+  get updated() {
+    return t('share.updated');
+  },
+  get format() {
+    return t('share.format');
+  },
+  get story() {
+    return t('share.story');
+  },
+  get storySub() {
+    return t('share.storySub');
+  },
+  get storyLabel() {
+    return t('share.storyLabel');
+  },
+  get square() {
+    return t('share.square');
+  },
+  get squareSub() {
+    return t('share.squareSub');
+  },
+  get squareLabel() {
+    return t('share.squareLabel');
+  },
+  get printing() {
+    return t('share.printing');
+  },
+  get fault() {
+    return t('share.fault');
+  },
+  title: (id: string) => t('share.title', { id }),
 };
 
 export type ShareMode = 'idle' | 'format' | 'printing' | 'fault';

@@ -13,12 +13,13 @@ import { TheatreGlass } from '../src/ui/scan/Theatre';
 import { RATE_CAP, elapsedForPhase, faultFor, frameAt, scanLeds } from '../src/ui/scan/timeline';
 import { color } from '../src/ui/tokens';
 import { useReduceMotion } from '../src/ui/useReduceMotion';
+import { copyOf, useLocale } from '../src/i18n';
 
-const copy = {
-  cancel: 'CANCEL',
-  cancelLabel: 'Cancel scan',
-  glass: 'Scan in progress.',
-};
+const copy = copyOf({
+  cancel: 'scan.cancel',
+  cancelLabel: 'scan.cancelLabel',
+  glass: 'scan.glass',
+});
 
 type ScanParams = { photo?: string; seed?: string; tag?: string; static?: string; fixture?: string; speed?: string; phase?: string };
 
@@ -39,6 +40,7 @@ export default function ScanRoute() {
 }
 
 function Scan({ params }: { params: ScanParams }) {
+  useLocale();
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const { isStatic, speed, phase } = harness;

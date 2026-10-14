@@ -22,11 +22,13 @@ import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
 import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
 import { DEMO_CASES, SCARE_CASE, demoRecord, isDemoName } from '../../src/ui/result/demo';
-import { bestSoFar, NO_PRIOR } from '../../src/ui/result/best';
+import { bestSoFar, noPrior } from '../../src/ui/result/best';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
 import { PINNED_TIERS, screenStampText, thermalDelta } from '../../src/ui/result/stamp';
 import { Readout } from '../../src/ui/Readout';
+import { tierWord } from '../../src/state/tierWord';
+import { copyOf, fmtFixed, t, useLocale } from '../../src/i18n';
 import { scareEligible } from '../../src/ui/result/scare';
 import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../../src/ui/result/deepCopy';
 import { type DeepState, useDeepScan } from '../../src/ui/result/deepScan';
@@ -38,36 +40,37 @@ import { SpiDial } from '../../src/ui/result/SpiDial';
 import { type GlassSize, Housing } from '../../src/ui/screens/Housing';
 import { color, motion, needle, type } from '../../src/ui/tokens';
 
-const copy = {
-  glass: 'Scan result.',
-  caseLabel: 'CASE',
-  missingTitle: 'NO RECORD',
-  missingLine: 'Case not on file.',
-  tierWord: { quiet: 'QUIET', trace: 'TRACE', active: 'ACTIVE', strong: 'STRONG', critical: 'CRITICAL' } satisfies Record<Tier, string>,
-  line: {
-    quiet: 'Baseline. No signature.',
-    trace: 'Trace only. Below threshold for class.',
-    active: 'Activity logged.',
-    strong: 'Strong. Signature resolving.',
-    critical: (hz: number) => `EVP fragment logged. CH2 ${hz} Hz.`,
-  },
-  coldSpot: (dt: string, khz: string) => `COLD SPOT ΔT ${dt} °C · DRIFT ${khz} kHz`,
-  flux: 'FLUX',
-  thermal: 'THERM',
-  acoustic: 'ACOUST',
-  profile: 'ENTITY PROFILE',
-  none: 'NO SIGNATURE',
-  decoded: 'SIGNATURE PARTIALLY DECODED:',
-  classLabel: 'CLASS',
-  eraLabel: 'ERA',
-  hidden: ['DESIGNATION', 'BEHAVIOUR', deepCopy.evpHead],
-  thermKeyLabel: 'Thermal view',
-  photoKey: 'PHOTO',
-  photoKeyLabel: 'Photo view',
-  back: 'NEW SCAN',
-  backLabel: 'Back to viewfinder',
-  photoLabel: 'Captured photo',
+const copy = copyOf({
+  glass: 'result.glass',
+  caseLabel: 'result.caseLabel',
+  missingTitle: 'result.missingTitle',
+  missingLine: 'result.missingLine',
+  flux: 'result.flux',
+  thermal: 'result.thermal',
+  acoustic: 'result.acoustic',
+  profile: 'result.profile',
+  none: 'result.none',
+  decoded: 'result.decoded',
+  classLabel: 'result.classLabel',
+  eraLabel: 'result.eraLabel',
+  thermKeyLabel: 'result.thermKeyLabel',
+  photoKey: 'result.photoKey',
+  photoKeyLabel: 'result.photoKeyLabel',
+  back: 'result.back',
+  backLabel: 'result.backLabel',
+  photoLabel: 'result.photoLabel',
+});
+
+const LINE_KEY: Record<Tier, string> = {
+  quiet: 'result.line.quiet',
+  trace: 'result.line.trace',
+  active: 'result.line.active',
+  strong: 'result.line.strong',
+  critical: 'result.line.critical',
 };
+const resultLineFor = (tier: Tier, hz: number) => t(LINE_KEY[tier], { hz });
+const coldSpot = (dt: string, khz: string) => t('result.coldSpot', { dt, khz });
+const hiddenLabels = () => [t('result.hidden.designation'), t('result.hidden.behaviour'), deepCopy.evpHead];
 
 // The barrel warp snapshots the glass content. The photo (Composite), the thermal view, the SPI digit and
 // the data strip are SnapshotCanvas, which the web snapshot reads through makeImageSnapshot (a plain WebGL
@@ -108,6 +111,7 @@ export default function ResultRoute() {
 }
 
 function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string; share?: string } }) {
+  useLocale();
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
@@ -296,6 +300,7 @@ type GlassProps = {
 };
 
 function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, therm, deep, onPhotoLoaded, onStable }: GlassProps) {
+  const locale = useLocale();
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -381,7 +386,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
   }, [stable, digitReady, onStable]);
 
   const mainLine =
-    tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
+    tier === 'critical' ? resultLineFor(tier, reading.evpHz) : resultLineFor(tier, 0);
   const resultLine = share.mode === 'fault' ? shareCopy.fault : share.line === 'ready' ? shareCopy.ready(record.id) : share.line === 'updated' ? shareCopy.updated : mainLine;
   const lineCount = PINNED_TIERS.includes(tier) ? 2 : 1;
   const sharePanel = share.mode === 'format' || share.mode === 'printing';
@@ -419,7 +424,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
         <View style={s.revealRow}>
           <View style={s.revealLeft}>
             <Text style={[type.rdM, s.tier, { color: tint, opacity: landed ? 1 : 0 }]} testID="result-tier">
-              {copy.tierWord[tier]}
+              {tierWord(tier)}
             </Text>
             <View style={s.spiBox}>
               {/* The glyphs are drawn on the glass canvas; this node keeps the number for screen readers and tests. */}
@@ -451,7 +456,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           </Text>
           {PINNED_TIERS.includes(tier) ? (
             <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
-              {copy.coldSpot(deltaC.toFixed(1), reading.driftKhz.toFixed(1))}
+              {coldSpot(fmtFixed(deltaC, 1, locale), fmtFixed(reading.driftKhz, 1, locale))}
             </Text>
           ) : null}
         </View>
@@ -467,7 +472,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           <Readout
             size="rdXS"
             label={copy.thermal}
-            value={reading.thermalC.toFixed(1)}
+            value={fmtFixed(reading.thermalC, 1, locale)}
             unit="°C"
             labelCh={6}
             valueColor={reading.thermalC < THERMAL_COLD ? color.p5 : color.p4}
@@ -484,7 +489,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
             <>
               <ProfileRow label={copy.classLabel} value={profile.class} />
               <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '').toUpperCase()} valueTestID="profile-era" />
-              {copy.hidden.map((l, i) =>
+              {hiddenLabels().map((l, i) =>
                 unlocked ? (
                   <ProfileRow key={l} label={l} value={unlockedValues[i]} valueTestID={`profile-${PROFILE_IDS[i]}`} />
                 ) : (
@@ -510,7 +515,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
                 {best.value}
               </Text>
             ) : (
-              <Text style={[s.bestText, { color: color.p3 }]}>{NO_PRIOR}</Text>
+              <Text style={[s.bestText, { color: color.p3 }]}>{noPrior()}</Text>
             )}
           </View>
         ) : null}
@@ -566,14 +571,11 @@ function SharePanel({ mode, height, still, onPick }: { mode: ShareMode; height: 
 
 // The DEEP SCAN key on the glass, directly under the decoded signature it leads into. The sublabel
 // is always drawn while the key is offered. Disabled states print their reason in the key itself.
-const DEEP_LEGEND: Record<Exclude<DeepState, 'unlocked'>, string> = {
-  ready: deepCopy.legend,
-  warming: deepCopy.warming,
-  offline: deepCopy.offline,
-  running: deepCopy.running,
-};
+const deepLegend = (state: Exclude<DeepState, 'unlocked'>): string =>
+  ({ ready: deepCopy.legend, warming: deepCopy.warming, offline: deepCopy.offline, running: deepCopy.running })[state];
 
 function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) {
+  useLocale();
   if (state === 'unlocked') {
     return (
       <Text style={s.deepDone} testID="deepscan-done">
@@ -587,7 +589,7 @@ function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) 
       <Pressable
         testID="deepscan-key"
         accessibilityRole="button"
-        accessibilityLabel={live ? deepCopy.label : DEEP_LEGEND[state]}
+        accessibilityLabel={live ? deepCopy.label : deepLegend(state)}
         accessibilityState={{ disabled: !live }}
         disabled={!live}
         hitSlop={{ top: 6, bottom: 6 }}
@@ -595,7 +597,7 @@ function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) 
         style={[s.deepKey, live ? s.deepKeyLive : s.deepKeyOff]}
       >
         <Text style={[s.deepLegend, live ? { color: color.p5 } : { color: color.p2 }]} numberOfLines={1}>
-          {DEEP_LEGEND[state]}
+          {deepLegend(state)}
         </Text>
       </Pressable>
       <Text style={s.deepSub} testID="deepscan-sub">
@@ -609,7 +611,7 @@ function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) 
 function DecodeBar({ pct }: { pct: number }) {
   const lit = Math.round((pct / 100) * 20);
   return (
-    <View style={s.decodeBar} testID="decode-bar" accessibilityLabel={`Decoded ${pct} percent`}>
+    <View style={s.decodeBar} testID="decode-bar" accessibilityLabel={t('result.decodedLabel', { pct })}>
       {Array.from({ length: 20 }, (_, i) => (
         <View key={i} style={[s.block, { backgroundColor: i < lit ? color.p4 : color.p1 }]} />
       ))}

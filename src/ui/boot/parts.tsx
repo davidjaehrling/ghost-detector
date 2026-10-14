@@ -5,6 +5,7 @@ import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
 import { stickerShowsSerial } from '../serial';
 import { GRID_TOP } from './layout';
 import { mulberry32 } from './seed';
+import { copyOf } from '../../i18n';
 
 // ---------- typed self-test ----------
 
@@ -204,12 +205,12 @@ export function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
 
 // ---------- calibration sticker ----------
 
-const copy = {
-  head1: 'SIMULATION UNIT ·',
-  head2: 'ENTERTAINMENT USE ONLY.',
-  body: 'All readings are generated in software. This unit detects nothing.',
-  model: 'VELDEN FS-4/87-P',
-};
+const copy = copyOf({
+  head1: 'sticker.head1',
+  head2: 'sticker.head2',
+  body: 'sticker.body',
+  model: 'sticker.model',
+});
 
 const FOLD = 16;
 

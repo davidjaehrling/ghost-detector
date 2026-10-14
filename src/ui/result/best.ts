@@ -1,7 +1,10 @@
 import { TIERS } from '../../engine';
+import { t } from '../../i18n';
+import { tagLabel } from '../../state/log';
 import type { ScanRecord } from '../../state/scans';
+import { tierWord } from '../../state/tierWord';
 
-export const NO_PRIOR = 'NO PRIOR CASES';
+export const noPrior = () => t('result.best.none');
 
 const hhmm = (ms: number) => {
   const d = new Date(ms);
@@ -16,7 +19,7 @@ export function bestSoFar(records: readonly ScanRecord[], excludeId?: string): {
   if (prior.length === 0) return null;
   let best = prior[0]!;
   for (const r of prior) if (r.outcome.spi >= best.outcome.spi) best = r;
-  const tier = TIERS.includes(best.outcome.tier) ? best.outcome.tier.toUpperCase() : '';
-  const parts = [`${best.outcome.spi} ${tier}`, best.tag ? best.tag.toUpperCase() : '', hhmm(best.createdAt)].filter(Boolean);
-  return { prefix: 'BEST SO FAR:', value: parts.join(' · ') };
+  const tier = TIERS.includes(best.outcome.tier) ? tierWord(best.outcome.tier) : '';
+  const parts = [`${best.outcome.spi} ${tier}`, best.tag ? tagLabel(best.tag) : '', hhmm(best.createdAt)].filter(Boolean);
+  return { prefix: t('result.best.prefix'), value: parts.join(' · ') };
 }

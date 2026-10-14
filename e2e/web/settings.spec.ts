@@ -99,3 +99,28 @@ test('the relay row reads FIELD LOG RELAY with one help line', async ({ page }) 
   await expect(page.getByTestId('setting-relay')).toContainText('FIELD LOG RELAY');
   await expect(page.getByTestId('setting-relay-help')).toHaveText('Max 1 line a night. 18:00 to 22:00.');
 });
+
+test('LANGUAGE row cycles SYSTEM, EN, DE, ES, PT and keeps the choice', async ({ page }) => {
+  await page.goto('/settings?static=1');
+  const state = page.getByTestId('setting-language-state');
+  await expect(state).toHaveText('SYSTEM');
+  for (const next of ['EN', 'DE', 'ES', 'PT', 'SYSTEM', 'EN', 'DE']) {
+    await page.getByTestId('setting-language').click();
+    await expect(state).toHaveText(next);
+  }
+  await page.reload();
+  await expect(page.getByTestId('setting-language-state')).toHaveText('DE');
+  // No de.json yet: the screen stays in English and keeps working.
+  await expect(page.getByTestId('settings-about')).toHaveText('READINGS ARE SIMULATED. FIELD INSTRUMENT FICTION.');
+});
+
+test('?lang=de with no de.json falls back to English without errors', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  await page.goto('/settings?static=1&lang=de');
+  await expect(page.getByTestId('screen-settings')).toBeVisible();
+  await expect(page.getByTestId('settings-about')).toHaveText('READINGS ARE SIMULATED. FIELD INSTRUMENT FICTION.');
+  await expect(page.getByTestId('setting-sound')).toContainText('SOUND');
+  expect(errors).toEqual([]);
+});
