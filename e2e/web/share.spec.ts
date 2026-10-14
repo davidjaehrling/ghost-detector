@@ -1,15 +1,21 @@
 import { expect, test } from '@playwright/test';
 
 // P6-01: the share card through the public renderShareCard on the web path (data URL), scaled to
-// fit on /share-probe. Goldens at 390 only, Skia tolerance as the other Skia goldens.
-for (const format of ['story', 'square'] as const) {
-  test(`share card ${format}`, async ({ page }, testInfo) => {
+// fit on /share-probe. Goldens at 390 only, Skia tolerance as the other Skia goldens. The third
+// case is a STRONG capture that was never Deep Scanned: `SIGNATURE [n]% DECODED` (D-034 b).
+const CASES = [
+  { name: 'share-story', format: 'story', kase: 'critical-deep' },
+  { name: 'share-square', format: 'square', kase: 'critical-deep' },
+  { name: 'share-story-undecoded', format: 'story', kase: 'strong-undecoded' },
+] as const;
+for (const { name, format, kase } of CASES) {
+  test(`share card ${name}`, async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'android-390x844', 'goldens at 390 only');
     test.setTimeout(90_000);
     const errors: string[] = [];
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     page.on('pageerror', (e) => errors.push(String(e)));
-    await page.goto(`/share-probe?static=1&format=${format}&case=critical-deep&fixture=cellar`);
+    await page.goto(`/share-probe?static=1&format=${format}&case=${kase}&fixture=cellar`);
     const cardEl = page.getByTestId('share-card');
     await cardEl.waitFor({ timeout: 60_000 });
     const src = await cardEl.locator('img').first().getAttribute('src');
@@ -20,7 +26,7 @@ for (const format of ['story', 'square'] as const) {
     );
     expect(size).toEqual(format === 'story' ? [1080, 1920] : [1080, 1080]);
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-    await expect(cardEl).toHaveScreenshot(`share-${format}.png`, { maxDiffPixels: 400 });
+    await expect(cardEl).toHaveScreenshot(`${name}.png`, { maxDiffPixels: 400 });
     expect(errors).toEqual([]);
   });
 }

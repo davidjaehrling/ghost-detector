@@ -71,11 +71,21 @@ function measure(img: any, box: { x0: number; y0: number; x1: number; y1: number
   return { cap: bottom - top + 1, top: box.y0 + top, bottom: box.y0 + bottom, contrast: (lt + 0.05) / (lb + 0.05) };
 }
 
+// The window around each mark's own line: 0.3 cap above and below on the strip, 0.15 on the
+// footer (the brackets of `[STORE NAME]` reach under its baseline), so the measured rows are the
+// mark's glyphs alone and not the line above.
 function marks(c: ReturnType<Mod['drawShareCard']>) {
   const [strip, footer] = c.marks;
-  const s = measure(c.image, { x0: Math.round(strip!.x) - 4, y0: c.strip.y, x1: Math.min(c.strip.x + c.strip.w, Math.round(strip!.x + strip!.w) + 4), y1: c.strip.y + c.strip.h });
+  const sv = Math.round(strip!.h * 0.3);
+  const s = measure(c.image, {
+    x0: Math.round(strip!.x) - 4,
+    y0: Math.max(c.strip.y, Math.round(strip!.y) - sv),
+    x1: Math.min(c.strip.x + c.strip.w, Math.round(strip!.x + strip!.w) + 4),
+    y1: Math.min(c.strip.y + c.strip.h, Math.round(strip!.baseline) + sv),
+  });
   const pad = Math.round(footer!.h * 0.6);
-  const f = measure(c.image, { x0: Math.round(footer!.x) - pad, y0: Math.round(footer!.y) - pad, x1: Math.round(footer!.x + footer!.w) + pad, y1: Math.round(footer!.baseline) + pad });
+  const fv = Math.round(footer!.h * 0.15);
+  const f = measure(c.image, { x0: Math.round(footer!.x) - pad, y0: Math.round(footer!.y) - fv, x1: Math.round(footer!.x + footer!.w) + pad, y1: Math.round(footer!.baseline) + fv });
   return { s, f };
 }
 
@@ -93,7 +103,11 @@ describe('SIMULATED mark, measured from the rendered pixels', () => {
         const c = card(fixture, name, format, deep);
         expect([c.width, c.height]).toEqual(format === 'story' ? [1080, 1920] : [1080, 1080]);
         const { s, f } = marks(c);
-        console.log(`${format} ${fixture} ${name}: strip cap ${s.cap} px contrast ${s.contrast.toFixed(2)} (scrim ${c.strip.alpha}); footer cap ${f.cap} px contrast ${f.contrast.toFixed(2)}; floor ${(0.02 * c.height).toFixed(1)} px`);
+        // D-034 (a): every strip run and the whole footer at the mark's size, nothing enlarged.
+        expect(c.marks[0]!.fontSize).toBe(R.stripSize(c.layout));
+        expect(c.marks[0]!.fontSize).toBeGreaterThanOrEqual(R.markSize(c.height, R.CAP_EM.vt323));
+        expect(c.marks[1]!.fontSize).toBe(R.markSize(c.height, R.CAP_EM.b612));
+        console.log(`${format} ${fixture} ${name}: strip cap ${s.cap} px contrast ${s.contrast.toFixed(2)} (scrim ${c.strip.alpha}); footer cap ${f.cap} px contrast ${f.contrast.toFixed(2)}; strip y ${c.strip.y} to ${c.strip.y + c.strip.h}; floor ${(0.02 * c.height).toFixed(1)} px`);
         for (const m of [s, f]) {
           expect(m.cap).toBeGreaterThanOrEqual(0.02 * c.height);
           expect(m.contrast).toBeGreaterThanOrEqual(4.5);
@@ -105,6 +119,29 @@ describe('SIMULATED mark, measured from the rendered pixels', () => {
           expect(c.strip.y + c.strip.h).toBeLessThanOrEqual(1580);
           expect(s.bottom).toBeLessThanOrEqual(1580);
         }
+      }, 60000);
+});
+
+describe('reading row (D-034 b), measured from the rendered pixels', () => {
+  for (const format of ['story', 'square'] as const)
+    for (const deep of [true, false])
+      it(`${format} ${deep ? 'deep: EVP line' : 'undecoded: SIGNATURE line'}`, () => {
+        const c = card('cellar', 'strong', format, deep);
+        const [spi, tier, line, detail] = c.readingLines;
+        const capOf = (l: typeof spi) => measure(c.image, { x0: Math.round(l!.x), y0: Math.round(l!.capTop - 0.15 * (l!.baseline - l!.capTop)), x1: Math.round(l!.x + 0.5 * l!.fontSize * Math.min(6, l!.text.length)), y1: l!.baseline + 1 }).cap;
+        expect(line!.text).toMatch(deep ? /^EVP ".+"$/ : /^SIGNATURE \d+% DECODED$/);
+        expect(line!.color).toBe(tier!.color); // p5: as bright as the tier word, brighter than anything after it
+        const lineCap = capOf(line);
+        console.log(`${format} ${deep ? 'deep' : 'undecoded'}: SPI/tier ${spi!.fontSize} px (cap ${capOf(spi)}), line ${line!.fontSize} px (cap ${lineCap})${detail ? `, detail ${detail.fontSize} px` : ''}`);
+        if (format === 'story') {
+          expect(spi!.fontSize).toBeGreaterThanOrEqual(90);
+          expect(line!.fontSize).toBeGreaterThanOrEqual(44);
+          expect(c.layout.reading.y).toBeGreaterThanOrEqual(c.layout.photo.y + c.layout.photo.h + 4);
+        } else {
+          expect(lineCap).toBeGreaterThanOrEqual(34);
+        }
+        if (deep) expect(detail!.color).not.toBe(line!.color);
+        else expect(detail).toBeUndefined();
       }, 60000);
 });
 
@@ -123,16 +160,27 @@ describe('card contents', () => {
       'VELDEN  FS-4/87-P',
       expect.stringMatching(/^CASE 0004 · SPI \d+ · ΔT -?\d+\.\d °C · \d\d:\d\d · $/),
       'SIMULATED',
-      expect.stringMatching(/^\d+$/),
+      expect.stringMatching(/^\d+ $/),
       'CRITICAL',
-      expect.stringMatching(/^CLASS: [A-Z-]+ · ERA EST\. \d{4} TO \d{4}$/),
       expect.stringMatching(/^EVP ".+"$/),
-      '[STORE NAME] · READINGS ARE ',
-      'SIMULATED',
+      expect.stringMatching(/^CLASS: [A-Z-]+ · ERA EST\. \d{4} TO \d{4}$/),
+      '[STORE NAME] · READINGS ARE SIMULATED',
     ]);
+    // Story: the case data breaks at its dots, SIMULATED on its own last line, the footer at its dot.
     const plain = card('cellar', 'active', 'story');
-    expect(plain.texts[5]).toMatch(/^SIGNATURE \d+% DECODED$/);
-    expect(card('black', 'quiet', 'story').texts[5]).toBe('NO SIGNATURE');
+    expect(plain.texts).toEqual([
+      'VELDEN  FS-4/87-P',
+      expect.stringMatching(/^CASE 0007 · SPI \d+$/),
+      expect.stringMatching(/^ΔT -?\d+\.\d °C · \d\d:\d\d$/),
+      'SIMULATED',
+      expect.stringMatching(/^\d+ $/),
+      'ACTIVE',
+      expect.stringMatching(/^SIGNATURE \d+% DECODED$/),
+      '[STORE NAME]',
+      'READINGS ARE SIMULATED',
+    ]);
+    expect(plain.marks[0]!.x).toBe(plain.strip.x + Math.round(plain.layout.photo.w * 0.02));
+    expect(card('black', 'quiet', 'story').texts[6]).toBe('NO SIGNATURE');
     const banned = /\b(detected|proof|verified|confirmed|unconfirmed|accurate|real|deep scan|sponsored|download|install|qr|http|www)\b|[←→↑↓⇦⇨➔▶◀★☆]/i;
     for (const t of [...c.texts, ...plain.texts]) expect(t).not.toMatch(banned);
     // The renderer has no path, line or arc drawing at all (no arrow, circle or box at the figure).

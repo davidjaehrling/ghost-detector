@@ -9,11 +9,13 @@ import { color } from '../../ui/tokens';
 import { LAYOUTS, type CardFormat } from './constants';
 import { renderShareCard } from './index';
 
-// L2 harness for the share card (/share-probe?format=story|square&case=<demo>[-deep]&fixture=<f>).
-// Renders through the public renderShareCard (web: data URL) and shows it scaled to fit.
+// L2 harness for the share card (/share-probe?format=story|square&case=<demo>[-deep|-undecoded]&fixture=<f>).
+// `-deep` marks the record Deep Scanned (EVP line); `-undecoded` (or no suffix) leaves it as captured
+// (`SIGNATURE [n]% DECODED`). Renders through the public renderShareCard (web: data URL), scaled to fit.
 export function ShareProbe({ format: f, kase, fixture }: { format?: string; kase?: string; fixture?: string }) {
   const format: CardFormat = f === 'square' ? 'square' : 'story';
-  const [name, deep] = (kase ?? 'critical-deep').split('-');
+  const [name, suffix] = (kase ?? 'critical-deep').split('-');
+  const deep = suffix === 'deep';
   const demo = isDemoName(name) ? name : 'critical';
   const fx = isFixtureName(fixture) ? fixture : DEFAULT_FIXTURE;
   const skia = useSkiaReady();
@@ -23,7 +25,7 @@ export function ShareProbe({ format: f, kase, fixture }: { format?: string; kase
   useEffect(() => {
     if (!skia) return;
     const rec = demoRecord(demo, fixtureUri(fx), DEMO_CASES[demo], fx);
-    if (deep === 'deep') rec.deepScanAt = rec.createdAt;
+    if (deep) rec.deepScanAt = rec.createdAt;
     renderShareCard(rec, { format }).then((c) => setUri(c.uri), (e: unknown) => setErr(String(e)));
   }, [skia, demo, deep, fx, format]);
 

@@ -9,8 +9,8 @@ export const NAMEPLATE = 'VELDEN  FS-4/87-P';
 /** The SIMULATED mark (Compliance launch blocker, D-026, D-032). */
 export const SIMULATED = 'SIMULATED';
 
-/** Footer text before the mark: `[STORE NAME] · READINGS ARE ` + SIMULATED. */
-export const footerLead = (store: string = STORE_NAME) => `${store} · READINGS ARE `;
+/** Footer, one run at the mark's size: `[STORE NAME] · READINGS ARE SIMULATED`. */
+export const footerText = (store: string = STORE_NAME) => `${store} · READINGS ARE ${SIMULATED}`;
 
 /** Least cap height of the SIMULATED mark, as a share of the card height (acceptance P6-01). */
 export const MARK_CAP_FRAC = 0.02;
@@ -36,30 +36,34 @@ export interface CardLayout {
   plate: Box;
   photo: Box;
   reading: Box;
-  /** Cap top of the footer line. */
+  /** Cap top of the footer's first line. */
   footerTop: number;
   /** Where the photo, the strip and its SIMULATED token must stay (story safe zone), or null. */
   safe: { top: number; bottom: number } | null;
 }
 
-/** Pixel positions from docs/p6-brief.md section 1.4. */
+/**
+ * Pixel positions: docs/p6-brief.md section 1.4 as amended by D-034 (b). The story photo is 1240
+ * tall (was 1250) and starts at 300 so the reading row (1558 to 1772) and the two-line footer at the
+ * mark's size (1794 to 1899) both fit under it; the square nameplate is inset 24 px.
+ */
 export const LAYOUTS: Record<CardFormat, CardLayout> = {
   story: {
     width: 1080,
     height: 1920,
-    plate: { x: 40, y: 240, w: 1000, h: 60 },
-    photo: { x: 40, y: 320, w: 1000, h: 1250 },
-    reading: { x: 40, y: 1590, w: 1000, h: 110 },
-    footerTop: 1720,
+    plate: { x: 40, y: 228, w: 1000, h: 56 },
+    photo: { x: 40, y: 300, w: 1000, h: 1240 },
+    reading: { x: 40, y: 1558, w: 1000, h: 214 },
+    footerTop: 1794,
     safe: { top: 250, bottom: 1580 },
   },
   square: {
     width: 1080,
     height: 1080,
-    plate: { x: 0, y: 0, w: 1080, h: 60 },
-    photo: { x: 0, y: 60, w: 1080, h: 760 },
-    reading: { x: 24, y: 840, w: 1032, h: 140 },
-    footerTop: 1020,
+    plate: { x: 64, y: 24, w: 952, h: 56 },
+    photo: { x: 0, y: 96, w: 1080, h: 704 },
+    reading: { x: 24, y: 816, w: 1032, h: 192 },
+    footerTop: 1024,
     safe: null,
   },
 };
