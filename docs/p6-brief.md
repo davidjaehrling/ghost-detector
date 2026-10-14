@@ -33,7 +33,7 @@ In draw order, all from the same Skia stack the result screen uses, captured wit
 4. The nameplate band: `VELDEN FS-4/87-P`, engraved, top of the card. No serial: it is seeded per install and has no value to a viewer.
 5. Footer, one line in lbXS: `[STORE NAME] · READINGS ARE SIMULATED`. This is the second SIMULATED mark and the only place the store name appears.
 
-The SIMULATED mark (Compliance launch blocker, D-026): at least 2.0% of the card height in cap height (22 px on a 1920 px card, 22 px on 1080), contrast at least 4.5:1 against what sits behind it, never rotated, never under 60% opacity, present on every aspect ratio.
+The SIMULATED mark (Compliance launch blocker, D-026): at least 2.0% of the card height in cap height (22 px on a 1920 px card, 22 px on 1080), contrast at least 4.5:1 against what sits behind it, never rotated, always at 100% opacity, present on every aspect ratio.
 
 ### 1.3 What the card must not contain
 - No ad, no DEEP SCAN key, no `SPONSORED VIDEO PLAYS FIRST` sublabel, no banner residue, no QR code, no "download now" line, no rating stars.
@@ -88,7 +88,7 @@ Trigger: the first return to the viewfinder after the 3rd scan or the first STRO
 
 It is a module on the viewfinder glass in the unit's voice, before any system dialog:
 - Header: `FIELD LOG RELAY`
-- Body: `Fit the relay? The unit posts one field-log line on nights the index runs high. 18:00 to 22:00 only. Lines are simulated, like every reading.`
+- Body: `Fit the relay? The unit posts at most one field-log line a night: the index, the moon or an open case. 18:00 to 22:00 only. Lines are simulated, like every reading.`
 - Keys: `FIT RELAY` and `NOT NOW`.
 - `FIT RELAY` opens the Android 13+ notification permission dialog. Granted: `Relay fitted. Change in Settings.` Denied by the system: `Relay not fitted. Change in Settings.`
 - `NOT NOW`: no follow-up, no second ask. The only way back is `Field log relay: OFF` in Settings and one passive row at the foot of the log.
@@ -113,14 +113,14 @@ Each template is one title and one body, voice rules 1 to 13, values from the de
 | # | Condition | Title | Body |
 |---|---|---|---|
 | 1 | Activity index 4 or 5 tonight from the 03:00 window and moon | `FIELD LOG · IDX [4]/5` | `03:00 window after midnight. Moon [81]%. Conditions favourable after 22:00.` |
-| 2 | Full moon ±1 day, sent once per cycle | `FIELD LOG · MOON [98]%` | `Full moon. Index 5/5 from 22:00 to 04:00.` |
+| 2 | Full moon ±1 day, sent once per cycle | `FIELD LOG · MOON [98]%` | `Full moon. Forecast index 5/5 from 22:00 to 04:00.` |
 | 3 | A tag the user has logged 2+ times, on an index 4+ evening | `FIELD LOG · [CELLAR]` | `[Cellar] on file, [3] cases. Forecast index [4]/5 after 22:00.` |
 | 4 | An unresolved case (not declined) from the last 7 days, once per case | `FIELD LOG · CASE [0041]` | `Signature [63]% decoded. Unresolved.` |
-| 5 | Catalogue progress, after a Deep Scan logged a new class in the last 7 days | `FIELD LOG · CATALOGUE [7]/24` | `[17] classes unconfirmed. Index [3]/5 after 22:00.` |
+| 5 | Catalogue progress, after a Deep Scan logged a new class in the last 7 days | `FIELD LOG · CATALOGUE [7]/24` | `[17] classes unlogged. Index [3]/5 after 22:00.` |
 
 On template 3. The task phrase "a location you logged is active tonight" crosses voice rule 11 and the §7 red line: "active" reads as a claim that something is happening in the user's home now. The nearest safe version is a forecast, built from the same moon and clock inputs as the viewfinder index, attached to a tag the user chose. It keeps the personal pull (their cellar, their case count) and claims nothing.
 
-On template 4. It leads toward a rewarded ad, so it carries the lowest dose: once per case, never for a declined case (D-028), never on Calm, and the tap opens the case with the standing DEEP SCAN key, no autoplay.
+On template 4. It leads toward a rewarded ad, so it carries the lowest dose: once per case, never for a declined case (D-028), never on Calm, and the tap opens the case with the standing DEEP SCAN key, no autoplay. Its text never mentions a reward, video, ad, unlock, free or watch, and it sets no deadline.
 
 Selection when several apply on one evening: 2, then 3, then 1, then 5, then 4. One line per night.
 
@@ -130,7 +130,7 @@ Selection when several apply on one evening: 2, then 3, then 1, then 5, then 4. 
 - Locations. Group cases by tag with a record per tag: `CELLAR · 7 CASES · PEAK 84 STRONG · 2026-10-13 23:41`. This is the personal record, and it is what template 3 points at. Lever: authority cues plus self-relevance; the user's own rooms become case files.
 - Peaks, never averages. Each session line shows its peak (`Peak: 84 STRONG, Cellar, 23:41`). The log header shows `BEST ON FILE` across all sessions. Peak-end applied to memory: the log replays the best moments.
 - Unresolved signatures. Cases at 41 to 73% decoded that the user left without declining show `UNRESOLVED 58%` in the row, in p4. The DEEP SCAN key lives only inside the reopened case, never in the list, so the list is a reading surface and the banner (plan §8) never sits beside an ad-starting key. Declined cases show `ARCHIVED 58%` with no offer. Decodes never expire, decay or count down. Lever: curiosity gap at the dose the brief set, once per result.
-- Entity catalogue. 24 classes, each `UNCONFIRMED` until a Deep Scan logs it (psych-brief §4). Slow completion with no deadline.
+- Entity catalogue. 24 classes, each `UNLOGGED` until a Deep Scan logs it (psych-brief §4). Slow completion with no deadline.
 - Moon table. The next 7 nights with the forecast index and the next full moon date. It gives a reason to come back on a date the user picks, with no pressure from the app.
 
 ### 3.2 Streaks
