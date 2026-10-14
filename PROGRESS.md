@@ -3,12 +3,13 @@
 Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what is next, what blocks.
 
 ## Current phase
-**P8 Polish** on branch `claude/p8-polish` (from `main` after the P7 squash merge). P8 carries the design-loop leftovers (D-022, D-029, D-034, D-035) and the believability loop on real photographs; P9 launch. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
+**P8 Polish & hardening** on branch `claude/p8-polish` (from `main` at 68a5261, the P7 squash merge). P8 carries the design-loop leftovers (D-022, D-029, D-034, D-035) and the believability loop on real photographs; P9 launch. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
 
 P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4, P5 as PR #5, P6 as PR #6, P7 as PR #7 (2026-10-14). Web preview: GitHub Pages workflow on main (owner enables Pages once). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
 
 ## Last thing done
-- P7 verified and merged as PR #7: i18n layer, engine resources, DE/ES/PT written per culture and reviewed twice, localised card and notifications, layout goldens in four languages plus de at 360, Compliance PASS (D-041), Refuter sweep and two re-checks (D-041 to D-043). P7-01..08 flipped. P8 contract next.
+- P8 contract P8-01 to P8-08 written (D-044); wave 1 launching.
+- P7 verified and merged as PR #7 (68a5261): i18n layer, engine resources, DE/ES/PT written per culture and reviewed twice, localised card and notifications, layout goldens in four languages plus de at 360, Compliance PASS (D-041), Refuter sweep and two re-checks (D-041 to D-043). P7-01..08 flipped. P8 contract next.
 - P6 merged as PR #6 (8df1e12) with the GitHub Pages web-preview workflow. P7 contract P7-01 to P7-08 written (D-037); wave 1 launching.
 - P6 verified: panel rounds (D-034, D-035; five of six surfaces at 8+), Compliance diff review (FCM veto fixed by a config plugin, lifted pending device check), Refuter sweep and re-check (D-035, D-036). P6-01..08 flipped; P6-05 device clauses owner-blocked. Merge PR #6 on CI green after the test hardening commit.
 - P5 merged as PR #5 (c4e8954). P6 contract P6-01 to P6-08 written from docs/p6-brief.md (D-031); wave 1 launched: Compliance pre-review, share card renderer, notification scheduler, investigation log and opt-in module.
