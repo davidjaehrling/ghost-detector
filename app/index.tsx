@@ -1,8 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { copyOf, t, useLocale } from '../src/i18n';
 import { PhosphorText, SnapshotCanvas } from '../src/fx/glass';
 import { BELIEF_PROFILE, type Belief, getBelief, setBelief } from '../src/state/belief';
+import { intensityWord } from '../src/state/intensity';
 import { sessionActivity } from '../src/state/session';
 import { daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
 import { useMinuteClock } from '../src/ui/boot/clock';
@@ -31,30 +33,34 @@ import { color, type } from '../src/ui/tokens';
 import { useReduceMotion } from '../src/ui/useReduceMotion';
 
 // Copy keys follow docs/voice-guide.md section 3.
-const copy = {
-  firmware: 'FW 3.1.7 · ROM C2-8811',
-  trig: 'TRIG AUTO',
-  timebase: '50 ms/DIV',
-  selftestOk: 'SELFTEST OK',
-  transient: 'TRANSIENT 1 · LOGGED',
-  actIdx: 'ACT IDX',
-  moon: 'MOON',
-  nextPeak: 'NEXT PEAK  FULL MOON',
+const copy = copyOf({
+  firmware: 'hud.firmware',
+  trig: 'hud.trig',
+  timebase: 'hud.timebase',
+  selftestOk: 'boot.selftestOk',
+  transient: 'boot.transient',
+  actIdx: 'boot.actIdx',
+  moon: 'boot.moon',
+  nextPeak: 'boot.nextPeak',
   // 72 px caps cannot carry the full word; the accessibility label does.
-  key: 'ACK',
-  keyLabel: 'Acknowledge',
-  glassLabel: 'Boot self-test and calibration sticker.',
-  'onboarding.head': 'FIELD CALIBRATION',
-  // The question is set in three fixed rows; the last row carries the cursor.
-  questionRows: ["Have you ever experienced\nsomething you couldn't", 'explain?'] as const,
-  'onboarding.question': "Have you ever experienced something you couldn't explain?",
-  'onboarding.note': 'One question. The answer stays on this device.',
-  'onboarding.intensitySet': (name: string) => `Intensity set to ${name}. Change any time in Settings.`,
-  yes: 'YES',
-  unsure: 'NOT SURE',
-  no: 'NO',
-  skip: 'SKIP',
-};
+  key: 'boot.key',
+  keyLabel: 'boot.keyLabel',
+  head: 'onboarding.head',
+  // The question is set in two text rows (the first holds a line break); the last row carries the cursor.
+  question: 'onboarding.question',
+  questionHead: 'onboarding.questionHead',
+  questionTail: 'onboarding.questionTail',
+  note: 'onboarding.note',
+  yes: 'onboarding.yes',
+  yesLabel: 'onboarding.yesLabel',
+  unsure: 'onboarding.unsure',
+  unsureLabel: 'onboarding.unsureLabel',
+  no: 'onboarding.no',
+  noLabel: 'onboarding.noLabel',
+  skip: 'onboarding.skip',
+  skipLabel: 'onboarding.skipLabel',
+});
+const intensitySet = (name: string) => t('onboarding.intensitySet', { name });
 
 // Boot is a warped glass (barrel snapshot, retaken on each stage). ACT IDX and the priming transient are
 // Skia canvases, so they are SnapshotCanvas (src/fx/glass) to survive the web snapshot.
@@ -88,6 +94,7 @@ export default function BootScreen() {
 type Stage = 'sticker' | 'calib' | 'confirmed';
 
 function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: BootParams }) {
+  const locale = useLocale();
   const router = useRouter();
   const { index, moonPct } = sessionActivity(date);
   const peakDays = daysToFullMoon(date);
@@ -97,8 +104,9 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
   const identity = useMemo(() => (fixed ? getInstallIdentity(date, FIXED_SEED) : getInstallIdentity(date)), [fixed, date]);
   const lines = useMemo(() => {
     const seed = fixed ? dayKey(date) : dayKey(date) ^ BOOT_NONCE;
+    void locale; // the labels follow the language
     return selfTestReadings(seed);
-  }, [fixed, date]);
+  }, [fixed, date, locale]);
   const lineLen = lines.map((l) => composeFields({ ...l, labelCh: 6, valueCh: 5, unitCh: 4 }).join('').length);
   const total = lineLen.reduce((n, l) => n + l, 0) + copy.selftestOk.length;
   const typed = useTyped(total, TYPE_CPS, isStatic || calib);
@@ -143,9 +151,9 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
       ? [null, null, null, { testID: 'key-acknowledge', label: copy.keyLabel, legend: copy.key, onPress: onAcknowledge, inert: typing }]
       : stage === 'calib'
         ? [
-            { testID: 'key-calib-yes', label: 'Yes', legend: copy.yes, onPress: () => onAnswer('yes') },
-            { testID: 'key-calib-unsure', label: 'Not sure', legend: copy.unsure, onPress: () => onAnswer('unsure') },
-            { testID: 'key-calib-no', label: 'No', legend: copy.no, onPress: () => onAnswer('no') },
+            { testID: 'key-calib-yes', label: copy.yesLabel, legend: copy.yes, onPress: () => onAnswer('yes') },
+            { testID: 'key-calib-unsure', label: copy.unsureLabel, legend: copy.unsure, onPress: () => onAnswer('unsure') },
+            { testID: 'key-calib-no', label: copy.noLabel, legend: copy.no, onPress: () => onAnswer('no') },
             null,
           ]
         : [null, null, null, null];
@@ -239,12 +247,12 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                 testID="calibration"
                 onLayout={(e: LayoutChangeEvent) => setCardH(Math.round(e.nativeEvent.layout.height))}
               >
-                <Text style={s.cardHead}>{copy['onboarding.head']}</Text>
+                <Text style={s.cardHead}>{copy.head}</Text>
                 <View style={s.rule} />
-                <View accessible accessibilityLabel={copy['onboarding.question']} testID="calibration-question">
-                  <Text style={s.question}>{copy.questionRows[0]}</Text>
+                <View accessible accessibilityLabel={copy.question} testID="calibration-question">
+                  <Text style={s.question}>{copy.questionHead}</Text>
                   <View style={s.cursorRow}>
-                    <Text style={s.question}>{copy.questionRows[1]}</Text>
+                    <Text style={s.question}>{copy.questionTail}</Text>
                     <View style={[s.cursor, { opacity: cursorOn ? 1 : 0 }]} testID="calibration-cursor" />
                   </View>
                 </View>
@@ -252,7 +260,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                   <Pressable
                     testID="key-calib-skip"
                     accessibilityRole="button"
-                    accessibilityLabel="Skip, same as not sure"
+                    accessibilityLabel={copy.skipLabel}
                     onPress={() => onAnswer('unsure')}
                     hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
                     style={s.skip}
@@ -261,7 +269,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                   </Pressable>
                 </View>
                 <Text style={s.note} testID="calibration-note">
-                  {answer ? copy['onboarding.intensitySet'](BELIEF_PROFILE[answer].intensity.toUpperCase()) : copy['onboarding.note']}
+                  {answer ? intensitySet(intensityWord(BELIEF_PROFILE[answer].intensity)) : copy.note}
                 </Text>
               </View>
             ) : null}

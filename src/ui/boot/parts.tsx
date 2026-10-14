@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
-import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
+import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout, legendFit } from '../keyLayout';
 import { stickerShowsSerial } from '../serial';
 import { GRID_TOP } from './layout';
 import { mulberry32 } from './seed';
+import { copyOf } from '../../i18n';
 
 // ---------- typed self-test ----------
 
@@ -204,12 +205,12 @@ export function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
 
 // ---------- calibration sticker ----------
 
-const copy = {
-  head1: 'SIMULATION UNIT ·',
-  head2: 'ENTERTAINMENT USE ONLY.',
-  body: 'All readings are generated in software. This unit detects nothing.',
-  model: 'VELDEN FS-4/87-P',
-};
+const copy = copyOf({
+  head1: 'sticker.head1',
+  head2: 'sticker.head2',
+  body: 'sticker.body',
+  model: 'sticker.model',
+});
 
 const FOLD = 16;
 
@@ -330,6 +331,7 @@ export function DummyCap() {
 // Rubber key: darker n2 face, 1 px n4 top highlight. Legend is lbM (Bible
 // section 5 sets key legends at 13 px). Long legends wrap on the space.
 export function Key({ testID, label, legend, onPress, inert = false, primary = false, backlit = false }: KeySlot) {
+  const fit = legendFit(legend);
   return (
     <Pressable
       testID={testID}
@@ -339,7 +341,7 @@ export function Key({ testID, label, legend, onPress, inert = false, primary = f
       onPress={inert ? undefined : onPress}
       style={({ pressed }) => [st.key, primary && st.keyPrimary, pressed && !inert && st.keyDown]}
     >
-      <Text style={[st.keyLegend, inert && st.keyLegendInert, (primary || backlit) && st.keyLegendPrimary]} numberOfLines={2}>
+      <Text style={[st.keyLegend, fit, inert && st.keyLegendInert, (primary || backlit) && st.keyLegendPrimary]} numberOfLines={2}>
         {legend}
       </Text>
     </Pressable>

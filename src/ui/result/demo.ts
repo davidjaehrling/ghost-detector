@@ -1,4 +1,5 @@
-import { drawOutcome, freshHistory, generateProfile } from '../../engine';
+import { drawOutcome, freshHistory } from '../../engine';
+import { profileFor, type Lang } from '../../i18n';
 import type { ScanRecord } from '../../state/scans';
 import type { FixtureName } from '../fixtureNames';
 
@@ -43,9 +44,9 @@ export function isDemoName(v: unknown): v is DemoName {
   return typeof v === 'string' && Object.prototype.hasOwnProperty.call(DEMO_SEEDS, v);
 }
 
-export function demoRecord(name: DemoName, photoUri: string, id = '0001', fixture?: FixtureName | null, seedOverride?: number): ScanRecord {
+export function demoRecord(name: DemoName, photoUri: string, id = '0001', fixture?: FixtureName | null, seedOverride?: number, lang?: Lang): ScanRecord {
   const seed = seedOverride ?? (name === 'active' && fixture ? FIXTURE_ACTIVE_SEEDS[fixture] : name === 'critical' && id === SCARE_CASE ? SCARE_SEED : undefined) ?? DEMO_SEEDS[name];
   const outcome = drawOutcome(seed, 'standard', freshHistory(0));
-  const profile = generateProfile((seed ^ 0x9e3779b9) >>> 0, outcome.tier, { names: [], lines: [] });
+  const profile = profileFor((seed ^ 0x9e3779b9) >>> 0, outcome.tier, { names: [], lines: [] }, lang);
   return { id, createdAt: DEMO_CREATED_AT, photoUri, seed, outcome, profile };
 }

@@ -1,4 +1,5 @@
 import { forecastIndex } from '../../engine';
+import { t } from '../../i18n';
 
 // Tonight's activity index (docs/psych-brief.md section 4): base 2, +1 within
 // 2 days of a full moon, +1 from 22:00 to 04:00, +2 from 03:00 to 03:59.
@@ -51,8 +52,8 @@ export function windowCountdown(date: Date): { open: boolean; hours: number; min
 
 export function formatWindowCountdown(date: Date): string {
   const c = windowCountdown(date);
-  if (c.open) return '03:00 WINDOW OPEN';
-  return c.hours > 0 ? `03:00 WINDOW IN ${c.hours} H ${c.minutes} MIN` : `03:00 WINDOW IN ${c.minutes} MIN`;
+  if (c.open) return t('boot.window.open');
+  return c.hours > 0 ? t('boot.window.inHours', { h: c.hours, m: c.minutes }) : t('boot.window.inMinutes', { m: c.minutes });
 }
 
 // Milliseconds until the wall clock next reaches a whole minute (the countdown's tick).

@@ -17,3 +17,16 @@ export function keyLayout(plateW: number): { gap: number; left: number } {
   return { gap, left };
 }
 
+
+// A legend word must sit on one line inside the cap (72 wide, 2 padding, 1 border each side: 66 px).
+// B612 Mono Bold 13 px advances 8.45 px (0.65 em) plus 0.6 tracking; a longer word (EINBAUEN, AUFNAHME) first
+// gives up tracking, then size, so no word is ever broken across two lines.
+const LEGEND_INNER = KEY_W - 6;
+export function legendFit(legend: string): { fontSize: number; letterSpacing: number } | null {
+  const longest = Math.max(1, ...legend.split(/\s+/).map((w) => [...w].length));
+  const adv = (f: number) => f * 0.65;
+  if (longest * (adv(13) + 0.6) <= LEGEND_INNER) return null;
+  if (longest * (adv(13) + 0.2) <= LEGEND_INNER) return { fontSize: 13, letterSpacing: 0.2 };
+  const fontSize = Math.max(9, Math.floor((LEGEND_INNER / longest - 0.2) / 0.65));
+  return { fontSize, letterSpacing: 0.2 };
+}

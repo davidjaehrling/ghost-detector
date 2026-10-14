@@ -1,3 +1,4 @@
+import { fmtFixed, getLocale, hasKey, tableFor, t } from '../i18n';
 import { readInstallSeed } from '../ui/boot/install';
 import { getBelief } from './belief';
 import { cadenceStore } from './cadence';
@@ -38,6 +39,14 @@ const defaultDeps = (): Deps => ({
   nowMs: harnessNow,
   offsetAt: (ms) => -new Date(ms).getTimezoneOffset(),
   seed: seedFor,
+  copy: () => {
+    const lang = getLocale();
+    return {
+      strings: tableFor('engine.'),
+      fmt: (n, digits) => (digits === undefined ? String(n) : fmtFixed(n, digits, lang)),
+      tagLabel: (id) => (hasKey(`tag.${id}`) ? t(`tag.${id}`) : undefined),
+    };
+  },
   refreshPermission: () => refreshRelay(relayStore, notifyBackend),
 });
 

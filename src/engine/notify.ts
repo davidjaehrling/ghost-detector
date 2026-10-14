@@ -1,6 +1,7 @@
 import { mulberry32 } from './rng';
 import type { Intensity } from './outcome';
 import type { Tier } from './tiers';
+import { en, fill, plainFmt, type EngineStrings, type NumFmt } from './strings';
 
 /**
  * Notification scheduler (docs/p6-brief.md section 2 and 4, D-032). Pure and seeded: no clock,
@@ -170,33 +171,24 @@ export function withinWeeklyCap(times: number[], cap: number): boolean {
 
 /** Words a notification may never carry (plan section 7, D-032) plus lint-copy's banned list. */
 export const CLAIM_WORDS = ['verified', 'confirmed', 'accurate', 'real', 'detected', 'active'] as const;
-const LORE: Record<string, string> = {
-  cellar: 'Cellars hold cold air.',
-  attic: 'Attics keep the day heat late.',
-  hallway: 'Hallways carry every draught.',
-  hall: 'Halls carry every draught.',
-  stairs: 'Stairs settle after dark.',
-  bedroom: 'Bedrooms cool fast at night.',
-  kitchen: 'Kitchens keep warm pipes.',
-  bathroom: 'Bathrooms hold damp air.',
-  garage: 'Garages sit colder than the house.',
-};
 // Stems are split so this file passes the copy linter that bans them.
 const BANNED_STEMS = ['del' + 'v', 'tapes' + 'tr', 'pivo' + 'tal', 'cru' + 'cial', 'intri' + 'cat', 'testa' + 'ment', 'fos' + 'ter', 'land' + 'scape', 'under' + 'scor'];
-const BAD_TAG_RE = new RegExp(`\\b(${BANNED_STEMS.join('|')}\\w*|${CLAIM_WORDS.join('|')}|evp)\\b`, 'i');
+const BAD_TAG_RE = new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${BANNED_STEMS.join('|')})\\p{L}*|${CLAIM_WORDS.join('|')}|evp)(?![\\p{L}\\p{N}])`, 'iu');
 
 export function cleanTag(raw: string): string | null {
-  const t = raw.toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20).trim();
+  const t = raw.toLocaleLowerCase().normalize('NFC').replace(/[^\p{L}\p{N} -]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 20).trim();
   if (!t || BAD_TAG_RE.test(t)) return null;
   return t;
 }
-const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const cap1 = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1);
+/** ASCII-folded form of a tag (Küche -> kuche), for lore keys. */
+const foldTag = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '');
 const pad4 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(4, '0');
 
 /* ---------- candidates ---------- */
 
 /** `idx` is the forecast index at 22:00 of the delivery night, `idx03` at 03:00 after it. */
-interface Ctx { s: NotifyState; t: number; moonPct: number; idx: number; idx03: number }
+interface Ctx { s: NotifyState; t: number; moonPct: number; idx: number; idx03: number; strings: EngineStrings; fmt: NumFmt }
 
 /**
  * Minute of the local day (18:00 to 21:30 inclusive, `WINDOW_START_MIN` to `DELIVERY_END_MIN`) this install is always notified at.
@@ -209,23 +201,25 @@ export function deliveryMinute(installMs: number): number {
 }
 
 function build(id: TemplateId, c: Ctx): Notification | null {
-  const { s, t, idx, idx03, moonPct } = c;
+  const { s, t, idx, idx03, moonPct, strings, fmt } = c;
+  const T = (key: string, values: Record<string, string>) => fill(strings[`notify.${key}`]!, values).trimEnd();
+  const base = { prefix: strings['notify.prefix']!, idx22: fmt(idx), idx03: fmt(idx03), moonPct: fmt(moonPct) };
   switch (id) {
     case 1:
       // The 03:00 index is 4 on every night, so the moon lift (night index 4) is the gate.
       if (idx < HIGH_INDEX || idx03 < HIGH_INDEX) return null;
       return {
         templateId: 1, fireAtMs: t,
-        title: `FIELD LOG · IDX ${idx}/5 AT 22:00`,
-        body: `Moon ${moonPct}%. Forecast ${idx}/5 after 22:00. ${idx03}/5 at 03:00.`,
+        title: T('t1.title', base),
+        body: T('t1.body', base),
       };
     case 2:
       if (!isFullMoonWindow(t, s.utcOffsetMin)) return null;
       if (s.sent.some((x) => x.templateId === 2 && Math.abs(x.sentAtMs - t) < MOON_CYCLE_GAP_MS)) return null;
       return {
         templateId: 2, fireAtMs: t,
-        title: `FIELD LOG · MOON ${moonPct}%`,
-        body: `Full moon. Forecast index ${idx}/5 from 22:00. ${idx03}/5 at 03:00.`,
+        title: T('t2.title', base),
+        body: T('t2.body', base),
       };
     case 3: {
       if (idx < HIGH_INDEX) return null;
@@ -239,11 +233,12 @@ function build(id: TemplateId, c: Ctx): Notification | null {
         .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
       if (!best) return null;
       const [tag, n] = best;
-      const lore = s.belief === 'yes' ? LORE[tag] : undefined;
+      const lore = s.belief === 'yes' ? (strings[`notify.lore.${tag}`] ?? strings[`notify.lore.${foldTag(tag)}`]) : undefined;
+      const v = { ...base, tag, Tag: cap1(tag), TAG: tag.toLocaleUpperCase(), count: fmt(n), lore: lore ?? '' };
       return {
         templateId: 3, fireAtMs: t,
-        title: `FIELD LOG · ${tag.toUpperCase()}`,
-        body: `${cap1(tag)} on file, ${n} cases. Forecast index ${idx}/5 after 22:00.${lore ? ` ${lore}` : ''}`,
+        title: T('t3.title', v),
+        body: T('t3.body', v),
       };
     }
     case 4: {
@@ -256,8 +251,8 @@ function build(id: TemplateId, c: Ctx): Notification | null {
       if (!c4) return null;
       return {
         templateId: 4, fireAtMs: t, caseId: c4.caseId,
-        title: `FIELD LOG · CASE ${pad4(c4.caseId)}`,
-        body: `Signature ${Math.round(c4.decodedPct)}% decoded. Unresolved.`,
+        title: T('t4.title', { prefix: base.prefix, caseId: pad4(c4.caseId) }),
+        body: T('t4.body', { pct: fmt(Math.round(c4.decodedPct)) }),
       };
     }
     case 5: {
@@ -269,8 +264,11 @@ function build(id: TemplateId, c: Ctx): Notification | null {
       if (!fresh) return null;
       return {
         templateId: 5, fireAtMs: t,
-        title: `FIELD LOG · CATALOGUE ${s.catalogueCount}/${CATALOGUE_SIZE}`,
-        body: `${unlogged} ${unlogged === 1 ? 'class' : 'classes'} unlogged.${last ? ` Last logged: ${last}.` : ''}`,
+        title: T('t5.title', { prefix: base.prefix, logged: fmt(s.catalogueCount), total: fmt(CATALOGUE_SIZE) }),
+        body: T(unlogged === 1 ? 't5.body.one' : 't5.body.other', {
+          unlogged: fmt(unlogged),
+          last: last ? fill(strings['notify.t5.last']!, { class: last }) : '',
+        }),
       };
     }
   }
@@ -282,7 +280,15 @@ function build(id: TemplateId, c: Ctx): Notification | null {
  * The next notification to schedule, or null. Call again after scheduling it, with the item
  * appended to `sent` (`sentAtMs` = `fireAtMs`, `opened` false), to get the one after.
  */
-export function nextNotification(s: NotifyState, _seed: number): Notification | null {
+export function nextNotification(s: NotifyState, seed: number): Notification | null {
+  return nextNotificationWith(s, seed, en);
+}
+
+/**
+ * `nextNotification` with an explicit locale table (`notify.*` keys) and number formatter.
+ * Plurals: `t5.body.one` for exactly 1 unlogged class, `t5.body.other` otherwise.
+ */
+export function nextNotificationWith(s: NotifyState, _seed: number, strings: EngineStrings, fmt: NumFmt = plainFmt): Notification | null {
   if (!s.optedIn || s.sessionCount < 2) return null;
   if (s.nowMs - s.lastAppOpenMs >= STALE_AFTER_MS) return null;
   const minute = deliveryMinute(s.installMs);
@@ -308,6 +314,7 @@ export function nextNotification(s: NotifyState, _seed: number): Notification | 
       s, t, moonPct: forecastIndex(t, s.utcOffsetMin).moonPct,
       idx: forecastIndex(at(22, 0), s.utcOffsetMin).index, // "after 22:00" that night
       idx03: forecastIndex(at(3, 1), s.utcOffsetMin).index, // the 03:00 window after midnight
+      strings, fmt,
     };
     for (const id of PRIORITY) {
       if (!allowed.includes(id)) continue;

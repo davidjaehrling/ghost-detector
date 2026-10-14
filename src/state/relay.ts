@@ -1,5 +1,6 @@
 import { type KeyValueStore } from './scans';
 import { platformStorage } from './storage';
+import { copyOf } from '../i18n';
 
 // FIELD LOG RELAY (docs/p6-brief.md section 2.2, D-032). Three things live here: the trigger for the
 // one opt-in module, the persisted opt-in state, and the permission flow behind FIT RELAY and the
@@ -18,17 +19,17 @@ export type RelayState = {
   system: SystemPermission;
 };
 
-export const relayCopy = {
-  header: 'FIELD LOG RELAY',
-  body: 'Fit the relay? At most one field-log line a night. Index, moon or an open case. 18:00 to 22:00. No sound. Lines are simulated.',
-  fit: 'FIT RELAY',
-  notNow: 'NOT NOW',
-  fitted: 'Relay fitted. Change in Settings.',
-  notFitted: 'Relay not fitted. Change in Settings.',
-  settingsLabel: 'FIELD LOG RELAY',
-  settingsHelp: 'Max 1 line a night. 18:00 to 22:00.',
-  blocked: 'RELAY BLOCKED BY SYSTEM. OPEN SYSTEM SETTINGS.',
-} as const;
+export const relayCopy = copyOf({
+  header: 'relay.header',
+  body: 'relay.body',
+  fit: 'relay.fit',
+  notNow: 'relay.notNow',
+  fitted: 'relay.fitted',
+  notFitted: 'relay.notFitted',
+  settingsLabel: 'relay.settingsLabel',
+  settingsHelp: 'relay.settingsHelp',
+  blocked: 'relay.blocked',
+});
 
 export type RelayContext = {
   state: RelayState;

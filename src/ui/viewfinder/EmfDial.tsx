@@ -1,3 +1,4 @@
+import { fmtFixed, getLocale, t, useLocale } from '../../i18n';
 import { Canvas, Path, Skia, vec } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -88,7 +89,7 @@ export function EmfDial({
   return (
     <View style={s.dial} pointerEvents="none">
       <Scale />
-      <View style={s.canvas} pointerEvents="none" testID="emf-needle" aria-valuetext={`${target.toFixed(1)} deg`}>
+      <View style={s.canvas} pointerEvents="none" testID="emf-needle" aria-valuetext={t('a11y.deg', { n: fmtFixed(target, 1, getLocale()) })}>
         <GeoArc />
         {frozen ? null : (
           <>
@@ -121,6 +122,7 @@ function Hand({ value, step, opacity, width = 1.5, dx = 0, dy = 0, bloom = false
 
 // The scale never changes: ticks, labels and the GEO legend, rendered once.
 const Scale = memo(function Scale() {
+  useLocale();
   return (
     <>
       {TICKS.map((mg) => {
@@ -136,7 +138,7 @@ const Scale = memo(function Scale() {
           {b.text}
         </Text>
       ))}
-      <Text style={[s.geo, { left: GEO_LABEL.left, top: GEO_LABEL.top, width: GEO_LABEL.width }]}>GEO</Text>
+      <Text style={[s.geo, { left: GEO_LABEL.left, top: GEO_LABEL.top, width: GEO_LABEL.width }]}>{t('viewfinder.geoLabel')}</Text>
     </>
   );
 });

@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { Canvas, Group, Line, Path, Skia, SweepGradient, vec } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -76,7 +77,7 @@ export function Sweep({
   const step = sweepStep(mg);
 
   return (
-    <View style={[s.fill, { width, height }]} pointerEvents="none" testID="hud-sweep" aria-valuetext={`${shown} deg`}>
+    <View style={[s.fill, { width, height }]} pointerEvents="none" testID="hud-sweep" aria-valuetext={t('a11y.deg', { n: shown })}>
       <Rings cx={cx} cy={cy} r={r} />
       <Animated.View style={[s.abs, { left: cx - r - 2, top: cy - r - 2, width: 2 * r + 4, height: 2 * r + 4 }, spin]}>
         <Wedge r={r} step={step} sector={reduceMotion ? REDUCED_SECTOR_DEG : SWEEP_SECTOR_DEG} />

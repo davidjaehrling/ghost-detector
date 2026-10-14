@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// PW_PORT lets a second run use its own server while another holds 4173.
+const port = Number(process.env.PW_PORT ?? 4173);
+
 const sizes = [
   { name: 'android-360x800', width: 360, height: 800 },
   { name: 'android-390x844', width: 390, height: 844 },
@@ -12,10 +15,11 @@ export default defineConfig({
   snapshotPathTemplate: 'e2e/screenshots/golden/{projectName}/{arg}{ext}',
   reporter: 'list',
   expect: { toHaveScreenshot: { animations: 'disabled', caret: 'hide', scale: 'css' } },
-  use: { baseURL: 'http://localhost:4173', trace: 'retain-on-failure' },
+  use: { baseURL: `http://localhost:${port}`, trace: 'retain-on-failure' },
   webServer: {
-    command: 'node e2e/web/serve.mjs dist',
-    url: 'http://localhost:4173',
+    command: `node e2e/web/serve.mjs dist`,
+    env: { PORT: String(port) },
+    url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
   },
   projects: sizes.map(({ name, width, height }) => ({

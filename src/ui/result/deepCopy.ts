@@ -1,37 +1,25 @@
 import type { Placement } from '../../fx/ghostV0';
+import { copyOf, t } from '../../i18n';
 
 // Rewarded DEEP SCAN (P5-04). Copy is instrument voice: no claim of a real or truer reading, no
 // system-style dialog. Strings that appear on the key live here so a test can assert them.
-export const deepCopy = {
-  legend: 'DEEP SCAN',
-  label: 'Deep scan',
-  sub: 'SPONSORED VIDEO PLAYS FIRST',
-  offline: 'DEEP SCAN OFFLINE. NO SIGNAL.',
-  warming: 'DEEP SCAN WARMING. STAND BY.',
-  running: 'DEEP SCAN RUNNING.',
-  done: 'DEEP SCAN COMPLETE.',
-  decoded: 'SIGNATURE DECODED: 100%',
-  evpHead: 'EVP',
-};
+export const deepCopy = copyOf({
+  legend: 'deep.legend',
+  label: 'deep.label',
+  sub: 'deep.sub',
+  offline: 'deep.offline',
+  warming: 'deep.warming',
+  running: 'deep.running',
+  done: 'deep.done',
+  decoded: 'deep.decoded',
+  evpHead: 'deep.evpHead',
+});
 
 // Short fragments for the EVP row, picked by the scan's seed. Simulated; the app says so in Settings.
-const EVP_LINES = [
-  '"stay quiet"',
-  '"behind the door"',
-  '"who is counting"',
-  '"not alone here"',
-  '"cold hands"',
-  '"it is late"',
-  '"close the window"',
-  '"still waiting"',
-  '"under the stairs"',
-  '"I heard you"',
-  '"turn it off"',
-  '"two of us"',
-];
+const EVP_LINE_COUNT = 12; // locales keep exactly this many deep.evp.N keys
 
 export function evpLine(seed: number): string {
-  return EVP_LINES[(seed >>> 0) % EVP_LINES.length]!;
+  return t(`deep.evp.${(seed >>> 0) % EVP_LINE_COUNT}`);
 }
 
 /** The apparition is drawn on a canvas this many times larger than the panel, then scaled down. */

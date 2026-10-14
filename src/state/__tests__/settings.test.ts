@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Intensity } from '../../engine';
-import { CALM_LINE, createSettingsStore, jumpScaresDefault } from '../settings';
+import { calmLine, createSettingsStore, jumpScaresDefault } from '../settings';
 import type { KeyValueStore } from '../scans';
 
 const mem = (): KeyValueStore & { data: Map<string, string> } => {
@@ -32,7 +32,7 @@ describe('settings', () => {
     intensity = 'calm';
     expect(s.get().jumpScares).toBe(false);
     expect(s.setJumpScares(true)).toBe(false);
-    expect(CALM_LINE).toBe('CALM MODE. SCARE CIRCUIT DISABLED.');
+    expect(calmLine()).toBe('CALM MODE. SCARE CIRCUIT DISABLED.');
     intensity = 'brave';
     expect(s.get().jumpScares).toBe(true);
   });

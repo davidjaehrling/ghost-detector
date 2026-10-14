@@ -1,5 +1,6 @@
 import { mulberry32 } from '../boot/seed';
 import { type Tier, needle } from '../tokens';
+import { fmtDeltaT, getLocale, t } from '../../i18n';
 
 // Seeded flux walk for the viewfinder HUD. Mean-reverting in the log domain
 // around Earth's field (Bible section 3: 250 to 650 mG), with rare excursions.
@@ -42,7 +43,7 @@ export function fluxAngle(mg: number): number {
 }
 
 export function formatFlux(mg: number): string {
-  return `FLUX ${String(mg).padStart(4, ' ')} mG`;
+  return t('viewfinder.flux', { mg: String(mg).padStart(4, ' ') });
 }
 
 // Live-mode ladder (Bible section 3, D-007): LED 1 is power; LED 2 and 3 light
@@ -59,7 +60,7 @@ export function geoDeviation(mg: number): number {
 
 export function formatGeo(mg: number): string {
   const d = geoDeviation(mg);
-  return `GEO ${d < 0 ? '-' : '+'}${Math.abs(d)}%`;
+  return t('viewfinder.geo', { sign: d < 0 ? '-' : '+', pct: Math.abs(d) });
 }
 
 export function liveLeds(mg: number): number {
@@ -79,7 +80,7 @@ export function liveThermal(mg: number): number {
   return Math.round(Math.min(6, Math.max(-12, dt)) * 10) / 10;
 }
 
-export const formatThermal = (dt: number) => `ΔT ${dt.toFixed(1)} °C`;
+export const formatThermal = (dt: number) => fmtDeltaT(dt, getLocale());
 
 // The live reading wobbles by 0.1 °C around its mean: the displayed digit lifts or drops one step.
 export const THERMAL_WOBBLE = 0.1;

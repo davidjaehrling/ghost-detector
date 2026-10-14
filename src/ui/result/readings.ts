@@ -1,4 +1,5 @@
 import type { Tier } from '../../engine';
+import { fmtFixed, getLocale } from '../../i18n';
 import { mulberry32 } from '../boot/seed';
 
 // The three reading lines on the result screen. The scan record stores no
@@ -48,7 +49,7 @@ export function readingsFor(seed: number, tier: Tier): Readings {
 export function formatReadings({ fluxMg, thermalC, levelDb }: Pick<Readings, 'fluxMg' | 'thermalC' | 'levelDb'>) {
   return {
     flux: `${fluxMg} mG`,
-    thermal: `${thermalC.toFixed(1)} °C`,
+    thermal: `${fmtFixed(thermalC, 1, getLocale())} °C`,
     level: `${levelDb} dBFS`,
   };
 }

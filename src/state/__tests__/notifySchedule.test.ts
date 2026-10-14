@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { type Intensity, type Outcome, type Tier, deliveryMinute, localDayNumber, localMinuteOfDay } from '../../engine';
+import { tableFor } from '../../i18n/core';
+import { fmtFixed } from '../../i18n/format';
+import { type Intensity, type Outcome, type Tier, deliveryMinute, localDayNumber, localMinuteOfDay, nextNotificationWith } from '../../engine';
 import {
   type Deps,
   atNightOffset,
@@ -7,6 +9,7 @@ import {
   createPlanStore,
   handleTap,
   inWindow,
+  localiseTags,
   reconcileNow,
 } from '../notifySchedule';
 import { catalogue } from '../log';
@@ -353,5 +356,38 @@ describe('handleTap', () => {
   });
   it('a case that is gone falls back to the viewfinder', () => {
     expect(handleTap({ id: 'fl-a', templateId: 4, caseId: 99 }, plan(), records)).toEqual({ pathname: '/viewfinder' });
+  });
+});
+
+describe('tag labels in lines (de)', () => {
+  const labels: Record<string, string> = { cellar: 'KELLER', attic: 'DACHBODEN' };
+  const copy = {
+    strings: tableFor('de', 'engine.'),
+    fmt: (n: number, d?: number) => (d === undefined ? String(n) : fmtFixed(n, d, 'de')),
+    tagLabel: (id: string) => labels[id],
+  };
+  const lineFor = (tagLabel: boolean) => {
+    for (let day = 14; day < 70; day++) {
+      const state = buildNotifyState({
+        nowMs: at(day, 10), utcOffsetMin: 120, records, intensity: 'brave', belief: 'yes', jumpScaresOff: false,
+        sessionCount: 3, optedIn: true, plan: { installMs: at(1, 12), lastAppOpenMs: at(day, 9), sent: [] },
+      });
+      const c = tagLabel ? copy : { ...copy, tagLabel: undefined };
+      const loc = localiseTags(state, c);
+      const n = nextNotificationWith(loc.state, 1, loc.strings!, copy.fmt);
+      if (n?.templateId === 3) return n;
+    }
+    return null;
+  };
+  it('prints the German label and keeps the lore lookup working', () => {
+    const n = lineFor(true);
+    expect(n).not.toBeNull();
+    expect(n!.title).toContain('DACHBODEN');
+    expect(n!.title).not.toContain('ATTIC');
+    expect(n!.body.startsWith('Dachboden im Protokoll')).toBe(true);
+    expect(n!.body).toContain('Dachböden halten die Tageswärme lange.');
+  });
+  it('without a label the English id is printed, as before', () => {
+    expect(lineFor(false)!.title).toContain('ATTIC');
   });
 });

@@ -1,4 +1,5 @@
 import type { Tier } from '../../engine';
+import { fmtFixed, getLocale, t } from '../../i18n';
 import type { Readings } from './readings';
 
 // The data strip burned into the photo's lower left corner (share crop): case, SPI, ΔT and the
@@ -17,7 +18,7 @@ export function clock(ms: number): string {
 }
 
 export function stampText({ id, spi, deltaC, createdAt }: { id: string; spi: number; deltaC: number; createdAt: number }): string {
-  return `CASE ${id} · SPI ${spi} · ΔT ${deltaC.toFixed(1)} °C · ${clock(createdAt)}`;
+  return t('result.strip.data', { id, spi, dt: fmtFixed(deltaC, 1, getLocale()), time: clock(createdAt) });
 }
 
 /**
@@ -25,4 +26,4 @@ export function stampText({ id, spi, deltaC, createdAt }: { id: string; spi: num
  * screenshot carries the mark (D-034). The share card prints the same two parts itself
  * (src/fx/share/text.ts), so `stampText` stays the data run alone.
  */
-export const screenStampText = (d: Parameters<typeof stampText>[0]): string => `${stampText(d)} · SIMULATED`;
+export const screenStampText = (d: Parameters<typeof stampText>[0]): string => `${stampText(d)} · ${t('result.strip.mark')}`;

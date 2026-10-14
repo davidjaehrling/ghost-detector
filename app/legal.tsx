@@ -4,18 +4,20 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { IMPRESSUM_URL, PRIVACY_POLICY_URL } from '../src/ui/legal';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 import { color, type } from '../src/ui/tokens';
+import { copyOf, useLocale } from '../src/i18n';
 
-const copy = {
-  code: 'MODE 5 · LEGAL',
-  next: 'BACK',
-  nextLabel: 'Back to settings',
-  open: 'OPEN',
-  impressum: 'IMPRESSUM',
-  privacy: 'PRIVACY POLICY',
-  about: 'READINGS ARE SIMULATED. FIELD INSTRUMENT FICTION.',
-};
+const copy = copyOf({
+  code: 'legal.code',
+  next: 'legal.next',
+  nextLabel: 'legal.nextLabel',
+  open: 'legal.open',
+  impressum: 'legal.impressum',
+  privacy: 'legal.privacy',
+  about: 'about.line',
+});
 
 export default function Legal() {
+  useLocale();
   const router = useRouter();
   const rows = [
     { id: 'impressum', label: copy.impressum, url: IMPRESSUM_URL },

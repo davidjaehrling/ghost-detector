@@ -15,6 +15,7 @@ import {
   stamp,
   tagLabel,
 } from '../src/state/log';
+import { tierWord as tierWordOf } from '../src/state/tierWord';
 import { relayOn } from '../src/state/relay';
 import { useRelay } from '../src/state/useRelay';
 import { listScans, moonsLogged, nightsLogged, type ScanRecord } from '../src/state/scans';
@@ -23,27 +24,21 @@ import { readHarness } from '../src/ui/harness';
 import { isDemoLog, seedDemoLog } from '../src/ui/log/demo';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 import { color, type } from '../src/ui/tokens';
+import { copyOf, t, useLocale } from '../src/i18n';
 
 // The investigation log (docs/p6-brief.md section 3): cases grouped by location tag, a record row per
 // tag, the nights logged. A reading surface only: no DEEP SCAN key here, no streaks, no countdowns.
-const copy = {
-  code: 'MODE 4 · HISTORY',
-  empty: 'No cases logged. Run CAPTURE on the viewfinder.',
-  next: 'SETUP',
-  nextLabel: 'Open settings',
-  nights: 'NIGHTS LOGGED',
-  best: 'BEST ON FILE',
-  emptyKey: 'Open viewfinder',
-  emptyLegend: 'VIEW FINDER',
-  catalogue: 'CATALOGUE',
-  moon: 'MOON TABLE',
-  moons: 'FULL MOONS LOGGED',
-  nextMoon: 'NEXT FULL MOON',
-  moonCol: 'IDX AT 22:00',
-  relay: 'FIELD LOG RELAY',
-};
+const copy = copyOf({
+  code: 'history.code',
+  empty: 'history.empty',
+  next: 'history.next',
+  nextLabel: 'history.nextLabel',
+  emptyKey: 'history.emptyKey',
+  emptyLegend: 'history.emptyLegend',
+  moon: 'history.moon',
+});
 
-const tierWord = (r: ScanRecord) => r.outcome.tier.toUpperCase();
+const tierWord = (r: ScanRecord) => tierWordOf(r.outcome.tier);
 // CRITICAL is red wherever a tier word shows, as on the result card.
 const tierStyle = (r: ScanRecord) => (r.outcome.tier === 'critical' ? s.crit : null);
 // The harness pins the clock so the moon table is the same on every run.
@@ -52,6 +47,7 @@ const tagWord = tagLabel;
 const casesWord = casesLabel;
 
 export default function History() {
+  useLocale();
   const router = useRouter();
   // Harness: ?static=1&log=demo3 seeds three tags before the first read.
   const [records] = useState(() => {
@@ -101,10 +97,10 @@ export default function History() {
         <View style={s.list} testID="history-list-box">
           {nights > 0 || best ? (
             <View style={s.head} testID="history-head">
-              {nights > 0 ? <Text style={s.nights} testID="history-nights">{`${copy.nights} ${nights}`}</Text> : null}
+              {nights > 0 ? <Text style={s.nights} testID="history-nights">{t('history.nightsLine', { n: nights })}</Text> : null}
               {best ? (
                 <Text style={s.best} testID="history-best">
-                  {`${copy.best} ${best.outcome.spi} `}
+                  {t('history.bestLine', { spi: best.outcome.spi })}
                   <Text style={tierStyle(best)}>{tierWord(best)}</Text>
                 </Text>
               ) : null}
@@ -121,7 +117,7 @@ export default function History() {
                 <View style={s.tagRow} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
                   <Text style={s.tagName}>{`${tagWord(g.tag)} · ${casesWord(g.count)}`}</Text>
                   <Text style={s.tagPeak}>
-                    {`PEAK ${g.peak.outcome.spi} `}
+                    {t('history.peak', { spi: g.peak.outcome.spi })}
                     <Text style={tierStyle(g.peak)}>{tierWord(g.peak)}</Text>
                     {` · ${stamp(g.peak.createdAt)}`}
                   </Text>
@@ -133,7 +129,7 @@ export default function History() {
                       key={r.id}
                       testID={`history-row-${r.id}`}
                       accessibilityRole="button"
-                      accessibilityLabel={`Case ${r.id}, ${r.outcome.spi} ${tierWord(r)}${status === null ? '' : `, ${status}`}`}
+                      accessibilityLabel={status === null ? t('history.rowLabel', { id: r.id, spi: r.outcome.spi, tier: tierWord(r) }) : t('history.rowLabelStatus', { id: r.id, spi: r.outcome.spi, tier: tierWord(r), status })}
                       onPress={() =>
                         router.push({
                           pathname: '/result/[id]',
@@ -159,20 +155,20 @@ export default function History() {
               </View>
             ))}
             <View style={s.group} testID="history-catalogue">
-              <Text style={s.section} testID="history-catalogue-head">{`${copy.catalogue} ${cat.count}/${cat.total}`}</Text>
+              <Text style={s.section} testID="history-catalogue-head">{t('history.catalogueHead', { count: cat.count, total: cat.total })}</Text>
               {(empty ? [] : cat.rows).map((c) => (
                 <View key={c.cls} style={s.catRow} testID={`history-cat-${c.cls}`}>
                   <Text style={c.last ? s.catOn : s.catOff}>{`${c.prefix} ${c.cls}`}</Text>
-                  <Text style={c.last ? s.catOn : s.catOff}>{c.last ? `LOGGED · ${c.last.id}` : 'UNLOGGED'}</Text>
+                  <Text style={c.last ? s.catOn : s.catOff}>{c.last ? t('history.logged', { id: c.last.id }) : t('history.unlogged')}</Text>
                 </View>
               ))}
             </View>
             <View style={s.group} testID="history-moon">
               <Text style={s.section}>{copy.moon}</Text>
-              <Text style={s.moons} testID="history-next-moon">{`${copy.nextMoon} ${nextMoon}`}</Text>
+              <Text style={s.moons} testID="history-next-moon">{t('history.nextMoonLine', { date: nextMoon })}</Text>
               <View style={s.catRow}>
-                <Text style={s.catOff}>DATE</Text>
-                <Text style={s.catOff}>{`MOON % · ${copy.moonCol}`}</Text>
+                <Text style={s.catOff}>{t('history.date')}</Text>
+                <Text style={s.catOff}>{t('history.moonHead')}</Text>
               </View>
               {table.map((n) => (
                 <View key={n.date} style={s.catRow} testID={`history-moon-${n.date}`}>
@@ -180,17 +176,17 @@ export default function History() {
                   <Text style={s.catOn}>{`${n.moonPct}% · ${n.index}/5`}</Text>
                 </View>
               ))}
-              {moons > 0 ? <Text style={s.moons} testID="history-moons">{`${copy.moons} ${moons}`}</Text> : null}
+              {moons > 0 ? <Text style={s.moons} testID="history-moons">{t('history.moonsLine', { n: moons })}</Text> : null}
             </View>
             <Pressable
               testID="history-relay"
               accessibilityRole="button"
-              accessibilityLabel={`${copy.relay} ${relay ? 'on' : 'off'}. Open settings`}
+              accessibilityLabel={t(relay ? 'history.relayLabelOn' : 'history.relayLabelOff')}
               hitSlop={{ top: 4, bottom: 4 }}
               onPress={() => router.push('/settings')}
               style={[s.row, s.relayRow]}
             >
-              <Text style={s.catOff}>{`${copy.relay}: ${relay ? 'ON' : 'OFF'}`}</Text>
+              <Text style={s.catOff}>{t(relay ? 'history.relayOn' : 'history.relayOff')}</Text>
             </Pressable>
           </ScrollView>
         </View>

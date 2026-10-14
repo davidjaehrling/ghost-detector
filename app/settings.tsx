@@ -3,35 +3,42 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { showPrivacyOptions } from '../src/ads';
 import { notifyBackend } from '../src/state/notifyBackend';
-import { cycleIntensity } from '../src/state/intensity';
+import { cycleIntensity, intensityWord } from '../src/state/intensity';
 import { syncRelay } from '../src/state/notifyRuntime';
 import { refreshRelay, relayCopy, relayOn, relayStore, toggleRelay } from '../src/state/relay';
 import { useRelay } from '../src/state/useRelay';
 import { getIntensity, setIntensity } from '../src/state/scans';
-import { CALM_LINE, setHaptics, setJumpScares, setSound } from '../src/state/settings';
+import { calmLine, setHaptics, setJumpScares, setSound } from '../src/state/settings';
 import { useConsent } from '../src/state/useConsent';
 import { useSettings } from '../src/state/useSettings';
 import { sound } from '../src/ui/audio';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 import { color, type } from '../src/ui/tokens';
+import type { LangSetting } from '../src/i18n';
+import { copyOf, cycleLanguage, t, useLanguageSetting, useLocale } from '../src/i18n';
 
-const copy = {
-  code: 'MODE 5 · SETTINGS',
-  next: 'BACK',
-  nextLabel: 'Back to history',
-  sound: 'SOUND',
-  haptics: 'HAPTICS',
-  intensity: 'INTENSITY',
-  scares: 'JUMP SCARES',
-  on: 'ON',
-  off: 'OFF',
-  privacy: 'PRIVACY',
-  legal: 'LEGAL',
-  open: 'OPEN',
-  about: 'READINGS ARE SIMULATED. FIELD INSTRUMENT FICTION.',
-};
+const languageName = (setting: LangSetting) => t(`settings.language.${setting}`);
+
+const copy = copyOf({
+  code: 'settings.code',
+  next: 'settings.next',
+  nextLabel: 'settings.nextLabel',
+  sound: 'settings.sound',
+  haptics: 'settings.haptics',
+  intensity: 'settings.intensity',
+  language: 'settings.language',
+  scares: 'settings.scares',
+  on: 'settings.on',
+  off: 'settings.off',
+  privacy: 'settings.privacy',
+  legal: 'settings.legal',
+  open: 'settings.open',
+  about: 'about.line',
+});
 
 export default function Settings() {
+  useLocale();
+  const languageSetting = useLanguageSetting();
   const router = useRouter();
   const settings = useSettings();
   const consent = useConsent();
@@ -65,13 +72,20 @@ export default function Settings() {
       id: 'intensity',
       label: copy.intensity,
       on: false,
-      value: intensity.toUpperCase(),
+      value: intensityWord(intensity),
       toggle: () => {
         void cycleIntensity(intensity, { set: setIntensity, reconcile: syncRelay }).then((next) => {
           setIntensityNow(next);
           setCalmNote(false);
         });
       },
+    },
+    {
+      id: 'language',
+      label: copy.language,
+      on: false,
+      value: languageName(languageSetting),
+      toggle: () => void cycleLanguage(),
     },
     { id: 'relay', label: relayCopy.settingsLabel, help: relayCopy.settingsHelp, on: relayOn(relay), toggle: () => void toggleRelay(relayStore, notifyBackend).catch(() => {}).then(() => syncRelay('settings')) },
   ];
@@ -89,7 +103,7 @@ export default function Settings() {
             <Pressable
               testID={`setting-${r.id}`}
               accessibilityRole={r.value ? 'button' : 'switch'}
-              accessibilityLabel={r.value ? `${r.label} ${r.value}` : r.label}
+              accessibilityLabel={r.value ? t('settings.rowLabel', { label: r.label, value: r.value }) : r.label}
               accessibilityState={r.value ? {} : { checked: r.on }}
               onPress={r.toggle}
               style={s.rowIn}
@@ -138,7 +152,7 @@ export default function Settings() {
         ) : null}
         {calmNote ? (
           <Text style={s.note} testID="settings-calm-note">
-            {CALM_LINE}
+            {calmLine()}
           </Text>
         ) : null}
       </View>

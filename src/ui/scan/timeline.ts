@@ -1,3 +1,4 @@
+import { fmtFixed, getLocale, t } from '../../i18n';
 import { mulberry32 } from '../boot/seed';
 
 // Scan theatre timeline (docs/sound-palette.md section 5). The scan runs for
@@ -81,7 +82,7 @@ export function elapsedForPhase(phase: number | 'hold' | 'fault', durationMs: nu
 }
 
 // Fault code blinks at 500 ms (on, off, on over the 1.5 s beat).
-export const FAULT_LINE = 'E-07 SENSOR DRIFT. RECALIBRATING.';
+export const faultLine = () => t('scan.fault');
 export const BLINK_MS = 500;
 export const faultOn = (faultT: number) => Math.floor(faultT / BLINK_MS) % 2 === 0;
 
@@ -107,16 +108,16 @@ export function phaseLine(seed: number, phase: Phase): string {
   const b1 = mulberry32((seed + phase * 7919) >>> 0)();
   switch (phase) {
     case 0:
-      return 'SWEEP BAND 2';
+      return t('scan.phase.0');
     case 1:
-      return `FLUX SAMPLE ${Math.round(300 + b1 * 260)} mG`;
+      return t('scan.phase.1', { mg: Math.round(300 + b1 * 260) });
     case 2:
       // No value: the pinned ΔT row is the only live thermal reading on the screen (D-011).
-      return 'THERMAL PROBE ZEROED';
+      return t('scan.phase.2');
     case 3:
-      return `ACOUSTIC ${Math.round(-(30 + b1 * 20))} dBFS`;
+      return t('scan.phase.3', { db: Math.round(-(30 + b1 * 20)) });
     default:
-      return 'DECODE 2048 BLOCKS';
+      return t('scan.phase.4');
   }
 }
 
@@ -131,15 +132,15 @@ export function liveAt(seed: number, phase: Phase, tick: number): Live {
   const wob = 1 + (noise - 0.5) * 0.04;
   switch (phase) {
     case 0:
-      return { label: 'CH', value: String(1 + Math.floor(((tick % 160) / 160) * 16)), unit: '/16' };
+      return { label: t('scan.live.ch'), value: String(1 + Math.floor(((tick % 160) / 160) * 16)), unit: '/16' };
     case 1:
-      return { label: 'FLUX', value: String(Math.round((300 + b1 * 260) * wob)), unit: 'mG' };
+      return { label: t('scan.live.flux'), value: String(Math.round((300 + b1 * 260) * wob)), unit: 'mG' };
     case 2:
-      return { label: 'ΔT', value: (-(0.4 + b1 * 3.2) * wob).toFixed(1), unit: '°C' };
+      return { label: t('scan.live.dt'), value: fmtFixed(-(0.4 + b1 * 3.2) * wob, 1, getLocale()), unit: '°C' };
     case 3:
-      return { label: 'LVL', value: String(Math.round(-(30 + b1 * 20) * wob)), unit: 'dBFS' };
+      return { label: t('scan.live.lvl'), value: String(Math.round(-(30 + b1 * 20) * wob)), unit: 'dBFS' };
     default:
-      return { label: 'BLK', value: String(Math.min(2048, Math.round(tick * 9.7 + b1 * 40))).padStart(4, '0'), unit: '/2048' };
+      return { label: t('scan.live.blk'), value: String(Math.min(2048, Math.round(tick * 9.7 + b1 * 40))).padStart(4, '0'), unit: '/2048' };
   }
 }
 

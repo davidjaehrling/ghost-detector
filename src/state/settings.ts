@@ -1,4 +1,5 @@
 import type { Intensity } from '../engine';
+import { t } from '../i18n';
 import { type KeyValueStore, getIntensity, webStorage } from './scans';
 
 // Settings (docs/sound-palette.md section 8, psych-brief 3): SOUND, HAPTICS and JUMP SCARES.
@@ -7,7 +8,7 @@ import { type KeyValueStore, getIntensity, webStorage } from './scans';
 
 export type SettingsSnapshot = { sound: boolean; haptics: boolean; jumpScares: boolean };
 
-export const CALM_LINE = 'CALM MODE. SCARE CIRCUIT DISABLED.';
+export const calmLine = () => t('settings.calm');
 
 const KEY = 'fs4.settings.v1';
 type Stored = { sound?: boolean; haptics?: boolean; jumpScares?: boolean };
@@ -73,7 +74,7 @@ export function createSettingsStore(storage: KeyValueStore | null = webStorage()
       save();
       emit();
     },
-    /** Returns the value now in force: on Calm it stays OFF and the caller shows CALM_LINE. */
+    /** Returns the value now in force: on Calm it stays OFF and the caller shows calmLine(). */
     setJumpScares(on: boolean): boolean {
       load().jumpScares = on;
       save();

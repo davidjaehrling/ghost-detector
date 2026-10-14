@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { Path, Skia } from '@shopify/react-native-skia';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -76,7 +77,7 @@ export function PrimingTransient({
   const trail = usePersistence(Math.round(amp * 20) / 20, { tau: TAU.sweep, step: 5, static: still, reduceMotion });
   const x0 = Math.round(gw * 0.62);
   return (
-    <View style={{ position: 'absolute', left, top: cy - reach, width: gw, height: reach * 2 }} pointerEvents="none" testID="boot-transient" aria-valuetext={`${Math.round(amp * 100)} percent`}>
+    <View style={{ position: 'absolute', left, top: cy - reach, width: gw, height: reach * 2 }} pointerEvents="none" testID="boot-transient" aria-valuetext={t('a11y.percent', { n: Math.round(amp * 100) })}>
       <SnapshotCanvas style={StyleSheet.absoluteFill} pointerEvents="none">
         <Bloom radius={3}>
           {trail.map((sample, i) => {
