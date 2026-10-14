@@ -111,6 +111,37 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 - Longer than the +35% allowance and worth a layout look: `settings.legal` is `RECHT` (5) to stay short; `viewfinder.hud.stored` is `SU · GESP.`; `history.relayOn` is `FELDPROTOKOLL: EIN` (18 against 19, no stretch).
 - `result.eraLabel` is `ÄRA`, a short label that also reads as German.
 
+### ES
+
+- Variant: neutral Spanish. Instrument surfaces use infinitives and impersonal forms (`Barrer despacio.`, `Pulsar CAPTURAR`). `usted` on the camera rationale (`su dispositivo`) and the relay opt-in (`Usted recibe`). No `tú`, no `vosotros`. Device words are neutral: `dispositivo`, never `móvil` or `celular`.
+- Rewritten, not translated: location tags and lore (`desván`, `caballete`, `rasante`, `marcos de puerta`), the 24 class names (`IMPRONTA`, `POSIMAGEN`, `OQUEDAD`, `MURMULLO`, `GUARDIÁN` ...), attachments (`alacena`, `fogón`, `estancia`), the EVP fragments, `FICHA DE CAMPO` for the field card, `PUNTO FRÍO`, `CONDUCTA`.
+- `PRESENCE` became `APARICIÓN` because `presencia*` is on the claim list.
+- `ON` and `OFF` stay as printed on Spanish devices.
+- Abbreviation table (English length in brackets, budget = English + 2):
+
+| Key | EN | ES |
+| --- | --- | --- |
+| `boot.key` | ACK (3) | OK (2) |
+| `history.next` | SETUP (5) | AJUSTES (7) |
+| `settings.next`, `legal.next` | BACK (4) | ATRÁS (5) |
+| `scan.cancel`, `share.cancel` | CANCEL (6) | CANCELAR (8) |
+| `viewfinder.hud.allow` | ALLOW (5) | ACCESO (6) |
+| `viewfinder.hud.log` | LOG (3) | REG (3) |
+| `viewfinder.hud.capture` | CAPTURE (7) | CAPTURAR (8) |
+| `result.photoKey` | PHOTO (5) | FOTO (4) |
+| `result.back` | NEW SCAN (8) | NUEVO SCAN (10, two lines) |
+| `share.key` | SHARE (5) | ENVIAR (6) |
+| `onboarding.unsure` | NOT SURE (8) | NO SÉ (5) |
+| `onboarding.skip` | SKIP (4) | OMITIR (6) |
+| `relay.fit` | FIT RELAY (9) | INSTALAR (8) |
+| `relay.notNow` | NOT NOW (7) | AHORA NO (8) |
+| `history.emptyLegend` | VIEW FINDER (11) | VISOR (5) |
+| `settings.open`, `legal.open` | OPEN (4) | ABRIR (5) |
+| `tag.short.*` | CELLAR ATTIC BEDROOM HALL OUTSIDE | SÓTANO DESVÁN DORM. PASIL. FUERA |
+
+- Over budget on purpose, rewritten shorter instead of shrunk: `history.unlogged` is `SIN REG.`; `viewfinder.hud.stored` is `VS · GUARD.`; `tag.short.hallway` is `PASIL.` (6 against `HALL` 4, +2).
+- `legal.impressum` stays `IMPRESSUM`: it opens the German document.
+
 ## Checks
 
 `pnpm test` fails when code uses a key that `en.json` lacks, when an `en.json` key is not referenced,
