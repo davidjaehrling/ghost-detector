@@ -50,6 +50,8 @@ export interface CardText {
   footer: string;
   /** The word in the footer the cap-height and contrast test measures (the footer's own mark word). */
   footerMark: string;
+  /** The housing sticker's head line (A-92), `sticker.head1` without its trailing ` ·`: `SIMULATION UNIT`. */
+  stickerHead: string;
 }
 
 /** Local calendar date of a timestamp, ISO (the data back prints `2026-10-13` in every locale). */
@@ -107,6 +109,7 @@ export function cardText(record: ScanRecord, store: string = STORE_NAME, locale?
     reading: { spi: String(outcome.spi), tier: TIER_WORD[tier], line, detail: deep ? tr(CARD_KEYS.detail, { cls: profile.class, era }) : null },
     footer,
     footerMark: footerMarkOf(footer, mark),
+    stickerHead: tr('sticker.head1').replace(/\s*·\s*$/, ''),
   };
 }
 

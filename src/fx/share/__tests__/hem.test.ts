@@ -5,7 +5,7 @@ import { FONT_FILES, readBytes, skiaModule } from './skiaNode';
 vi.mock('@shopify/react-native-skia', () => skiaModule());
 vi.mock('react-native', () => ({ Platform: { OS: 'web' }, PixelRatio: { get: () => 1 } }));
 
-// A-98, in its own file: CanvasKit's wasm heap is per test file, and shareCard.test.ts is near its limit.
+// A-98 and A-92, in their own file: CanvasKit's wasm heap is per test file, and shareCard.test.ts is near its limit.
 type Mod = typeof import('../render');
 let R: Mod;
 let Skia: any;
@@ -28,11 +28,11 @@ afterEach(() => {
   for (const img of made.splice(0)) img.dispose();
 });
 
-function card(fixture: string, name: 'critical', format: 'story' | 'square', deep: boolean, _locale?: undefined, opts: { fx?: { ghost?: boolean } } = {}) {
+function card(fixture: string, name: 'critical', format: 'story' | 'square', deep: boolean, locale?: 'en' | 'de' | 'es' | 'pt', opts: { fx?: { ghost?: boolean } } = {}) {
   const photo = Skia.Image.MakeImageFromEncoded(Skia.Data.fromBytes(readBytes(`e2e/fixtures/${fixture}.png`)));
   const record = demo.demoRecord(name, 'fixture', demo.DEMO_CASES[name]);
   if (deep) record.deepScanAt = record.createdAt;
-  const c = R.drawShareCard({ record, format, photo, stats: statsFromImage(photo), fonts, ...opts });
+  const c = R.drawShareCard({ record, format, photo, stats: statsFromImage(photo), fonts, locale, ...opts });
   photo.dispose();
   made.push(c.image);
   return c;
@@ -110,4 +110,42 @@ describe('hem edge under the figure (A-98)', () => {
       expect(drop).toBeLessThanOrEqual(HEM_DROP_MAX);
       expect(darkest).toBeGreaterThanOrEqual(-1);
     }, 120000);
+});
+
+/**
+ * A-92: the housing sticker prints `SIMULATION UNIT` (localised) and the CAL and PRÜF lines at the
+ * card's floor (cap at least MARK_CAP_FRAC of the card height), in the top band between the screws
+ * on the story; the story's bottom band carries the engraving, clear of the footer run, the mark,
+ * the strip, the reading box and the LED plate. The square has no room right of its footer: no
+ * sticker and no engraving there (D-049 ruling: the square's composition does not change).
+ */
+describe('housing sticker and engraving (A-92)', () => {
+  const hit = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  for (const locale of ['en', 'de', 'es', 'pt'] as const)
+    it(`story ${locale}: sticker at the floor in the top band, engraving clear of every part`, async () => {
+      const { MARK_CAP_FRAC } = await import('../constants');
+      const c = card('cellar', 'critical', 'story', true, locale);
+      const L = c.layout;
+      const s = c.sticker!;
+      expect(s, 'sticker placed').not.toBeNull();
+      expect(s.lines[0]).toBe(c.text.stickerHead);
+      expect(s.lines.slice(1)).toEqual(['CAL 2026-10-13', 'PRÜF 07']);
+      expect(R.CAP_EM.b612 * s.fontSize).toBeGreaterThanOrEqual(MARK_CAP_FRAC * L.height);
+      expect(s.y).toBeGreaterThan(0);
+      expect(s.y + s.h).toBeLessThan(L.plate.y);
+      expect(s.x).toBeGreaterThan(56 + 15);
+      expect(s.x + s.w).toBeLessThan(L.width - 56 - 15);
+      const e = c.engraving!;
+      expect(e, 'engraving placed').not.toBeNull();
+      expect(e.lines).toEqual(['FIELD SPECTROMETER', 'MADE IN W.-GERMANY']);
+      for (const b of [...c.footerBoxes, c.marks[1]!, c.strip, L.reading, L.leds, L.photo]) expect(hit(e, b), JSON.stringify(b)).toBe(false);
+      expect(e.x + e.w).toBeLessThanOrEqual(L.footerRight);
+      console.log(`[a92] story ${locale}: sticker ${s.w.toFixed(0)} x ${s.h.toFixed(0)} at ${s.x.toFixed(0)},${s.y.toFixed(0)} (${s.fontSize} px, cap ${(R.CAP_EM.b612 * s.fontSize).toFixed(1)}); engraving ${e.w.toFixed(0)} x ${e.h.toFixed(1)} at ${e.x.toFixed(0)},${e.y.toFixed(1)}; footer line 1 ends ${(c.footerBoxes[0]!.x + c.footerBoxes[0]!.w).toFixed(0)}, line 2 cap top ${c.footerBoxes[1]!.y.toFixed(1)}`);
+    }, 120000);
+  it('square: nothing drawn into the footer band that does not fit', () => {
+    const c = card('cellar', 'critical', 'square', true, 'en');
+    expect(c.engraving).toBeNull();
+    if (c.sticker) for (const b of [...c.footerBoxes, c.marks[1]!, c.layout.reading, c.layout.leds, c.layout.photo]) expect(hit(c.sticker, b)).toBe(false);
+    console.log(`[a92] square: sticker ${c.sticker ? 'placed' : 'none'}; free width right of the footer ${(c.layout.width - 44 - (c.footerBoxes[0]!.x + c.footerBoxes[0]!.w) - 16).toFixed(0)} px`);
+  }, 120000);
 });

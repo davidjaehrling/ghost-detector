@@ -8,6 +8,7 @@ import { fixtureUri } from '../../ui/fixtures';
 import { DEFAULT_FIXTURE, isFixtureName } from '../../ui/fixtureNames';
 import { color } from '../../ui/tokens';
 import { LAYOUTS, type CardFormat } from './constants';
+import { CARD_IDENTITY } from './render';
 import { renderShareCard, type PrintTiming } from './index';
 
 // L2 harness for the share card (/share-probe?format=story|square&case=<demo>[-deep|-undecoded]&fixture=<f>&lang=en|de|es|pt).
@@ -32,7 +33,7 @@ export function ShareProbe({ format: f, kase, fixture, lang, encoder = searchPar
     if (!skia) return;
     const rec = demoRecord(demo, fixtureUri(fx), DEMO_CASES[demo], fx);
     if (deep) rec.deepScanAt = rec.createdAt;
-    renderShareCard(rec, { format, locale, ...(skiaPng ? { encoder: 'skia' as const } : {}) }).then((c) => {
+    renderShareCard(rec, { format, locale, identity: CARD_IDENTITY, ...(skiaPng ? { encoder: 'skia' as const } : {}) }).then((c) => {
       setMs(c.ms);
       setUri(c.uri);
     }, (e: unknown) => setErr(String(e)));

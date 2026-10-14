@@ -3,6 +3,7 @@ import { Asset } from 'expo-asset';
 
 import type { Lang } from '../../i18n';
 import type { ScanRecord } from '../../state/scans';
+import { getInstallIdentity } from '../../ui/boot/install';
 import { regionFromImage } from '../compositor/regionFromImage';
 import type { CardFormat } from './constants';
 import { encodeCard } from './encode';
@@ -46,6 +47,8 @@ export interface ShareCardOptions {
   store?: string;
   /** Locale override (the L2 probe's `?lang=`); default the locale in force. */
   locale?: Lang;
+  /** The calibration stamp the card's sticker prints (A-92); default this install's, as the housing shows it. */
+  identity?: { cal: string; pruef: string };
   /** 'skia' forces CanvasKit's PNG encoder on web too (the L2 probe's `?encoder=skia`, to compare pixels). */
   encoder?: 'skia';
 }
@@ -88,7 +91,7 @@ export async function renderShareCard(record: ScanRecord, opts: ShareCardOptions
   const t0 = now();
   const [photo, stats, f] = await Promise.all([loadPhoto(record.photoUri), regionFromImage(record.photoUri).catch(() => null), loadCardFonts()]);
   const t1 = now();
-  const card = drawShareCard({ record, format: opts.format, photo, stats, fonts: f, beliefBand: opts.beliefBand, store: opts.store, locale: opts.locale });
+  const card = drawShareCard({ record, format: opts.format, photo, stats, fonts: f, beliefBand: opts.beliefBand, store: opts.store, locale: opts.locale, identity: opts.identity ?? getInstallIdentity() });
   const t2 = now();
   const png = opts.encoder === 'skia' ? encodePng(card.image) : await encodeCard(card.image);
   const t3 = now();

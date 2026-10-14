@@ -1,4 +1,4 @@
-import { AlphaType, ClipOp, ColorType, ImageFormat, PaintStyle, processUniforms, Skia, TileMode, type SkCanvas, type SkImage, type SkRuntimeEffect, type SkTypeface } from '@shopify/react-native-skia';
+import { AlphaType, ClipOp, ColorType, ImageFormat, processUniforms, Skia, TileMode, type SkCanvas, type SkImage, type SkRuntimeEffect, type SkTypeface } from '@shopify/react-native-skia';
 
 import type { Lang } from '../../i18n';
 import type { ScanRecord } from '../../state/scans';
@@ -58,6 +58,8 @@ export interface CardInput {
   store?: string;
   /** Locale override for the card's strings (probe and tests); default the locale in force. */
   locale?: Lang;
+  /** The install's calibration stamp the housing sticker prints (A-92); default the harness unit's (`CAL 2026-10-13`, `PRÜF 07`). */
+  identity?: { cal: string; pruef: string };
   /** Test switches: `tint: false` draws the photo's own colour, `ghost: false` the photo without the figure (same layout). */
   fx?: { tint?: boolean; ghost?: boolean };
 }
@@ -109,6 +111,12 @@ export interface CardRender {
   /** Phosphor tint mix used on the photo (0 with `fx.tint` false). */
   tintMix: number;
   tintLift: number;
+  /** The housing sticker (A-92): its axis-aligned bounds after the -1.5° turn, lines and font size; null where it does not fit. */
+  sticker: (Box & { lines: string[]; fontSize: number }) | null;
+  /** Footer line boxes as drawn (cap top to baseline), card pixels. */
+  footerBoxes: Box[];
+  /** The bottom band's engraving (A-92, story only): bounds, lines and font size; null where it does not fit. */
+  engraving: (Box & { lines: string[]; fontSize: number }) | null;
   /** The compositor's foreground mass (A-98 hem test) in photo-window pixels (add layout.photo's x and y for card pixels), or null. */
   band: Band | null;
 }
@@ -278,29 +286,51 @@ function drawScrew(canvas: SkCanvas, cx: number, cy: number, rad: number, angle:
   canvas.restore();
 }
 
-/** Calibration sticker: textless printed fields, rotated -1.5°, one corner lifted with a shadow. */
-function drawSticker(canvas: SkCanvas, x: number, y: number, w: number, h: number) {
+/** The harness unit's calibration stamp (Bible section 11), the card's default. */
+export const CARD_IDENTITY = { cal: '2026-10-13', pruef: '07' } as const;
+/** Sticker turn (Bible section 2) and its paper padding as shares of the cap height. */
+const STICKER_DEG = -1.5;
+const STICKER_PAD = { x: 0.45, y: 0.4 } as const;
+const STICKER_PITCH = 1.4;
+/** Bottom-band engraving (A-92, story): two lines of B612 Mono Bold n2 at lbXS scaled (10 px at 390), right-aligned in footer line 1's band. */
+export const ENGRAVING = { lines: ['FIELD SPECTROMETER', 'MADE IN W.-GERMANY'], size: 28, pitch: 1.35 } as const;
+
+/** Paper size of a sticker for its lines at `size` (B612 Mono Bold head, Regular below). */
+function stickerSize(lines: string[], fonts: CardFonts, size: number): { w: number; h: number } {
+  const cap = CAP_EM.b612 * size;
+  const tw = Math.max(...lines.map((l, i) => width(l, i === 0 ? fonts.b612Bold : fonts.b612, size)));
+  return { w: Math.ceil(tw + 2 * STICKER_PAD.x * cap), h: Math.ceil(cap * (1 + STICKER_PITCH * (lines.length - 1)) + 2 * STICKER_PAD.y * cap) };
+}
+
+/** Axis-aligned bounds of a w x h box turned STICKER_DEG about its centre (cx, cy). */
+function turnedBounds(cx: number, cy: number, w: number, h: number): Box {
+  const a = (Math.abs(STICKER_DEG) * Math.PI) / 180;
+  const bw = w * Math.cos(a) + h * Math.sin(a);
+  const bh = w * Math.sin(a) + h * Math.cos(a);
+  return { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh };
+}
+
+/**
+ * Calibration sticker (A-92): paper with ink print, the head line in B612 Mono Bold and the CAL and
+ * PRÜF lines in Regular, all at the card's floor size; turned -1.5° about its centre, the
+ * bottom-right corner lifted over a shadow.
+ */
+function drawSticker(canvas: SkCanvas, cx: number, cy: number, lines: string[], fonts: CardFonts, size: number) {
+  const { w, h } = stickerSize(lines, fonts, size);
+  const cap = CAP_EM.b612 * size;
   canvas.save();
-  canvas.translate(x, y);
-  canvas.rotate(-1.5, 0, 0);
+  canvas.translate(cx, cy);
+  canvas.rotate(STICKER_DEG, 0, 0);
+  canvas.translate(-w / 2, -h / 2);
   canvas.drawRect(Skia.XYWHRect(2, 3, w, h), paintOf(color.n1, 0.55));
-  // The lifted bottom-right corner throws a longer shadow.
-  canvas.drawRect(Skia.XYWHRect(w - h * 0.3, h - h * 0.3 + 2, h * 0.3 + 3, h * 0.3 + 3), paintOf(color.n1, 0.5));
-  canvas.drawRect(Skia.XYWHRect(0, 0, w, h), paintOf(color.n6, 0.62));
-  const u = h / 10;
-  // Printed header band and ruled fields, faded to the housing's ramp (no legible text).
-  canvas.drawRect(Skia.XYWHRect(u, u, w - 2 * u, 2.2 * u), paintOf(color.n3, 0.75));
-  for (let i = 0; i < 3; i++) canvas.drawRect(Skia.XYWHRect(u, 4.6 * u + i * 1.8 * u, w * 0.62, Math.max(1, u * 0.22)), paintOf(color.n3, 0.6));
-  const box = Skia.Paint();
-  box.setAntiAlias(true);
-  box.setStyle(PaintStyle.Stroke);
-  box.setStrokeWidth(Math.max(1, u * 0.22));
-  box.setColor(Skia.Color(color.n3));
-  box.setAlphaf(0.6);
-  for (let i = 0; i < 3; i++) canvas.drawRect(Skia.XYWHRect(w * 0.72 + i * 1.7 * u, 4.4 * u, 1.3 * u, 1.3 * u), box);
-  canvas.drawRect(Skia.XYWHRect(w * 0.72, 7.2 * u, 1.3 * u, 1.3 * u), paintOf(color.n3, 0.6));
+  const c = Math.min(h * 0.3, 18);
+  canvas.drawRect(Skia.XYWHRect(w - c, h - c + 2, c + 3, c + 3), paintOf(color.n1, 0.5));
+  canvas.drawRect(Skia.XYWHRect(0, 0, w, h), paintOf(color.paper));
+  lines.forEach((l, i) => {
+    const base = STICKER_PAD.y * cap + cap + i * STICKER_PITCH * cap;
+    text(canvas, l, STICKER_PAD.x * cap, Math.round(base), i === 0 ? fonts.b612Bold : fonts.b612, size, color.ink);
+  });
   // The lifted corner: a folded triangle, lit, clipped to the sticker's corner.
-  const c = h * 0.3;
   canvas.save();
   canvas.clipRect(Skia.XYWHRect(w - c, h - c, c, c), ClipOp.Intersect, true);
   canvas.drawRect(Skia.XYWHRect(w - c, h - c, c, c), paintOf(color.n3));
@@ -310,6 +340,8 @@ function drawSticker(canvas: SkCanvas, x: number, y: number, w: number, h: numbe
   canvas.restore();
   canvas.restore();
 }
+
+const overlaps = (a: Box, b: Box, gap = 0) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap;
 
 /** Wear streaks: thin paint rubs to n4 in a band, seeded, never in the safe zone. */
 function drawWear(canvas: SkCanvas, r: () => number, x0: number, x1: number, y0: number, y1: number, n: number) {
@@ -322,13 +354,31 @@ function drawWear(canvas: SkCanvas, r: () => number, x0: number, x1: number, y0:
   }
 }
 
-/** Fasteners, sticker and wear in the housing's dead bands (Bible section 2), outside the safe zone. */
-function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: { top: number; bottom: number; x0: number; x1: number }, seed: number) {
+/** Footer line boxes as drawn (cap top to baseline), for the sticker and engraving placement. */
+interface FooterGeom {
+  top: number;
+  bottom: number;
+  x0: number;
+  x1: number;
+  boxes: Box[];
+  mark: Box;
+}
+
+/**
+ * Fasteners, sticker, engraving and wear in the housing's dead bands (Bible section 2), outside the
+ * safe zone. A-92: the story's sticker sits in the top band between the screws; on the square it
+ * takes the free space right of the footer only where it fits clear of the footer run and the mark
+ * (head and CAL line, else the head alone, else none). The engraving is story-only.
+ */
+function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: FooterGeom, seed: number, fonts: CardFonts, sticker: string[], avoid: Box[]): Pick<CardRender, 'sticker' | 'engraving'> {
   const r = mulberry32((seed ^ 0x5c3e) >>> 0);
   const story = L.height > L.width;
   const burred = Math.floor(r() * 4);
   const angle = () => 15 + r() * 150;
   const fy = (footer.top + footer.bottom) / 2;
+  const size = markSize(L.height, CAP_EM.b612);
+  let placed: CardRender['sticker'] = null;
+  let engraving: CardRender['engraving'] = null;
   if (story) {
     const top = L.plate.y; // band 0 to the nameplate, above the safe zone
     drawWear(canvas, r, 24, L.width - 24, 14, top - 30, 7);
@@ -341,7 +391,15 @@ function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: { top: numbe
       [L.width - 56, fy],
     ] as const;
     screws.forEach(([x, y], i) => drawScrew(canvas, x, y, 15, angle(), i === burred));
-    drawSticker(canvas, L.width - 300, top * 0.3, 168, 70);
+    const { w, h } = stickerSize(sticker, fonts, size);
+    const cx = L.width / 2 + 40;
+    const cy = top / 2;
+    const b = turnedBounds(cx, cy, w, h);
+    if (b.x > 56 + 15 + 8 && b.x + b.w < L.width - 56 - 15 - 8 && b.y > 4 && b.y + b.h < top - 6) {
+      drawSticker(canvas, cx, cy, sticker, fonts, size);
+      placed = { ...b, lines: sticker, fontSize: size };
+    }
+    engraving = drawEngraving(canvas, L, footer, fonts);
   } else {
     drawWear(canvas, r, 90, L.width - 90, 6, L.plate.y - 6, 4);
     drawWear(canvas, r, 60, L.width - 60, footer.bottom + 8, L.height - 8, 3);
@@ -352,10 +410,48 @@ function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: { top: numbe
       [L.width - 24, fy],
     ] as const;
     screws.forEach(([x, y], i) => drawScrew(canvas, x, y, 12, angle(), i === burred));
-    // The sticker sits right of the footer, never over the right screw (left out where the footer is too long).
-    const sx = footer.x1 + 26;
-    if (sx + 78 <= L.width - 24 - 12 - 10) drawSticker(canvas, sx, fy - 18, 78, 36);
+    // Free space right of the footer: clear of its run and the mark by 16 px, of the right screw, the reading box and the card edge.
+    const x0 = footer.x1 + 16;
+    const x1 = L.width - 24 - 12 - 8;
+    const y0 = L.reading.y + L.reading.h + 4;
+    const y1 = L.height - 6;
+    for (const lines of [sticker, sticker.slice(0, 1)]) {
+      const { w, h } = stickerSize(lines, fonts, size);
+      const b = turnedBounds((x0 + x1) / 2, (y0 + y1) / 2, w, h);
+      if (b.x >= x0 && b.x + b.w <= x1 && b.y >= y0 && b.y + b.h <= y1 && ![...footer.boxes, footer.mark, ...avoid].some((o) => overlaps(b, o, 8))) {
+        drawSticker(canvas, (x0 + x1) / 2, (y0 + y1) / 2, lines, fonts, size);
+        placed = { ...b, lines, fontSize: size };
+        break;
+      }
+    }
   }
+  return { sticker: placed, engraving };
+}
+
+/**
+ * The story's engraving (A-92): `FIELD SPECTROMETER` / `MADE IN W.-GERMANY` in n2 over a faint lit
+ * lip (as the nameplate), right-aligned at the footer's right limit, its last baseline on the
+ * footer's first baseline; drawn only where it clears every footer line by 12 px and the reading box.
+ */
+function drawEngraving(canvas: SkCanvas, L: CardLayout, footer: FooterGeom, fonts: CardFonts): CardRender['engraving'] {
+  const first = footer.boxes[0];
+  if (!first || footer.boxes.length < 2) return null;
+  const size = ENGRAVING.size;
+  const cap = CAP_EM.b612 * size;
+  const pitch = Math.round(cap * ENGRAVING.pitch);
+  const lines = [...ENGRAVING.lines];
+  const w = Math.max(...lines.map((l) => width(l, fonts.b612Bold, size)));
+  const base1 = first.y + first.h;
+  const box: Box = { x: L.footerRight - w, y: base1 - pitch - cap, w, h: pitch + cap };
+  if (box.y < L.reading.y + L.reading.h + 6) return null;
+  if (footer.boxes.some((b) => overlaps(box, b, 12))) return null;
+  lines.forEach((l, i) => {
+    const y = base1 - (lines.length - 1 - i) * pitch;
+    const x = L.footerRight - width(l, fonts.b612Bold, size);
+    text(canvas, l, x, y + 1.5, fonts.b612Bold, size, color.n6, 0.3);
+    text(canvas, l, x, y, fonts.b612Bold, size, color.n2);
+  });
+  return { ...box, lines, fontSize: size };
 }
 
 function drawNameplate(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, label: string, seed: number) {
@@ -462,7 +558,7 @@ export function footerLines(footer: string, fits: (s: string) => boolean): strin
  * untinted. `markWord` is the localised mark word in the sentence (text.ts `footerMark`); its box is
  * the one the cap-height and contrast test measures.
  */
-function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: string, markWord: string): { mark: MarkBox; lines: string[]; x0: number; x1: number; bottom: number } {
+function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: string, markWord: string): { mark: MarkBox; lines: string[]; x0: number; x1: number; bottom: number; boxes: Box[] } {
   const size = markSize(L.height, CAP_EM.b612);
   const capPx = CAP_EM.b612 * size;
   const avail = L.footerRight - L.footerX;
@@ -471,9 +567,11 @@ function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: s
   const x = L.footerX;
   let x1 = 0;
   let mark: MarkBox | null = null;
+  const boxes: Box[] = [];
   lines.forEach((line, i) => {
     const baseline = Math.round(L.footerTop + capPx + i * pitch);
     const w = width(line, fonts.b612, size);
+    boxes.push({ x, y: baseline - capPx, w, h: capPx });
     text(canvas, line, x, baseline, fonts.b612, size, color.n6);
     x1 = Math.max(x1, x + w);
     if (i === lines.length - 1) {
@@ -483,7 +581,7 @@ function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: s
       mark = { kind: 'footer', x: mx, y: baseline - capPx, w: width(markWord, fonts.b612, size), h: capPx, baseline, fontSize: size, capPx };
     }
   });
-  return { mark: mark!, lines, x0: x, x1, bottom: mark!.baseline };
+  return { mark: mark!, lines, x0: x, x1, bottom: mark!.baseline, boxes };
 }
 
 /**
@@ -642,7 +740,10 @@ export function drawShareCard(i: CardInput): CardRender {
   const reading = drawReading(canvas, L, fonts, t.reading, record.outcome.tier === 'critical');
   const leds = drawLeds(canvas, L, record.outcome.tier);
   const footer = drawFooter(canvas, L, fonts, t.footer, t.footerMark);
-  drawHousingDetail(canvas, L, { top: L.footerTop, bottom: footer.bottom, x0: footer.x0, x1: footer.x1 }, record.seed >>> 0);
+  const id = i.identity ?? CARD_IDENTITY;
+  const stickerLines = L.height > L.width ? [t.stickerHead, `CAL ${id.cal}`, `PRÜF ${id.pruef}`] : [t.stickerHead, `CAL ${id.cal} · PRÜF ${id.pruef}`];
+  const avoid: Box[] = [L.leds, L.reading, { x: P.x, y: P.y, w: P.w, h: P.h }];
+  const housing = drawHousingDetail(canvas, L, { top: L.footerTop, bottom: footer.bottom, x0: footer.x0, x1: footer.x1, boxes: footer.boxes, mark: footer.mark }, record.seed >>> 0, fonts, stickerLines, avoid);
   surface.flush();
   const image = surface.makeImageSnapshot();
   // Free the wasm heap now (CanvasKit has no GC for these): the card image keeps its own pixels.
@@ -668,6 +769,9 @@ export function drawShareCard(i: CardInput): CardRender {
     tintMix: i.fx?.tint === false ? 0 : setup.tintMix,
     tintLift: setup.tintLift,
     band: setup.ref.band ?? null,
+    sticker: housing.sticker,
+    footerBoxes: footer.boxes,
+    engraving: housing.engraving,
   };
 }
 
