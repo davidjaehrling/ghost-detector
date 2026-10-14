@@ -57,6 +57,32 @@ test('the history slot is fixed in height, empty on web, and 24 dp from the near
   expect(await slot.boundingBox()).toEqual(first);
 });
 
+test('with real rows in the log the slot is 24 dp from every visible row and every key', async ({ page }) => {
+  await page.goto('/history?static=1&log=demo3');
+  const slot = page.getByTestId(SLOT);
+  await expect(page.getByTestId('history-row-0003')).toBeVisible();
+  const top = (await slot.boundingBox())!.y;
+  const m = await page.evaluate(() => {
+    const list = document.querySelector('[data-testid="history-list"]')!.getBoundingClientRect();
+    const rows = Array.from(document.querySelectorAll('[data-testid^="history-row-"]')).map((e) => {
+      const r = e.getBoundingClientRect();
+      // A row scrolled past the clipped list is not on screen: measure what the list shows.
+      return { id: e.getAttribute('data-testid'), bottom: Math.min(r.bottom, list.bottom), top: r.top };
+    });
+    const keys = Array.from(document.querySelectorAll('[data-testid^="key-"]')).map((e) => e.getBoundingClientRect().bottom);
+    return { listBottom: list.bottom, rows, keys };
+  });
+  expect(m.rows.length).toBe(6);
+  const nearest = Math.max(m.listBottom, ...m.rows.map((r) => r.bottom), ...m.keys);
+  console.log(`banner gap with rows: slot top ${top}, nearest ${nearest}, gap ${top - nearest} px; ${m.rows.length} rows`);
+  expect(top - nearest).toBeGreaterThanOrEqual(24);
+  // Rows past the list's edge are clipped by the list, never drawn over the slot or the keys.
+  const overflow = await page.getByTestId('history-list').evaluate((e) => getComputedStyle(e).overflowY);
+  expect(['auto', 'scroll', 'hidden']).toContain(overflow);
+  // No clear control exists in the log.
+  await expect(page.getByTestId('key-clear')).toHaveCount(0);
+});
+
 test('consent denied: the slot is still there and still empty', async ({ page }) => {
   await page.goto('/history?static=1&consent=denied');
   await expect(page.getByTestId(SLOT)).toBeVisible();
