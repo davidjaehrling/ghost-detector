@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PHOSPHOR, withAlpha } from '../../glass/color';
-import { bootSpike, HARNESS_SPIKE, sweepBloomStops, SWEEP_FADE_PX, tailAlpha, tailStep } from '../bloom';
+import { bootSpike, HARNESS_SPIKE, sweepBloomStops, sweepStripStops, SWEEP_FADE_PX, tailAlpha, tailStep } from '../bloom';
 
 describe('sweep head bloom and tail (A-32)', () => {
   it('has a p5 head, then p3, p2, p1, fading exponentially to nothing within the fade length', () => {
@@ -67,4 +67,23 @@ describe('boot transient per launch (A-11)', () => {
     for (const s of [1, 2, 3, 99]) expect(bootSpike(s, true)).toEqual(HARNESS_SPIKE);
     expect(HARNESS_SPIKE).toEqual({ fires: true, count: 1, div: 2, at: 0.6 });
   });
+});
+
+describe('scan theatre sweep strip (D-049)', () => {
+  const alphaOf = (c: string) => Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(c)?.[1] ?? 'NaN');
+  for (const tail of [110, 180]) {
+    it(`tail ${tail} px: stops only in the last ${SWEEP_FADE_PX} px, transparent behind, head at 1`, () => {
+      const { positions, colors } = sweepStripStops(tail, false);
+      expect(positions[0]).toBe(0);
+      expect(positions[positions.length - 1]).toBe(1);
+      for (let i = 1; i < positions.length; i++) expect(positions[i]!).toBeGreaterThan(positions[i - 1]!);
+      for (let i = 1; i < positions.length; i++) expect(positions[i]!).toBeGreaterThanOrEqual(1 - SWEEP_FADE_PX / tail - 1e-9);
+      expect(alphaOf(colors[0]!)).toBe(0);
+      expect(alphaOf(colors[1]!)).toBe(0);
+      expect(colors[colors.length - 1]).toBe(withAlpha(PHOSPHOR[5], 1));
+      const dim = sweepStripStops(tail, true);
+      expect(dim.positions).toEqual(positions);
+      expect(dim.colors[dim.colors.length - 1]).toBe(withAlpha(PHOSPHOR[2], 0.6));
+    });
+  }
 });

@@ -82,3 +82,19 @@ export function bootSpike(launchSeed: number, harness = false): BootSpike {
   const at = Math.round((SPIKE_AT_RANGE[0] + r() * (SPIKE_AT_RANGE[1] - SPIKE_AT_RANGE[0])) * 1000) / 1000;
   return { fires, count: fires ? 1 : 0, div, at };
 }
+
+/** The dim (faulted) sweep's peak against the lit one: the old strip's 0.3 / 0.5. */
+export const SWEEP_DIM_PEAK = 0.6;
+
+/**
+ * Stops for the scan theatre's flat sweep strip (`SweepStrip`, a LinearGradient over `tail` px):
+ * `sweepBloomStops` at a sector of 180/π degrees and radius `tail`, whose arc is exactly `tail`, so
+ * the tail is the exponential one gone within SWEEP_FADE_PX (was a wash over the whole strip). Dim:
+ * every stop in p2 at SWEEP_DIM_PEAK of its alpha.
+ */
+export function sweepStripStops(tail: number, dim: boolean): { positions: number[]; colors: string[] } {
+  const b = sweepBloomStops(180 / Math.PI, tail);
+  if (!dim) return b;
+  const arc = Math.max(1, tail);
+  return { positions: b.positions, colors: b.positions.map((p) => withAlpha(PHOSPHOR[2], SWEEP_DIM_PEAK * tailAlpha((1 - p) * arc))) };
+}

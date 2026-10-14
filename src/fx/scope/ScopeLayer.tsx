@@ -5,6 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 import { mulberry32 } from '../../engine';
 import { color } from '../../ui/tokens';
 import { withAlpha } from '../glass/color';
+import { sweepStripStops } from './bloom';
 import { faultDip, faultTear, sweepTail, TRACE_SEG, type TearBand } from './scope';
 
 // The scan theatre's scope (D-017, P3-09): the noise trace, its phosphor afterglow, and the sweep
@@ -217,15 +218,12 @@ function Grid({ gw, gh, div, dy }: { gw: number; gh: number; div: number; dy: nu
 
 // The sweep line at the right edge of the strip and its exponential tail to the left, drawn once.
 const SweepStrip = memo(function SweepStrip({ tail, gh, dim }: { tail: number; gh: number; dim: boolean }) {
-  const stops = [0, 0.25, 0.5, 0.7, 0.85, 0.95, 1];
-  // alpha(d) = peak * exp(-d / tau) with tau = tail / 4: about 2% at the far end.
-  const tint = dim ? color.p2 : color.p3;
-  const peak = dim ? 0.3 : 0.5;
-  const colors = stops.map((t) => withAlpha(tint, peak * Math.exp(-4 * (1 - t))));
+  // A-32 (D-049): the exponential tail gone within SWEEP_FADE_PX, never a flat wash over the strip.
+  const { positions, colors } = sweepStripStops(tail, dim);
   return (
     <Canvas style={{ width: tail + 2, height: gh }} pointerEvents="none">
       <Rect x={0} y={0} width={tail} height={gh}>
-        <LinearGradient start={vec(0, 0)} end={vec(tail, 0)} colors={colors} positions={stops} />
+        <LinearGradient start={vec(0, 0)} end={vec(tail, 0)} colors={colors} positions={positions} />
       </Rect>
       <Rect x={tail} y={0} width={2} height={gh} color={withAlpha(dim ? color.p2 : color.p5, 0.9)} />
     </Canvas>
