@@ -1,20 +1,26 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// P8-03, the FX half of the performance budget, measured at CPU throttle x4 (CDP
-// Emulation.setCPUThrottlingRate; FX_CPU_RATE overrides it for an x1 reference run).
+// P8-03, the FX half of the performance budget (D-046).
 // - Scan theatre: the FX frame counter (src/fx/perf, window.__fxFrames) records every rAF interval
 //   from the moment the theatre is on the glass until the result screen is attached (the route change
-//   itself is excluded). Budget: p50 at or above 55 fps; p95 is recorded.
+//   itself is excluded). Guard: p50 at or above 55 fps under CPU throttle x2 (D-046 ruling 3). A
+//   second run at x4 prints p50, p95 and mean and asserts nothing (no phone behind that number).
 // - Result print: the story card through the public renderShareCard on /share-probe; the probe
-//   carries the step timings as data-ms-* attributes. Budget: draw plus PNG encode under 1500 ms.
+//   carries the step timings as data-ms-* attributes. Regression guard (D-046 rulings 1, 2): draw
+//   plus encode at x1 no more than 1.5x the x1 baseline recorded in docs/perf-fx.md. The 1.5 s
+//   phone budget is measured at phone check 3, not here.
 // Numbers go to stdout as `[perf-fx] {...}` lines so the CI log carries them. 390 only.
-const RATE = Number(process.env.FX_CPU_RATE ?? 4);
+// FX_CPU_RATE overrides the scan guard's rate (default 2).
+const SCAN_RATE = Number(process.env.FX_CPU_RATE ?? 2);
 const SCAN_FPS_MIN = 55;
-const PRINT_MS_MAX = 1500;
+/** Story card draw + encode at x1 on the committed head 167b731 (two runs: 4618.5, 4290.8 ms; docs/perf-fx.md). */
+const PRINT_BASELINE_MS = 4620;
+const PRINT_MS_MAX = Math.round(1.5 * PRINT_BASELINE_MS);
 
-async function throttle(page: Page) {
+async function throttle(page: Page, rate: number) {
+  if (rate <= 1) return;
   const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Emulation.setCPUThrottlingRate', { rate: RATE });
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate });
 }
 
 function watch(page: Page) {
@@ -28,10 +34,10 @@ test.beforeEach(({ page: _page }, testInfo) => {
   test.skip(testInfo.project.name !== 'android-390x844', 'budgets measured at 390 only');
 });
 
-test(`scan theatre holds ${SCAN_FPS_MIN} fps at p50 under CPU x${RATE}`, async ({ page }) => {
+async function scanRun(page: Page, rate: number): Promise<{ fpsP50: number; frames: number }> {
   test.setTimeout(120_000);
   const errors = watch(page);
-  await throttle(page);
+  await throttle(page, rate);
   await page.goto('/viewfinder?fixture=cellar');
   await expect(page.getByTestId('screen-viewfinder')).toBeVisible({ timeout: 30_000 });
   await page.waitForFunction(() => Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0));
@@ -52,19 +58,24 @@ test(`scan theatre holds ${SCAN_FPS_MIN} fps at p50 under CPU x${RATE}`, async (
   await expect(page.getByTestId('screen-result')).toBeVisible({ timeout: 60_000 });
   const st = await page.evaluate(() => (window as unknown as { __fxScan: { frames: number; spanMs: number; p50Ms: number; p95Ms: number; maxMs: number; meanMs: number; fpsP50: number; fpsMean: number; over33: number } }).__fxScan);
   const { frames, spanMs, p50Ms, p95Ms, maxMs, meanMs, fpsP50, fpsMean, over33 } = st;
-  console.log(`[perf-fx] scan ${JSON.stringify({ cpu: RATE, frames, spanMs, p50Ms, p95Ms, maxMs, meanMs, fpsP50, fpsMean, over33 })}`);
+  console.log(`[perf-fx] scan ${JSON.stringify({ cpu: rate, frames, spanMs, p50Ms, p95Ms, maxMs, meanMs, fpsP50, fpsMean, over33 })}`);
+  expect(errors).toEqual([]);
+  return { fpsP50, frames };
+}
+
+test(`scan theatre holds ${SCAN_FPS_MIN} fps at p50 under CPU x${SCAN_RATE}`, async ({ page }) => {
+  const { fpsP50, frames } = await scanRun(page, SCAN_RATE);
   expect(frames).toBeGreaterThan(100); // a full theatre: 6 to 10 s
   expect(fpsP50).toBeGreaterThanOrEqual(SCAN_FPS_MIN);
-  expect(errors).toEqual([]);
 });
 
-test(`story card draw plus encode under ${PRINT_MS_MAX} ms under CPU x${RATE}`, async ({ page }) => {
+test('scan theatre at CPU x4 (reported, not asserted)', async ({ page }) => {
+  await scanRun(page, 4);
+});
+
+test(`story card draw plus encode at x1 within 1.5x the baseline (${PRINT_MS_MAX} ms)`, async ({ page }) => {
   test.setTimeout(120_000);
-  // Over budget today (docs/perf-fx.md: about 29 s at x4 before P8-03, CanvasKit CPU raster in wasm).
-  // Expected to fail until fixed; the threshold is not loosened, and a pass turns this red so the marker comes off.
-  test.fail(true, 'print over the 1500 ms budget, see docs/perf-fx.md');
   const errors = watch(page);
-  await throttle(page);
   await page.goto('/share-probe?static=1&format=story&case=critical-deep&fixture=cellar');
   const card = page.getByTestId('share-card');
   await card.waitFor({ timeout: 90_000 });
@@ -73,9 +84,9 @@ test(`story card draw plus encode under ${PRINT_MS_MAX} ms under CPU x${RATE}`, 
     return { load: Number(d.msLoad), draw: Number(d.msDraw), encode: Number(d.msEncode), save: Number(d.msSave), total: Number(d.msTotal) };
   });
   const print = Math.round((ms.draw + ms.encode) * 10) / 10;
-  console.log(`[perf-fx] print ${JSON.stringify({ cpu: RATE, format: 'story', ...ms, print })}`);
+  console.log(`[perf-fx] print ${JSON.stringify({ cpu: 1, format: 'story', ...ms, print })}`);
   expect(Number.isFinite(print)).toBe(true);
-  expect(print).toBeLessThan(PRINT_MS_MAX);
+  expect(print).toBeLessThanOrEqual(PRINT_MS_MAX);
   expect(errors).toEqual([]);
 });
 
