@@ -18,6 +18,8 @@ export type ScanRecord = {
   profile: EntityProfile;
   /** Set when a rewarded DEEP SCAN finished for this scan (P5-04): full profile, high-resolution apparition, EVP line. */
   deepScanAt?: number;
+  /** Set when a rewarded ad for this scan was dismissed without the reward. The log shows ARCHIVED instead of UNRESOLVED. */
+  declined?: boolean;
 };
 
 export type KeyValueStore = { getItem(k: string): string | null; setItem(k: string, v: string): void };
@@ -28,6 +30,8 @@ export type ScanStore = {
   /** Marks the scan as deep-scanned and persists it. False when the case does not exist. Idempotent. */
   unlockDeepScan(id: string, atMs?: number): boolean;
   listScans(): ScanRecord[];
+  /** Marks the scan as declined (rewarded ad dismissed without reward) and persists it. False when the case does not exist. Idempotent. */
+  markDeclined(id: string): boolean;
   /** Harness only: stores these records, with their ids, when the store is empty. False when it is not. */
   seedScans(records: ScanRecord[]): boolean;
   /** Distinct local nights with a scan. Only rises, even when old records are dropped. */
@@ -97,6 +101,15 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
       if (!rec) return false;
       if (rec.deepScanAt === undefined) {
         rec.deepScanAt = atMs;
+        persist();
+      }
+      return true;
+    },
+    markDeclined(id) {
+      const rec = load().find((r) => r.id === id);
+      if (!rec) return false;
+      if (!rec.declined) {
+        rec.declined = true;
         persist();
       }
       return true;
@@ -176,6 +189,7 @@ const store = createScanStore();
 export const saveScan = store.saveScan;
 export const getScan = store.getScan;
 export const unlockDeepScan = store.unlockDeepScan;
+export const markDeclined = store.markDeclined;
 export const listScans = store.listScans;
 export const seedScans = store.seedScans;
 export const nightsLogged = store.nightsLogged;

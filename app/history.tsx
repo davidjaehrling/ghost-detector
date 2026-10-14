@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdBanner } from '../src/ads/Banner';
-import { bestOnFile, casesLabel, groupByTag, recordLine, stamp, tagLabel, unresolvedPct } from '../src/state/log';
+import { bestOnFile, casesLabel, caseStatus, groupByTag, recordLine, stamp, tagLabel } from '../src/state/log';
 import { listScans, nightsLogged, type ScanRecord } from '../src/state/scans';
 import { sound } from '../src/ui/audio';
 import { readHarness } from '../src/ui/harness';
@@ -19,7 +19,6 @@ const copy = {
   nextLabel: 'Open settings',
   nights: 'NIGHTS LOGGED',
   best: 'BEST ON FILE',
-  unresolved: 'UNRESOLVED',
 };
 
 const tierWord = (r: ScanRecord) => r.outcome.tier.toUpperCase();
@@ -62,18 +61,18 @@ export default function History() {
                   <Text style={s.tagPeak}>{`PEAK ${g.peak.outcome.spi} ${tierWord(g.peak)} · ${stamp(g.peak.createdAt)}`}</Text>
                 </View>
                 {g.cases.map((r) => {
-                  const pct = unresolvedPct(r);
+                  const status = caseStatus(r);
                   return (
                     <Pressable
                       key={r.id}
                       testID={`history-row-${r.id}`}
                       accessibilityRole="button"
-                      accessibilityLabel={`Case ${r.id}, ${r.outcome.spi} ${tierWord(r)}${pct === null ? '' : `, ${copy.unresolved} ${pct}%`}`}
+                      accessibilityLabel={`Case ${r.id}, ${r.outcome.spi} ${tierWord(r)}${status === null ? '' : `, ${status}`}`}
                       onPress={() => router.push({ pathname: '/result/[id]', params: { id: r.id } })}
                       style={s.row}
                     >
                       <Text style={s.rowMain}>{`${r.id} · ${r.outcome.spi} ${tierWord(r)}`}</Text>
-                      {pct === null ? null : <Text style={s.rowOpen}>{`${copy.unresolved} ${pct}%`}</Text>}
+                      {status === null ? null : <Text style={s.rowOpen}>{status}</Text>}
                     </Pressable>
                   );
                 })}

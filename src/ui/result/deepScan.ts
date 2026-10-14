@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { canRequestAds, consentState, ensureConsent, rewarded } from '../../ads';
 import { track } from '../../analytics';
-import { unlockDeepScan } from '../../state/scans';
+import { markDeclined, unlockDeepScan } from '../../state/scans';
 import { useConsent } from '../../state/useConsent';
 import { onRewardedShown } from '../interstitial';
 
@@ -79,8 +79,9 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
       track('deep_scan_rewarded');
       setUnlocked(true);
     } else {
-      // Dismissed without the reward: the slot is spent, so the key warms while a fresh ad loads.
+      // Dismissed without the reward: the case is archived (the log shows ARCHIVED), the slot is spent, so the key warms while a fresh ad loads.
       // A second tap, user initiated, plays it.
+      if (persist) markDeclined(id);
       void rewarded.load();
     }
   };

@@ -50,6 +50,13 @@ export function unresolvedPct(r: ScanRecord): number | null {
   return UNRESOLVED_TIERS.includes(r.outcome.tier) ? r.profile.signatureDecodedPct : null;
 }
 
+/** Row status: `UNRESOLVED 58%`, or `ARCHIVED 58%` once the user declined the rewarded ad; null when nothing is open. */
+export function caseStatus(r: ScanRecord): string | null {
+  const pct = unresolvedPct(r);
+  if (pct === null) return null;
+  return `${r.declined ? 'ARCHIVED' : 'UNRESOLVED'} ${pct}%`;
+}
+
 const NIGHT_CUT_HOURS = 6;
 
 /** The local night a time belongs to: a scan before 06:00 counts for the evening before. "YYYY-MM-DD". */

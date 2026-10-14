@@ -141,3 +141,21 @@ describe('deep scan unlock (P5-04)', () => {
     expect(second.listScans().filter((r) => r.deepScanAt !== undefined)).toHaveLength(1);
   });
 });
+
+describe('declined flag (D-033)', () => {
+  it('marks one case, is idempotent, and survives a reload', () => {
+    const storage = mem();
+    const s = createScanStore({ storage });
+    const a = s.saveScan(rec('strong', 1));
+    const b = s.saveScan(rec('active', 2));
+    expect(s.getScan(a)?.declined).toBeUndefined();
+    expect(s.markDeclined(a)).toBe(true);
+    expect(s.markDeclined(a)).toBe(true);
+    expect(s.getScan(a)?.declined).toBe(true);
+    expect(s.getScan(b)?.declined).toBeUndefined();
+    expect(createScanStore({ storage }).getScan(a)?.declined).toBe(true);
+  });
+  it('returns false for a case that is not on file', () => {
+    expect(createScanStore({ storage: null }).markDeclined('0042')).toBe(false);
+  });
+});

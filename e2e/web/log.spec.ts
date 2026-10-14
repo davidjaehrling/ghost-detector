@@ -21,13 +21,18 @@ test('three tags: record rows, case rows, nights, no DEEP SCAN key in the list',
   await expect(page.getByTestId('history-best')).toHaveText('BEST ON FILE 94 CRITICAL');
   const label = (tag: string) => page.getByTestId(`history-tag-${tag}`).getAttribute('aria-label');
   expect(await label('cellar')).toBe('CELLAR · 3 CASES · PEAK 80 STRONG · 2026-10-13 22:48');
-  expect(await label('attic')).toBe('ATTIC · 1 CASE · PEAK 94 CRITICAL · 2026-10-12 21:30');
+  expect(await label('attic')).toBe('ATTIC · 2 CASES · PEAK 94 CRITICAL · 2026-10-12 21:30');
   expect(await label('bedroom')).toMatch(/^BEDROOM · 2 CASES · PEAK \d+ \w+ · 2026-10-\d\d \d\d:\d\d$/);
   // Case rows: ID, SPI, tier; UNRESOLVED only where a Deep Scan is still open.
   const strong = page.getByTestId('history-row-0003');
   await expect(strong).toContainText('0003 · 80 STRONG');
   await expect(strong).toContainText(/UNRESOLVED \d+%/);
   await expect(page.getByTestId('history-row-0001')).not.toContainText('UNRESOLVED');
+  // A declined rewarded ad archives the case: ARCHIVED replaces UNRESOLVED, same percent.
+  const declined = page.getByTestId('history-row-0006');
+  await expect(declined).toContainText('0006 · ');
+  await expect(declined).toContainText(/ARCHIVED \d+%/);
+  await expect(declined).not.toContainText('UNRESOLVED');
   // A reading surface: no DEEP SCAN key, no streak, badge or countdown wording.
   const body = (await page.getByTestId('screen-history').innerText()).toUpperCase();
   for (const w of ['DEEP SCAN', 'STREAK', 'BADGE', 'EXPIRE', 'COME BACK', 'MISSED']) expect(body).not.toContain(w);

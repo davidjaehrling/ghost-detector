@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Outcome, Tier } from '../../engine';
-import { bestOnFile, recordLine, createNightsStore, groupByTag, nightKey, stamp, unresolvedPct, UNTAGGED } from '../log';
+import { bestOnFile, caseStatus, recordLine, createNightsStore, groupByTag, nightKey, stamp, unresolvedPct, UNTAGGED } from '../log';
 import { createScanStore, type KeyValueStore, type ScanRecord } from '../scans';
 
 const mem = (): KeyValueStore => {
@@ -101,5 +101,17 @@ describe('recordLine', () => {
     expect(recordLine('cellar', 7, peak)).toBe('CELLAR · 7 CASES · PEAK 84 STRONG · 2026-10-13 23:41');
     expect(recordLine('cellar', 1, peak)).toContain('1 CASE ·');
     expect(recordLine(UNTAGGED, 2, peak)).toContain('UNTAGGED · 2 CASES');
+  });
+});
+
+describe('caseStatus', () => {
+  it('reads UNRESOLVED while open and ARCHIVED once declined', () => {
+    expect(caseStatus(rec('1', 'cellar', 60, 'strong', 1))).toBe('UNRESOLVED 58%');
+    expect(caseStatus(rec('1', 'cellar', 60, 'strong', 1, { declined: true }))).toBe('ARCHIVED 58%');
+  });
+  it('is null where nothing is open: QUIET, TRACE, or a Deep Scan done (even if declined earlier)', () => {
+    expect(caseStatus(rec('1', 'cellar', 5, 'quiet', 1, { declined: true }))).toBeNull();
+    expect(caseStatus(rec('1', 'cellar', 15, 'trace', 1))).toBeNull();
+    expect(caseStatus(rec('1', 'cellar', 60, 'strong', 1, { declined: true, deepScanAt: 5 }))).toBeNull();
   });
 });

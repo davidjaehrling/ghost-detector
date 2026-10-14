@@ -72,7 +72,7 @@ test('with real rows in the log the slot is 24 dp from every visible row and eve
     const keys = Array.from(document.querySelectorAll('[data-testid^="key-"]')).map((e) => e.getBoundingClientRect().bottom);
     return { listBottom: list.bottom, rows, keys };
   });
-  expect(m.rows.length).toBe(6);
+  expect(m.rows.length).toBe(7);
   const nearest = Math.max(m.listBottom, ...m.rows.map((r) => r.bottom), ...m.keys);
   console.log(`banner gap with rows: slot top ${top}, nearest ${nearest}, gap ${top - nearest} px; ${m.rows.length} rows`);
   expect(top - nearest).toBeGreaterThanOrEqual(24);
