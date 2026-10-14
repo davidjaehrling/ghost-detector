@@ -3,7 +3,7 @@ import { AlphaType, ColorType, Skia, type SkImage } from '@shopify/react-native-
 import type { Tier } from '../../engine';
 import { FIT_H, FIT_W } from '../apparition';
 import { stackedAlpha, type Placement, type RegionInput } from '../ghostV0/placement';
-import { BAND_K, BAND_MIX, BAND_SOFT, BAND_TAP_X, BAND_TAP_Y, CLAMP_LIFT, GAMMA, GRAIN, OCC_GRID_BLUR, POP_ALPHA, POP_GAMMA, POP_LIFT } from './blend';
+import { BAND_HEM, BAND_K, BAND_MIX, BAND_SOFT, BAND_TAP_X, BAND_TAP_Y, CLAMP_LIFT, GAMMA, GRAIN, OCC_GRID_BLUR, POP_ALPHA, POP_GAMMA, POP_LIFT } from './blend';
 import { NEAR_BLACK_BLUR, NEAR_BLACK_CAP, NEAR_BLACK_GRAIN, NEAR_BLACK_LIFT, NEAR_BLACK_PEAK, reference, smudgePlacement, type Reference } from './reference';
 import { occlusionGrid, type LumaGrid } from './regionStats';
 import { autoGain, NO_GAIN, type AutoGain } from './autoGain';
@@ -141,6 +141,7 @@ export function compositeUniforms(s: CompositeSetup, o: { pop: number; on: numbe
       bandBottom: band?.bottom ?? 0,
       bandRag: band?.rag ?? 0,
       bandSoft: BAND_SOFT,
+      bandHemPx: BAND_HEM,
       bandSampleY: band?.sampleY ?? 0,
       bandMix: BAND_MIX,
       bandTapX: BAND_TAP_X,

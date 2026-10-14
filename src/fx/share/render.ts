@@ -5,6 +5,7 @@ import type { ScanRecord } from '../../state/scans';
 import { color } from '../../ui/tokens';
 import { mulberry32 } from '../../engine';
 import { drawComposite, imageShader } from '../compositor/offscreen';
+import type { Band } from '../compositor/blend';
 import type { RegionStats } from '../compositor/regionFromImage';
 import { GRAIN_FREQ } from '../compositor/setup';
 import {
@@ -108,6 +109,8 @@ export interface CardRender {
   /** Phosphor tint mix used on the photo (0 with `fx.tint` false). */
   tintMix: number;
   tintLift: number;
+  /** The compositor's foreground mass (A-98 hem test) in photo-window pixels (add layout.photo's x and y for card pixels), or null. */
+  band: Band | null;
 }
 
 /** Cap height per em, measured on the bundled TTFs (CanvasKit, glyph rows of `EHILT`). */
@@ -664,6 +667,7 @@ export function drawShareCard(i: CardInput): CardRender {
     gainDb: setup.gain.db,
     tintMix: i.fx?.tint === false ? 0 : setup.tintMix,
     tintLift: setup.tintLift,
+    band: setup.ref.band ?? null,
   };
 }
 
