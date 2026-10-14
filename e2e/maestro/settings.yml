@@ -1,0 +1,50 @@
+# Viewfinder, LOG (history), forward to Settings; toggles, language, legal.
+appId: com.ghostdetector.app
+---
+- runFlow: lib/start.yml
+- tapOn:
+    id: key-log
+- extendedWaitUntil:
+    visible:
+      id: screen-history
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-settings-01-history
+- tapOn:
+    id: key-forward
+- extendedWaitUntil:
+    visible:
+      id: screen-settings
+    timeout: 10000
+- assertVisible:
+    id: setting-sound-state
+    text: "ON"
+- takeScreenshot: ${MAESTRO_PROFILE}-settings-02-defaults
+- tapOn:
+    id: setting-sound
+- assertVisible:
+    id: setting-sound-state
+    text: "OFF"
+- tapOn:
+    id: setting-haptics
+- assertVisible:
+    id: setting-haptics-state
+    text: "OFF"
+- tapOn:
+    id: setting-language
+- assertNotVisible:
+    id: setting-language-state
+    text: "SYSTEM"
+- tapOn:
+    id: setting-intensity
+- takeScreenshot: ${MAESTRO_PROFILE}-settings-03-changed
+- tapOn:
+    id: setting-legal
+- extendedWaitUntil:
+    visible:
+      id: screen-legal
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-settings-04-legal
+- tapOn:
+    id: key-forward
+- assertVisible:
+    id: screen-settings

@@ -1,7 +1,18 @@
 appId: com.ghostdetector.app
 ---
-- launchApp
+- launchApp:
+    clearState: true
+    permissions:
+      camera: deny
+      notifications: unset
 - extendedWaitUntil:
     visible: ".*SELFTEST OK.*"
-    timeout: 20000
-- takeScreenshot: boot
+    timeout: 30000
+- takeScreenshot: ${MAESTRO_PROFILE}-boot
+- tapOn:
+    id: key-acknowledge
+- extendedWaitUntil:
+    visible:
+      id: key-calib-yes
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-boot-calibration

@@ -1,0 +1,51 @@
+# FIELD LOG RELAY opt-in. Due on the first return from a result with 3 or more scans on file and a
+# session index of 1 or more (src/state/relay.ts relayDue): three scans in session 0, relaunch
+# without clearing state (session 1), one more scan, back.
+appId: com.ghostdetector.app
+---
+- runFlow: lib/start.yml
+- repeat:
+    times: 3
+    commands:
+      - runFlow: lib/capture.yml
+      - tapOn:
+          id: key-back
+      - extendedWaitUntil:
+          visible:
+            id: key-capture
+          timeout: 10000
+- stopApp
+- launchApp:
+    permissions:
+      camera: deny
+      notifications: unset
+- extendedWaitUntil:
+    visible: ".*SELFTEST OK.*"
+    timeout: 30000
+- tapOn:
+    id: key-acknowledge
+- extendedWaitUntil:
+    visible:
+      id: key-capture
+    timeout: 15000
+- runFlow: lib/capture.yml
+- tapOn:
+    id: key-back
+- extendedWaitUntil:
+    visible:
+      id: relay-module
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-relay-01-offer
+- tapOn:
+    id: relay-fit
+# Android 13+ asks for POST_NOTIFICATIONS after FIT RELAY, never before.
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- extendedWaitUntil:
+    visible:
+      id: relay-result
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-relay-02-result

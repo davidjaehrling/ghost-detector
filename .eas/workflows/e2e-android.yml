@@ -1,4 +1,12 @@
 # Run: eas workflow:run .eas/workflows/e2e-android.yml --wait   (exit 0 pass, 11 fail); artifacts: eas workflow:view <id> --json
+# One e2e-test APK, then the five Maestro flows on three display profiles, one job per profile.
+# Each job records the screen (record_screen) and its flows take screenshots named <profile>-<flow>-<nn>-<moment>.
+# Display profiles: the emulator is the stock pixel_6 AVD; `wm size` and `wm density` set the logical
+# display to the target in dp (px / (dpi / 160)). See docs/release-runbook.md, "Three device profiles".
+#   small   360x800  mdpi   (160 dpi): wm size 360x800    / wm density 160
+#   medium  390x844  xhdpi  (320 dpi): wm size 780x1688   / wm density 320
+#   large   428x926  xxhdpi (480 dpi): wm size 1284x2778  / wm density 480
+# EXPO_PUBLIC_RELEASE stays unset on the e2e-test profile, so the ad-ID gate stays in test mode.
 name: e2e-android
 
 on:
@@ -12,12 +20,87 @@ jobs:
     params:
       platform: android
       profile: e2e-test
-  maestro_test:
+
+  maestro_small:
+    name: Maestro small 360x800 mdpi
     needs: [build_android]
     type: maestro
     runs_on: linux-large-nested-virtualization
+    env:
+      MAESTRO_PROFILE: small
     params:
       build_id: ${{ needs.build_android.outputs.build_id }}
-      flow_path: ['e2e/maestro/boot.yml']
+      flow_path:
+        - e2e/maestro/boot.yml
+        - e2e/maestro/scan-flow.yml
+        - e2e/maestro/settings.yml
+        - e2e/maestro/share.yml
+        - e2e/maestro/relay.yml
+      device_identifier: pixel_6
       record_screen: true
       retries: 1
+    hooks:
+      before_maestro_tests:
+        - name: Set display 360x800 at 160 dpi
+          run: |
+            adb wait-for-device
+            adb shell wm size 360x800
+            adb shell wm density 160
+            adb shell wm size
+            adb shell wm density
+
+  maestro_medium:
+    name: Maestro medium 390x844 xhdpi
+    needs: [build_android]
+    type: maestro
+    runs_on: linux-large-nested-virtualization
+    env:
+      MAESTRO_PROFILE: medium
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      flow_path:
+        - e2e/maestro/boot.yml
+        - e2e/maestro/scan-flow.yml
+        - e2e/maestro/settings.yml
+        - e2e/maestro/share.yml
+        - e2e/maestro/relay.yml
+      device_identifier: pixel_6
+      record_screen: true
+      retries: 1
+    hooks:
+      before_maestro_tests:
+        - name: Set display 780x1688 at 320 dpi
+          run: |
+            adb wait-for-device
+            adb shell wm size 780x1688
+            adb shell wm density 320
+            adb shell wm size
+            adb shell wm density
+
+  maestro_large:
+    name: Maestro large 428x926 xxhdpi
+    needs: [build_android]
+    type: maestro
+    runs_on: linux-large-nested-virtualization
+    env:
+      MAESTRO_PROFILE: large
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      flow_path:
+        - e2e/maestro/boot.yml
+        - e2e/maestro/scan-flow.yml
+        - e2e/maestro/settings.yml
+        - e2e/maestro/share.yml
+        - e2e/maestro/relay.yml
+      device_identifier: pixel_6
+      record_screen: true
+      retries: 1
+    hooks:
+      before_maestro_tests:
+        - name: Set display 1284x2778 at 480 dpi
+          run: |
+            adb wait-for-device
+            adb shell wm size 1284x2778
+            adb shell wm density 480
+            adb shell wm size
+            adb shell wm density
