@@ -27,7 +27,7 @@ Only then do any work.
 - Simplicity: copy the smallest proven pattern; no new layer until something hurts.
 - Licence ledger: every image, font or sound goes into `assets/LICENSES.md` with source URL, licence and author. No clear licence, no ship. Ghost source images: public domain or CC0 only, then distorted.
 - Craft rules in plan §6 bind every agent: one instrument, one phosphor hue, two type faces, banned visual tells, banned copy words (delve, tapestry, pivotal, crucial, intricate, testament, foster, landscape, underscore), no em-dash asides.
-- File ownership: `app/` and `src/ui/` Builder A; `src/engine/` Builder B; `src/fx/` FX Engineer; `src/audio/` Sound & Haptics; `locales/` Copy; `e2e/web/`, `e2e/screenshots/` and `.github/workflows/` QA; `eas.json`, `.eas/` and `e2e/maestro/` Release. Stay inside your tree.
+- File ownership: `app/`, `src/ui/`, `src/state/`, `src/ads/` and `src/analytics/` Builder A; `docs/privacy-policy.md`, `docs/data-safety.md`, `docs/impressum.md` Compliance; `src/engine/` Builder B; `src/fx/` FX Engineer; `src/audio/` Sound & Haptics; `locales/` Copy; `e2e/web/`, `e2e/screenshots/` and `.github/workflows/` QA; `eas.json`, `.eas/` and `e2e/maestro/` Release. Stay inside your tree.
 - Agent teams are off. Fan-out uses the Workflow tool with at most 10 agents per run.
 - `isolation: worktree` branches from the default branch, not the current HEAD. Do not use it while the phase branch is ahead of `main`; give agents disjoint file trees instead.
 

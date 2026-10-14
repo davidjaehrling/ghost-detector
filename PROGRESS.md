@@ -3,11 +3,12 @@
 Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what is next, what blocks.
 
 ## Current phase
-**P3 Ghost engine & FX** on branch `claude/p3-ghost-fx` (from `main` at fc2a14a, the P2 squash merge). Runs in parallel with P4 (sensors, sound, haptics) once P3-01 lands. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB) and P2-11 (identity) wait on the owner.
+**P5 Monetization & consent** on branch `claude/p5-monetization` (from `main` at 208dbbe, the P3 squash merge). P6 (share card, notifications, log) starts in parallel once P5 wave 1 lands. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
 
-P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P1-08 boot screen loop at 6.05 (continues as P2-08).
+P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4 (2026-10-14). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
 
 ## Last thing done
+- P3 merged as PR #4 (208dbbe). P5 contract P5-01 to P5-11 written (D-025); Compliance contract review and Builder B cadence machine launched.
 - P3 round 2 built: FX (density, smear, occlusion, tier extent, thermal blocks, wedge sweep, fault tear, feed tint, warp capture, 60 fps on the harness), Builder A (per-case seeds, locked photo window, one thermal number, data strip, housing sticker, priming transient, countdown, session index), goldens regenerated at 81c1c7c (173 e2e x2, 338 unit tests). Clamp measured before the warp (D-021). Re-score running. PR #4 open.
 - P3/P4 build complete except the result screen: compositor v1 (3a29431), glass on all screens, D-011 leftovers, magnetometer needle, sweep, audio and haptics wiring, jump-scare, Settings (dbe3248..d948f73; 302 unit tests, 122 e2e). Result-screen integration (compositor, thermal toggle, warp) running.
 - P3: Skia 2.14 installed (P3-01), glass stack (P3-02), thermal view (P3-05) committed; P4 audio engine (P4-01..03) committed. Compositor v1 (P3-03/04) and Builder A's three-screen integration running. Decisions D-013, D-014.
@@ -24,15 +25,16 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-0
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Round-2 re-score (running) on the fresh goldens; log D-022; merge PR #4 when CI is green (leftovers carry to P8 if believability stays under 8 after round 2, by the five-round rule the loop may continue in P8 polish).
-2. P5 Monetization & consent (blocked on AdMob and Firebase IDs for anything live; UMP flow, cadence state machine and test IDs can be built) and P6 share card and notifications; P7 localisation.
-3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase.
+1. P5 wave 1: Compliance contract review, Builder B `adCadence` machine; then Builder A SDK facade, consent, Deep Scan, interstitial, banner, analytics gate; Compliance diff review; Refuter sweep; merge on green.
+2. P6 share card, notifications and investigation log (parallel with P5 once wave 1 lands); P7 localisation after.
+3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase; plus 5 to 8 real dark-room photos for `e2e/fixtures/real/` (D-023).
 
 ## Blockers (owner)
 - **Gate 1**: name (panel recommends option 1 "Velden FS-4 Field Probe", alternative option 5), icon (panel recommends concept 3 nameplate), Android package ID (permanent; must not contain "detector" if option 2 is chosen).
 - `expo.dev` and `*.expo.dev` are blocked by the environment network policy. Needed for EAS (L3). Flagged to David.
 - `EXPO_TOKEN` is not set as an environment secret.
-- Play Console account, AdMob and Firebase not yet created (needed by end of P2 and by P5).
+- Play Console account, AdMob and Firebase not yet created (needed by end of P2 and by P5). P5 builds on Google's test IDs; the Firebase native backend waits on `google-services.json`.
+- Real photographs for the believability loop: 5 to 8 phone photos of dark rooms (cellar, attic, hallway, bedroom at night, outdoors at dusk) into `e2e/fixtures/real/`, licensed to the project.
 
 ## Budget
 | Phase | Tokens (approx.) | Notes |
@@ -42,3 +44,4 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-0
 | P2 | ~3.6M | Subagents: engine 89k+74k, nav/boot 144k, viewfinder/scan 192k, result 128k, FX 108k+152k+136k, rounds 2 and 3 of screens 297k+266k, loop scoring 203k+170k+160k, Refuter 141k+115k+99k, misc; Director context ~0.25M |
 | P3 | ~4.3M | Subagents: Skia 106k, glass 208k, apparition/compositor 343k, thermal 167k, Builder A integration 376k + 274k, round 2 FX 531k + 94k + Builder A 385k, round 3 FX 361k + defects, scoring 167k + 182k (void) + 168k + 135k, Refuter 167k + 141k; Director context ~0.3M |
 | P4 | ~0.25M (engine 133k, test fix 61k; the screen wiring is counted under P3) | P4-07 phone check waits on the owner |
+| P5 | (running) | |
