@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_GAP_MS, cadenceStore } from '../../state/cadence';
-import { SHOW_DELAY_MS, onBackToViewfinder, onFreshResult, resetInterstitialRuntime, setGate, startCadence } from '../interstitial';
+import { SHOW_DELAY_MS, TAP_EXPIRY_MS, onBackToViewfinder, onFreshResult, resetInterstitialRuntime, setGate, startCadence } from '../interstitial';
 
 const load = vi.fn(async () => true);
 const show = vi.fn(async () => ({ shown: true, earned: false }));
@@ -39,6 +39,26 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('interstitial show rules', () => {
+  it('drops a pending show whose gate opens more than 3 s after the tap', async () => {
+    sessionOne();
+    onFreshResult();
+    onBackToViewfinder();
+    await vi.advanceTimersByTimeAsync(TAP_EXPIRY_MS + 1);
+    setGate(true);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(show).not.toHaveBeenCalled();
+  });
+
+  it('still shows when the gate opens just inside 3 s', async () => {
+    sessionOne();
+    onFreshResult();
+    onBackToViewfinder();
+    await vi.advanceTimersByTimeAsync(TAP_EXPIRY_MS - 100);
+    setGate(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(show).toHaveBeenCalledTimes(1);
+  });
+
   it('shows no earlier than 500 ms after the tap, and only once the viewfinder gate is open', async () => {
     sessionOne();
     onFreshResult();
@@ -69,7 +89,7 @@ describe('interstitial show rules', () => {
     sessionOne();
     onFreshResult();
     onBackToViewfinder();
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(show).not.toHaveBeenCalled();
     setGate(true);
     await vi.advanceTimersByTimeAsync(1);

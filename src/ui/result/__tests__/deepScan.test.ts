@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { placeGhost } from '../../../fx/ghostV0/placement';
 import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../deepCopy';
-import { resetDeepScanSession, useDeepScan } from '../deepScan';
+import { useDeepScan } from '../deepScan';
 
 // A minimal hook runtime: enough React to drive useDeepScan without a renderer.
 const rt = vi.hoisted(() => {
@@ -42,12 +42,13 @@ vi.mock('react', () => ({
 }));
 
 const track = vi.fn();
+const load = vi.fn(async () => true);
 const show = vi.fn(async () => ({ shown: true, earned: true }));
 vi.mock('../../../analytics', () => ({ track: (e: string) => track(e) }));
 vi.mock('../../../ads', () => ({
   ensureConsent: async () => ({}),
   canRequestAds: () => true,
-  rewarded: { subscribe: () => () => {}, status: () => 'ready', load: async () => true, show: () => show() },
+  rewarded: { subscribe: () => () => {}, status: () => 'ready', load: () => load(), show: () => show() },
 }));
 vi.mock('../../../state/useConsent', () => ({ useConsent: () => ({ status: 'obtained', canRequestAds: true }) }));
 vi.mock('../../../state/scans', () => ({ unlockDeepScan: vi.fn() }));
@@ -114,7 +115,7 @@ describe('DEEP SCAN analytics', () => {
     rt.effects = [];
     track.mockClear();
     show.mockClear();
-    resetDeepScanSession();
+    load.mockClear();
   });
 
   it('tracks deep_scan_offered once when the key goes live, and not deep_scan_rewarded yet', () => {
@@ -136,5 +137,27 @@ describe('DEEP SCAN analytics', () => {
     const render = renderDeepScan();
     await render().press();
     expect(track).not.toHaveBeenCalledWith('deep_scan_rewarded');
+  });
+
+  it('a declined ad requests a fresh one, and a second tap plays it', async () => {
+    show.mockResolvedValueOnce({ shown: true, earned: false });
+    const render = renderDeepScan();
+    await render().press();
+    // One preload on mount, one fresh request after the decline.
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(render().state).toBe('ready');
+    await render().press();
+    expect(show).toHaveBeenCalledTimes(2);
+    expect(track).toHaveBeenCalledWith('deep_scan_rewarded');
+  });
+
+  it('maps a show that did not display to the offline state', async () => {
+    show.mockResolvedValueOnce({ shown: false, earned: false });
+    const render = renderDeepScan();
+    await render().press();
+    const after = render();
+    expect(after.state).toBe('offline');
+    await after.press();
+    expect(show).toHaveBeenCalledTimes(1);
   });
 });

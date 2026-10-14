@@ -11,9 +11,12 @@ import { SESSION_GAP_MS, cadenceStore } from '../state/cadence';
 //   - the viewfinder has rendered and is focused (`useInterstitialGate`, true only then);
 //   - the camera permission is not being asked (the gate is false while the prompt is up);
 //   - at least SHOW_DELAY_MS have passed since the tap on NEW SCAN.
+// A show still waiting for the gate TAP_EXPIRY_MS after the tap is dropped; the ad stays at the natural break.
 // If the ad did not load, nothing happens and the machine retries after its preload TTL.
 
 export const SHOW_DELAY_MS = 500;
+/** A pending show whose gate has not opened this long after the tap is dropped. */
+export const TAP_EXPIRY_MS = 3000;
 
 /** Pending show: the time of the tap that asked for it. */
 let tapAt: number | null = null;
@@ -71,12 +74,14 @@ export function onBackToViewfinder(): void {
 function arm(): void {
   if (timer) clearTimeout(timer);
   timer = null;
+  if (tapAt !== null && cadenceStore.now() - tapAt > TAP_EXPIRY_MS) tapAt = null;
   if (tapAt === null || !gateOpen) return;
   timer = setTimeout(() => void fire(), Math.max(0, tapAt + SHOW_DELAY_MS - cadenceStore.now()));
 }
 
 async function fire(): Promise<void> {
   timer = null;
+  if (tapAt !== null && cadenceStore.now() - tapAt > TAP_EXPIRY_MS) tapAt = null;
   if (tapAt === null || !gateOpen) return;
   tapAt = null;
   const result = await interstitial.show();

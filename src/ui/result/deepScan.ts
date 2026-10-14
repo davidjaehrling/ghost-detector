@@ -17,21 +17,15 @@ export type DeepState =
   /** Reward earned and stored on the scan. */
   | 'unlocked';
 
-/** Per process: a scan whose ad was dismissed without the reward is not offered again. */
-const declined = new Set<string>();
-export function resetDeepScanSession(): void {
-  declined.clear();
-}
-
 export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: number | undefined; persist: boolean }) {
   const { id, enabled, unlockedAt, persist } = opts;
   const consent = useConsent();
   const status = useSyncExternalStore(rewarded.subscribe, rewarded.status, rewarded.status);
   const [unlocked, setUnlocked] = useState(unlockedAt !== undefined);
   const [running, setRunning] = useState(false);
-  const [dismissed, setDismissed] = useState(() => declined.has(id));
+  const [failed, setFailed] = useState(false);
   const offered = useRef(false);
-  const eligible = enabled && !unlocked && !dismissed;
+  const eligible = enabled && !unlocked && !failed;
 
   // Preload when the result mounts, only with consent to request.
   useEffect(() => {
@@ -49,7 +43,7 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
   let state: DeepState;
   if (unlocked) state = 'unlocked';
   else if (running) state = 'running';
-  else if (dismissed) state = 'ready';
+  else if (failed) state = 'offline';
   else if (!enabled) state = 'offline';
   else if (!requestable) state = consent.status === 'unknown' ? 'warming' : 'offline';
   else if (status === 'ready') state = 'ready';
@@ -66,19 +60,23 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
 
   const press = async () => {
     if (state !== 'ready' || running) return;
-    // Dismissed without the reward: the key stays, and nothing else is asked in this session.
-    if (dismissed) return;
     setRunning(true);
     const result = await rewarded.show();
     setRunning(false);
-    if (result.shown) onRewardedShown();
+    if (!result.shown) {
+      // The ad did not appear: the key goes offline rather than looking live while doing nothing.
+      setFailed(true);
+      return;
+    }
+    onRewardedShown();
     if (result.earned) {
       if (persist) unlockDeepScan(id);
       track('deep_scan_rewarded');
       setUnlocked(true);
-    } else if (result.shown) {
-      declined.add(id);
-      setDismissed(true);
+    } else {
+      // Dismissed without the reward: the slot is spent, so the key warms while a fresh ad loads.
+      // A second tap, user initiated, plays it.
+      void rewarded.load();
     }
   };
 
