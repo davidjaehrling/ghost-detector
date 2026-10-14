@@ -6,7 +6,9 @@ import { copyOf, t } from '../../i18n';
 export const deepCopy = copyOf({
   legend: 'deep.legend',
   label: 'deep.label',
-  sub: 'deep.sub',
+  arm: 'deep.arm',
+  keyWarming: 'deep.keyWarming',
+  keyOffline: 'deep.keyOffline',
   offline: 'deep.offline',
   warming: 'deep.warming',
   running: 'deep.running',

@@ -101,8 +101,9 @@ test('ad-load: no ad loads, DEEP SCAN reads OFFLINE and no interstitial shows', 
   const check = watch(page);
   await page.goto(`${DEMO}&fault=ad-load`);
   const key = page.getByTestId('deepscan-key');
-  await expect(key).toBeDisabled();
-  await expect(key).toHaveText('DEEP SCAN OFFLINE. NO SIGNAL.');
+  await expect.poll(() => key.evaluate((e) => getComputedStyle(e.querySelector('div') as HTMLElement).color)).toBe('rgb(74, 77, 66)');
+  await expect(key).toHaveText('OFFLINE');
+  await expect(page.getByTestId('deepscan-line')).toHaveText('DEEP SCAN OFFLINE. NO SIGNAL.');
   await page.goto('/viewfinder?static=1&speed=8&session=1&fault=ad-load');
   await scanOnce(page);
   await page.getByTestId('screen-result').last().getByTestId('key-back').click();
@@ -115,8 +116,9 @@ test('ad-load: no ad loads, DEEP SCAN reads OFFLINE and no interstitial shows', 
 test('consent-timeout: the info update never answers, ads stay off, nothing initialises', async ({ page }) => {
   const check = watch(page);
   await page.goto(`${DEMO}&fault=consent-timeout`);
-  await expect(page.getByTestId('deepscan-key')).toBeDisabled({ timeout: 15_000 });
-  await expect(page.getByTestId('deepscan-key')).toHaveText('DEEP SCAN OFFLINE. NO SIGNAL.');
+  await expect.poll(() => page.getByTestId('deepscan-key').evaluate((e) => getComputedStyle(e.querySelector('div') as HTMLElement).color), { timeout: 15_000 }).toBe('rgb(74, 77, 66)');
+  await expect(page.getByTestId('deepscan-key')).toHaveText('OFFLINE');
+  await expect(page.getByTestId('deepscan-line')).toHaveText('DEEP SCAN OFFLINE. NO SIGNAL.');
   const calls = await adsLog(page);
   expect(calls).toContain('requestInfoUpdate');
   expect(calls).not.toContain('initialize');

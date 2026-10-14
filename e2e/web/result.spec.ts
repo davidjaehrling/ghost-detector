@@ -52,13 +52,15 @@ for (const { demo, tier } of DEMOS) {
     await expect(page.getByTestId('result-tier')).toHaveText(tier);
     await expect(page.getByTestId('key-share')).toBeVisible();
     if (demo === 'quiet') {
-      // DEEP SCAN is absent on QUIET and TRACE: nothing to decode, no offer.
+      // DEEP SCAN is absent on QUIET and TRACE: nothing to decode, no offer. Key 4 is LOG.
       await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
+      await expect(page.getByTestId('key-log')).toHaveText('LOG');
       await expect(page.getByTestId('result-profile').getByText('NO SIGNATURE')).toBeVisible();
       await expect(page.getByTestId('composite')).toHaveCount(0);
     } else {
       await expect(page.getByTestId('deepscan-key')).toBeVisible();
-      await expect(page.getByTestId('deepscan-sub')).toHaveText('SPONSORED VIDEO PLAYS FIRST');
+      // Nothing prints above key 4 until the first press arms it (D-045 1).
+      await expect(page.getByTestId('deepscan-line')).toHaveCount(0);
       await expect(page.getByTestId('result-decoded')).toContainText('SIGNATURE PARTIALLY DECODED:');
       await expect(page.getByTestId('profile-mask')).toHaveCount(3);
       await expect(page.getByTestId('composite')).toHaveCount(1);
@@ -69,10 +71,10 @@ for (const { demo, tier } of DEMOS) {
     const line = page.getByTestId('result-line');
     if (demo === 'strong' || demo === 'critical') {
       if (demo === 'strong') await expect(line).toHaveText('Strong. Signature resolving.');
-      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT ΔT -\d+\.\d °C · DRIFT \d\.\d kHz$/);
-      const cold = (await page.getByTestId('result-coldspot').innerText()).split(' · ')[0]!;
-      const therm = await page.getByText(/^THERM\s+-?\d/).first().innerText();
-      expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD SPOT ΔT ', ''));
+      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD ΔT MIN -\d+\.\d °C {2}DRIFT \d\.\d kHz$/);
+      const cold = (await page.getByTestId('result-coldspot').innerText()).split('  ')[0]!;
+      const therm = await page.getByText(/^ΔT\sAVG\s+-?\d/).first().innerText();
+      expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD ΔT MIN ', ''));
     } else {
       await expect(page.getByTestId('result-coldspot')).toHaveCount(0);
       if (demo === 'active') await expect(line).toHaveText('Activity logged.');
@@ -93,9 +95,9 @@ for (const { demo, tier } of DEMOS) {
       const dec = await box('result-decoded');
       expect(dec.y - (prof.y + prof.height)).toBeLessThanOrEqual(8);
       expect(dec.y).toBeGreaterThanOrEqual(prof.y + prof.height);
-      // The key leads on from the decoded line: it sits under the decode bar, above the hardware keys.
+      // Key 4 is a hardware key under the glass; the decode bar closes the glass content above it.
       const deep = await box('deepscan-key');
-      expect(deep.y).toBeGreaterThan(dec.y + dec.height);
+      expect(deep.y).toBeGreaterThan((await box('decode-bar')).y);
     }
     // The key row is one fixed grid: four 72 px slots at the same x on every screen.
     const xs = await page.locator('[data-testid^="key-"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
@@ -112,7 +114,7 @@ for (const { fixture, caseNo } of FIXTURES) {
     await page.goto(`/result/demo?static=1&fixture=${fixture}&demo=active&case=${caseNo}`);
     await expect(page.getByTestId('screen-result')).toBeVisible();
     await settle(page);
-    await expect(page.getByText(`CASE ${caseNo}`)).toBeVisible();
+    await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-label', new RegExp(`^CASE ${caseNo} `));
     await expect(page.getByTestId('result-tier')).toHaveText('ACTIVE');
     await expect(page.getByTestId('composite')).toHaveCount(1);
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-active-${fixture}.png` });
@@ -138,7 +140,7 @@ test('THERM swaps the photo for the thermal view of the same frame and PHOTO swa
   expect(view.y + view.height).toBeLessThanOrEqual(photo.y + photo.height + 1.5);
   // One number on screen: on CRITICAL the view prints the COLD SPOT line's ΔT (not the THERM reading).
   const cold = (await page.getByTestId('result-coldspot').innerText()).replace(/\s+/g, ' ');
-  const dt = /ΔT (-\d+\.\d) °C/.exec(cold)?.[1];
+  const dt = /ΔT MIN (-\d+\.\d) °C/.exec(cold)?.[1];
   expect(dt).toBeDefined();
   await expect(page.getByTestId('thermal-view')).toHaveAttribute('aria-label', new RegExp(`ΔT ${dt!} `));
   await page.getByTestId('key-therm').click();
@@ -173,8 +175,9 @@ test('SHARE opens the format choice, and the only ad surface on the result is th
   await expect(page.getByTestId('result-line')).toHaveText('Activity logged.');
   await page.getByTestId('key-share').click();
   await expect(page.getByTestId('share-line')).toHaveText('Print field card. Format?');
-  // While the flow is open the DEEP SCAN key and its sublabel are gone: no ad shares the glass.
+  // While the flow is open key 4 is a dark cap and the sponsored line is gone: no ad shares the glass.
   await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
+  await expect(page.getByTestId('deepscan-line')).toHaveCount(0);
   // No banner or interstitial surface and no sponsor line.
   const ids = await page.locator('[data-testid]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
   expect(ids.length).toBeGreaterThan(10);
@@ -274,16 +277,22 @@ for (const { demo } of DEMOS) {
     await settle(page);
     const strip = page.getByTestId('result-stamp');
     const label = (await strip.getAttribute('aria-label'))!;
-    const m = /^CASE (\d{4}) · SPI (\d+) · ΔT (-?\d+\.\d) °C · (\d\d:\d\d) · SIMULATED$/.exec(label);
+    // Two lines (A-40): case, SPI and time, then the labelled ΔT and the mark, which is always last.
+    const m = /^CASE (\d{4}) {2}SPI (\d+) {2}(\d\d:\d\d) ΔT (MIN|AVG) (-?\d+\.\d) °C {2}SIMULATED$/.exec(label);
     expect(m, label).not.toBeNull();
     expect(m![2]).toBe((await page.getByTestId('result-spi').innerText()).trim());
-    expect(m![4]).toBe('22:48');
-    // One thermal number: the cold spot on STRONG and CRITICAL, the THERM reading below.
+    expect(m![3]).toBe('22:48');
+    // Three temperatures, three names: the row is ΔT AVG, the cold spot line and the strip are ΔT MIN
+    // on STRONG and CRITICAL (the same figure), and the strip carries ΔT AVG below them.
     if (demo === 'strong' || demo === 'critical') {
-      expect(await page.getByTestId('result-coldspot').innerText()).toContain(`ΔT ${m![3]} °C`);
+      expect(m![4]).toBe('MIN');
+      expect(await page.getByTestId('result-coldspot').innerText()).toContain(`ΔT MIN ${m![5]} °C`);
     } else {
-      expect((await page.getByText(/^THERM\s+-?\d/).first().innerText()).replace(/\s+/g, ' ')).toContain(m![3]);
+      expect(m![4]).toBe('AVG');
+      expect((await page.getByText(/^ΔT\sAVG\s+-?\d/).first().innerText()).replace(/\s+/g, ' ')).toContain(m![5]);
     }
+    // The duplicate CASE band over the photo's top edge is gone: CASE prints once, in the strip (A-42).
+    await expect(page.getByText(/^CASE \d{4}$/)).toHaveCount(0);
     const photo = (await page.getByTestId('result-photo').boundingBox())!;
     const box = (await strip.boundingBox())!;
     expect(box.x).toBeLessThan(photo.x + 4);

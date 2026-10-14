@@ -22,8 +22,14 @@ export function stampText({ id, spi, deltaC, createdAt }: { id: string; spi: num
 }
 
 /**
- * The strip as the result screen draws it: the card's data run plus ` · SIMULATED`, so a plain
- * screenshot carries the mark (D-034). The share card prints the same two parts itself
- * (src/fx/share/text.ts), so `stampText` stays the data run alone.
+ * The strip as the result screen draws it (A-40, A-41, D-045 ruling 7): two lines, case and time
+ * on the first, the labelled ΔT and the mark on the second, so `SIMULATED` is always last and a
+ * plain screenshot carries it (D-034). The share card prints its own run (src/fx/share/text.ts), so
+ * `stampText` stays the card's data run. ΔT is named for what it is: the cold-spot minimum on the
+ * pinned tiers, the ambient average (the ΔT AVG row) below them.
  */
-export const screenStampText = (d: Parameters<typeof stampText>[0]): string => `${stampText(d)} · ${t('result.strip.mark')}`;
+export function screenStampLines(d: Parameters<typeof stampText>[0], tier: Tier): [string, string] {
+  const dt = fmtFixed(d.deltaC, 1, getLocale());
+  const key = PINNED_TIERS.includes(tier) ? 'result.strip.min' : 'result.strip.avg';
+  return [t('result.strip.a', { id: d.id, spi: d.spi, time: clock(d.createdAt) }), `${t(key, { dt })}  ${t('result.strip.mark')}`];
+}

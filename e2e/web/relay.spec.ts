@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 // The log demo seeds six cases (session=1 lifts the first-session rule), so the first return from a
 // result is eligible. The web stub records every call in window.__notifyLog.
 
-const BODY = 'Fit the relay? At most one field-log line a night. Index, moon or an open case. 18:00 to 22:00. No sound. Lines are simulated.';
+const BODY = 'Fit the relay? At most one field-log line a night. Index, moon, an open case or the catalogue. 18:00 to 22:00. No sound. Lines are simulated.';
 
 // `getPermission` is the silent re-read of the stored permission on app open; it never asks. The
 // opt-in assertions are about what is asked and created, so it is left out of the list.
@@ -35,7 +35,25 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   const mod = page.getByTestId('relay-module');
   await expect(mod).toBeVisible();
   await expect(mod).toContainText('FIELD LOG RELAY');
-  await expect(page.getByTestId('relay-body')).toHaveText(BODY);
+  // The body prints one sentence per line; the text content is the whole body, in order.
+  expect(((await page.getByTestId('relay-body').textContent()) ?? '').replace(/\s+/g, ' ').trim()).toBe(BODY);
+  // The catalogue is named (A-82).
+  await expect(page.getByTestId('relay-body')).toContainText('the catalogue');
+  // Screen text, not a dialog (A-80): no keyline box, no radius, a p1 top rule, inside the glass and above the keys.
+  const glass = (await page.getByTestId('screen-viewfinder').last().getByTestId('screen-viewfinder-glass').boundingBox())!;
+  const mbox = (await mod.boundingBox())!;
+  expect(mbox.x).toBeGreaterThanOrEqual(glass.x - 0.5);
+  expect(mbox.x + mbox.width).toBeLessThanOrEqual(glass.x + glass.width + 0.5);
+  expect(mbox.y + mbox.height).toBeLessThanOrEqual(glass.y + glass.height);
+  const frame = await mod.evaluate((e) => {
+    const cs = getComputedStyle(e);
+    return { top: cs.borderTopWidth, topColor: cs.borderTopColor, left: cs.borderLeftWidth, right: cs.borderRightWidth, bottom: cs.borderBottomWidth, radius: cs.borderTopLeftRadius, anim: cs.animationName, transform: cs.transform };
+  });
+  expect(frame).toMatchObject({ top: '1px', topColor: 'rgb(28, 74, 42)', left: '0px', right: '0px', bottom: '0px', radius: '0px', anim: 'none', transform: 'none' });
+  // The simulated sentence is p4 (124, 232, 149); the other sentences p3 (79, 180, 106).
+  const colours = await page.getByTestId('relay-body').evaluate((e) => Array.from(e.children).map((c) => getComputedStyle(c).color));
+  expect(colours.at(-1)).toBe('rgb(124, 232, 149)');
+  expect(new Set(colours.slice(0, -1))).toEqual(new Set(['rgb(79, 180, 106)']));
   // Nothing has been requested yet: the dialog follows the tap.
   expect(await calls(page)).toEqual([]);
   // The keys sit on the hardware row, slots 1 and 2 (CAPTURE keeps slot 4), inside the key band and outside the module.
@@ -66,6 +84,8 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   await expect(page.getByTestId('key-capture')).toBeEnabled();
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot('relay-module.png', { maxDiffPixels: 150 });
+  // Nothing was scheduled or asked while the offer was up (only FIT RELAY schedules).
+  expect(await calls(page)).toEqual([]);
 
   await page.getByTestId('relay-fit').click();
   await expect(page.getByTestId('relay-result')).toHaveText('Relay fitted. Change in Settings.');
@@ -242,4 +262,42 @@ test('a system denial schedules nothing', async ({ page }) => {
   await backFromACase(page);
   await page.waitForTimeout(500);
   expect((await log(page)).filter((e) => e.call === 'schedule' || e.call === 'cancel')).toEqual([]);
+});
+
+// A-80: the offer prints line by line at telemetry speed (under ?static=1 it is whole at once, so this walk
+// is not static: three stored cases, a real return from a result).
+test('the offer prints one line at a time and ends whole', async ({ page }) => {
+  const rec = (id: string, spi: number, tier: string) => ({
+    id, createdAt: Date.now() - 1000 * Number(id), tag: 'hall', seed: 95 + Number(id),
+    photoUri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+    outcome: { tier, spi, figureShown: false, smudge: false, jumpScare: false, scanDurationMs: 7000 },
+    profile: { class: 'KEEPER', era: 'Era est. 1905 to 1973', name: 'RSD-9', traits: [], signatureDecodedPct: 61 },
+  });
+  await page.addInitScript((r) => localStorage.setItem('fs4.scans.v1', JSON.stringify(r)), [rec('0003', 62, 'active'), rec('0002', 55, 'active'), rec('0001', 50, 'active')]);
+  await page.goto('/result/0001?session=1&notify=granted');
+  await expect(page.getByTestId('result-spi')).toHaveText('50', { timeout: 10_000 });
+  await page.waitForTimeout(600);
+  await page.getByTestId('key-back').click();
+  await expect(page.getByTestId('relay-module')).toBeVisible();
+  const printed = () => page.getByTestId('relay-body').evaluate((e) => Array.from(e.children).filter((c) => getComputedStyle(c).opacity === '1').length);
+  const seen: number[] = [];
+  for (let i = 0; i < 14; i++) {
+    seen.push(await printed());
+    await page.waitForTimeout(120);
+  }
+  const total = await page.getByTestId('relay-body').evaluate((e) => e.children.length);
+  // Monotonic, starting short of the whole body and ending with every sentence printed.
+  expect([...seen].sort((a, b) => a - b)).toEqual(seen);
+  expect(seen[0]).toBeLessThan(total);
+  expect(seen.at(-1)).toBe(total);
+  expect(new Set(seen).size).toBeGreaterThan(1);
+});
+
+// D-045 6: nothing is scheduled without FIT RELAY, whichever way the offer is left.
+test('leaving the offer by CAPTURE or NOT NOW schedules nothing; only FIT RELAY does', async ({ page }) => {
+  await start(page, `&notify=granted&clock=${encodeURIComponent('2026-10-13T12:00:00')}`);
+  await backFromACase(page);
+  await page.getByTestId('relay-notnow').click();
+  await page.waitForTimeout(500);
+  expect((await page.evaluate(() => (window.__notifyLog ?? []).filter((e) => e.call === 'schedule' || e.call === 'requestPermission'))).length).toBe(0);
 });

@@ -78,8 +78,8 @@ function renderDeepScan(persist = false) {
 const BANNED = [/\bfree\b/i, /unlock now/i, /tap to continue/i, /continue scan/i, /\breal\b/i, /\btruer\b/i, /\baccurate\b/i, /\bactual\b/i];
 
 describe('DEEP SCAN copy', () => {
-  it('carries the sublabel and the offline line exactly', () => {
-    expect(deepCopy.sub).toBe('SPONSORED VIDEO PLAYS FIRST');
+  it('carries the armed line and the offline line exactly', () => {
+    expect(deepCopy.arm).toBe('Resolves class, era, EVP. Sponsored video plays first. DEEP SCAN again to run.');
     expect(deepCopy.offline).toBe('DEEP SCAN OFFLINE. NO SIGNAL.');
   });
   it('uses none of the banned phrases and claims no real or truer reading', () => {

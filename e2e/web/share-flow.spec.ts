@@ -133,14 +133,17 @@ test('no proactive line while a rewarded ad plays, nor within 3 s after it close
   test.setTimeout(60_000);
   const check = watch(page);
   await logLines(page);
-  // The offer line comes 3.0 s after the settle and takes the DEEP SCAN key off the glass, so under load a
-  // press from Playwright can land after it. The page presses the key itself the moment it is live.
+  // The offer line comes 3.0 s after the settle and takes key 4 dark, so under load a press from Playwright
+  // can land after it. The page presses the key itself the moment it is live: one press to arm it (after the
+  // 500 ms guard), a second to run the ad.
   await page.addInitScript(() => {
     const press = new MutationObserver(() => {
       const key = document.querySelector('[data-testid="deepscan-key"]') as HTMLElement | null;
-      if (key && key.getAttribute('aria-disabled') !== 'true') {
+      // Live once the legend leaves the engraved n4 (rgb 74, 77, 66).
+      if (key && getComputedStyle(key.querySelector('div') as HTMLElement).color !== 'rgb(74, 77, 66)') {
         press.disconnect();
-        setTimeout(() => key.click(), 50);
+        setTimeout(() => key.click(), 600);
+        setTimeout(() => key.click(), 800);
       }
     });
     press.observe(document, { childList: true, subtree: true, attributes: true });
@@ -149,7 +152,7 @@ test('no proactive line while a rewarded ad plays, nor within 3 s after it close
   // The line was due about 3.0 s after the settle; the ad closed right after the press, so it waits.
   await expect(page.getByTestId('result-line')).toHaveText('Field card ready. CASE 0003.', { timeout: 15_000 });
   const log = await readLog(page);
-  const press = log.presses[0]!;
+  const press = log.presses[1]!;
   // A line that was up just before the press is taken off by the ad; the one that follows is the one counted.
   const offers = log.lines.filter((l) => l.text.startsWith('Field card') && l.t > press);
   expect(offers).toHaveLength(1);
@@ -163,8 +166,11 @@ test('after a Deep Scan the card line comes back once as updated', async ({ page
   const check = watch(page);
   await logLines(page);
   await page.goto(`${STRONG}&share=timer`);
-  await expect(page.getByTestId('deepscan-key')).toBeEnabled();
-  await page.waitForTimeout(500);
+  await expect(page.getByTestId('deepscan-key')).toBeVisible();
+  await page.waitForTimeout(1200);
+  // Two presses: arm, then run.
+  await page.getByTestId('deepscan-key').click();
+  await expect(page.getByTestId('deepscan-line')).toBeVisible();
   await page.getByTestId('deepscan-key').click();
   await expect(page.getByTestId('deepscan-done')).toBeVisible();
   await expect(page.getByTestId('result-line')).toHaveText('Field card updated. Class and EVP added.', { timeout: 15_000 });
@@ -174,7 +180,7 @@ test('after a Deep Scan the card line comes back once as updated', async ({ page
   // 3.0 s after the high-resolution figure has faded in, which is after the Deep Scan finished.
   expect(updated[0]!.t - log.done!).toBeGreaterThanOrEqual(3000);
   // After the press the plain line does not come: the Deep Scan came first, so the updated one is the line.
-  expect(log.lines.filter((l) => l.text.startsWith('Field card ready') && l.t > log.presses[0]!)).toHaveLength(0);
+  expect(log.lines.filter((l) => l.text.startsWith('Field card ready') && l.t > log.presses[1]!)).toHaveLength(0);
   check();
 });
 
@@ -184,15 +190,29 @@ test('9:16 and 1:1 land in __shareLog at the card sizes', async ({ page }) => {
   await page.goto(`${ACTIVE}&share=format`);
   await expect(page.getByTestId('share-panel')).toBeVisible();
   await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
-  await expect(page.getByTestId('deepscan-sub')).toHaveCount(0);
-  // The card renders in well under a second on web, so the DEEP SCAN key is sampled in the page on
-  // every DOM change made while the printing line is up.
+  await expect(page.getByTestId('deepscan-line')).toHaveCount(0);
+  // The format is chosen on the hardware row: CANCEL, 9:16 STORY, 1:1 SQUARE, a dark cap. THERM is gone.
+  await expect(page.getByTestId('key-back')).toHaveText('CANCEL');
+  await expect(page.getByTestId('share-916')).toHaveText(/9:16\s*STORY/);
+  await expect(page.getByTestId('share-11')).toHaveText(/1:1\s*SQUARE/);
+  await expect(page.getByTestId('key-therm')).toHaveCount(0);
+  await expect(page.getByTestId('key-share')).toHaveCount(0);
+  const keyXs = await Promise.all(['key-back', 'share-916', 'share-11'].map(async (id) => Math.round((await page.getByTestId(id).boundingBox())!.x)));
+  expect([...keyXs].sort((a, b) => a - b)).toEqual(keyXs);
+  // The card renders in well under a second on web, so key 4 and the inert keys are sampled in the page
+  // on every DOM change made while the printing line is up.
   await page.evaluate(() => {
-    const w = window as unknown as { __deepWhilePrinting: number[] };
+    const w = window as unknown as { __deepWhilePrinting: number[]; __inertWhilePrinting: string[] };
     w.__deepWhilePrinting = [];
+    w.__inertWhilePrinting = [];
     new MutationObserver(() => {
       if (document.querySelector('[data-testid=share-line]')?.textContent?.startsWith('PRINTING')) {
         w.__deepWhilePrinting.push(document.querySelectorAll('[data-testid=deepscan-key]').length);
+        for (const id of ['key-back', 'key-share', 'key-therm']) {
+          const el = document.querySelector(`[data-testid=${id}]`);
+          // Inert is the engraved n4 legend (rgb 74, 77, 66); a live key is lighter.
+          w.__inertWhilePrinting.push(`${id}:${el ? (getComputedStyle(el.querySelector('div') as HTMLElement).color === 'rgb(74, 77, 66)') : 'absent'}`);
+        }
       }
     }).observe(document.body, { subtree: true, childList: true, characterData: true });
   });
@@ -203,6 +223,10 @@ test('9:16 and 1:1 land in __shareLog at the card sizes', async ({ page }) => {
   const sampled = await page.evaluate(() => (window as unknown as { __deepWhilePrinting: number[] }).__deepWhilePrinting);
   expect(sampled.length).toBeGreaterThan(0);
   expect(sampled.every((n) => n === 0)).toBe(true);
+  // While printing every key is inert (the card render cannot be skipped) and THERM does not work.
+  const inert = await page.evaluate(() => (window as unknown as { __inertWhilePrinting: string[] }).__inertWhilePrinting);
+  expect(inert.length).toBeGreaterThan(0);
+  expect(inert.filter((e) => !e.endsWith(':true'))).toEqual([]);
   let log = await shareLog(page);
   expect(log).toHaveLength(1);
   expect(log[0]!.format).toBe('story');
@@ -217,6 +241,8 @@ test('9:16 and 1:1 land in __shareLog at the card sizes', async ({ page }) => {
   log = await shareLog(page);
   expect(log).toHaveLength(2);
   expect(log[1]!.format).toBe('square');
+  // The file name carries `simulated` for both formats.
+  expect(log[1]!.fileName).toBe('field-card-0007-simulated.png');
   expect(await dims(page, log[1]!.uri)).toEqual({ w: 1080, h: 1080 });
   check();
 });
@@ -250,26 +276,23 @@ test('goldens: the offer line and the format choice', async ({ page }, testInfo)
 
 test('no ad-starting key shares the glass with the share moment', async ({ page }) => {
   const check = watch(page);
-  // The offer line is up: no DEEP SCAN key, no sublabel, the SHARE legend is lit (p5).
+  // The offer line is up: key 4 is a dark cap and nothing sponsored prints, the SHARE legend is lit (p5).
   await page.goto(`${ACTIVE}&share=offer`);
   await offerAt(page, 'Field card ready. CASE 0007.');
   await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
-  await expect(page.getByTestId('deepscan-sub')).toHaveCount(0);
-  await expect(page.getByText('SPONSORED VIDEO PLAYS FIRST')).toHaveCount(0);
-  const legend = (id: string) => page.getByTestId(id).evaluate((e) => getComputedStyle(e.querySelector('div') as HTMLElement).color);
-  const lit = await legend('key-share');
-  // Format mode: the SHARE key goes dark and inert, the format keys carry STORY and SQUARE.
+  await expect(page.getByTestId('deepscan-line')).toHaveCount(0);
+  await expect(page.getByText(/sponsored video/i)).toHaveCount(0);
+  // Format mode: the format keys carry STORY and SQUARE and nothing starts a card by itself.
   await page.goto(`${ACTIVE}&share=format`);
   await expect(page.getByTestId('share-panel')).toBeVisible();
-  expect(await legend('key-share')).not.toBe(lit);
-  await page.getByTestId('key-share').click();
   await expect(page.getByTestId('share-line')).toHaveText('Print field card. Format?');
   expect(await shareLog(page)).toEqual([]);
   await expect(page.getByTestId('share-916')).toContainText('STORY');
   await expect(page.getByTestId('share-11')).toContainText('SQUARE');
-  // With the offer gone and the share state idle the key is back.
-  await page.goto(ACTIVE);
+  // CANCEL returns to the resting row; with the offer gone and the share state idle key 4 is back, no line yet.
+  await page.getByTestId('key-back').click();
+  await expect(page.getByTestId('key-share')).toBeVisible();
   await expect(page.getByTestId('deepscan-key')).toBeVisible();
-  await expect(page.getByTestId('deepscan-sub')).toHaveText('SPONSORED VIDEO PLAYS FIRST');
+  await expect(page.getByTestId('deepscan-line')).toHaveCount(0);
   check();
 });
