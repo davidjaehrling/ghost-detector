@@ -35,7 +35,6 @@ export const FIXTURE_TAG = { cellar: 'cellar', attic: 'attic', bright: 'hallway'
 
 // The tag row always uses the short legends (A-25): they keep 12 px between the 44 dp hit areas in every
 // language at every width. The long forms stay in TAG_LABEL for the accessibility label.
-const TAG_SHORT_BELOW = 380;
 const TAG_SHORT: Record<LocationTag, string> = copyOf({
   cellar: 'tag.short.cellar',
   attic: 'tag.short.attic',

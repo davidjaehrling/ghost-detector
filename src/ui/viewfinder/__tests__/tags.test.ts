@@ -8,11 +8,9 @@ describe('tag row', () => {
     expect(tagRowGap(LOCATION_TAGS, w)).toBeGreaterThanOrEqual(TAG_GAP_MIN);
   });
   it('always uses the short legends', () => {
-    for (const w of [360, 379, 380, 428]) {
-      expect(tagLegend('hallway')).toBe('HALL');
-      expect(tagLegend('outdoors')).toBe('OUTSIDE');
-      expect(tagLegend('cellar')).toBe('CELLAR');
-    }
+    expect(tagLegend('hallway')).toBe('HALL');
+    expect(tagLegend('outdoors')).toBe('OUTSIDE');
+    expect(tagLegend('cellar')).toBe('CELLAR');
   });
 });
 
