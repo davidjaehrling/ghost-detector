@@ -586,6 +586,13 @@
           "output": "cellar 9.9 / attic 12.1 / bright 12.7 / black 9.8 / outdoors 11.0 mean lift; 0 darkened; union box 5.8 to 14.1%; centres in margins; Plus blend, per-pixel clamp, occlusion, grain after compositing",
           "by": "fx-engineer",
           "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "node scripts/measure-ghost.mjs --route result (after 92281a7, flat glass, 2 runs, spread 0)",
+          "output": "cellar 9.0 / attic 9.4 / bright 11.1 / black 6.2 (smudge) / outdoors 14.4 mean lift; 0 darkened; 0 over-clamp; union ≤11%; cut 22/14/11/11/11%",
+          "by": "fx-engineer",
+          "date": "2026-10-14"
         }
       ],
       "passes": true,
