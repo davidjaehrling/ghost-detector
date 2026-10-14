@@ -7,7 +7,7 @@ import { color, radius, type } from '../tokens';
 
 // The FIELD LOG RELAY opt-in (brief section 2.2): a module on the viewfinder glass, in the unit's
 // voice, before any system dialog. Header and body stay on the glass; FIT RELAY and NOT NOW sit on
-// the hardware key row (slots 1 and 4), the same key in size, weight and contrast. The system
+// the hardware key row (slots 1 and 2), the same key in size, weight and contrast. CAPTURE keeps its slot and stays live. The system
 // permission is requested only from the FIT RELAY press.
 const RESULT_MS = 2400;
 
@@ -32,9 +32,9 @@ export function useRelayModule(still: boolean, onDone: () => void): { line: stri
     line === null
       ? [
           { testID: 'relay-fit', label: relayCopy.fit, legend: relayCopy.fit, onPress: fit, primary: true },
-          null,
-          null,
           { testID: 'relay-notnow', label: relayCopy.notNow, legend: relayCopy.notNow, onPress: onDone, primary: true },
+          null,
+          null, // slot 4 stays CAPTURE (the viewfinder fills it); pressing it counts as NOT NOW
         ]
       : null;
   return { line, keys };

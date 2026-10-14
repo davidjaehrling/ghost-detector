@@ -200,12 +200,17 @@ function Viewfinder({
   const state = source === 'denied' ? copy['hud.stored'] : source === 'ask' || source === 'loading' ? copy['hud.wait'] : copy['hud.live'];
   const lore = hasSeenTag(tag) ? null : LORE[tag];
 
+  // While the relay module is up its keys take slots 1 and 2; CAPTURE stays live in slot 4 and pressing
+  // it counts as NOT NOW (offered stays true, the module closes).
+  const relayKeys = relayOpen ? relayModule.keys : null;
   const keySlots: (KeySlot | null)[] = [
     // History is one tap from here (the result screen's key row carries THERM instead).
-    { testID: 'key-log', label: copy['hud.logLabel'], legend: copy['hud.log'], onPress: () => router.push('/history') },
-    null,
-    showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
-    canCapture ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => void capture(), backlit: true } : null,
+    relayKeys?.[0] ?? { testID: 'key-log', label: copy['hud.logLabel'], legend: copy['hud.log'], onPress: () => router.push('/history') },
+    relayKeys ? (relayKeys[1] ?? null) : null,
+    !relayKeys && showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
+    canCapture
+      ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => { if (relayOpen) closeRelay(); void capture(); }, backlit: true }
+      : null,
   ];
 
   return (
@@ -214,7 +219,7 @@ function Viewfinder({
       leds={liveLeds(sample.mg)}
       fixedIdentity={isStatic}
       glassLabel={`${copy['hud.mode']}. ${flux}. Activity index ${index} of 5. Location ${TAG_LABEL[tag]}.`}
-      keys={relayOpen && relayModule.keys ? relayModule.keys : keySlots}
+      keys={keySlots}
     >
       {({ w, h }) => {
         const bandH = Math.max(Math.round(h * BAND), BAND_MIN);

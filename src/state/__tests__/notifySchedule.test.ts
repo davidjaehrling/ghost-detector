@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { type Intensity, type Outcome, type Tier, localDayNumber, localMinuteOfDay } from '../../engine';
+import { type Intensity, type Outcome, type Tier, deliveryMinute, localDayNumber, localMinuteOfDay } from '../../engine';
 import {
   type Deps,
+  atNightOffset,
   buildNotifyState,
   createPlanStore,
   handleTap,
@@ -9,7 +10,7 @@ import {
   reconcileNow,
 } from '../notifySchedule';
 import { catalogue } from '../log';
-import { type ScheduledLine, createRelayStore } from '../relay';
+import { type NotifyBackend, type ScheduledLine, createRelayStore, refreshRelay } from '../relay';
 import type { KeyValueStore, ScanRecord } from '../scans';
 
 const mem = (): KeyValueStore => {
@@ -218,9 +219,51 @@ describe('reconcile', () => {
 /* ---------- the 18:00 to 22:00 promise ---------- */
 
 describe('the 18:00 to 22:00 promise', () => {
-  // DST: Europe/Berlin leaves summer time on 2026-10-25 01:00 UTC (UTC+2 to UTC+1).
-  const dstAt = Date.UTC(2026, 9, 25, 1);
-  const berlin = (ms: number) => (ms < dstAt ? 120 : 60);
+  // DST: Europe/Berlin leaves summer time on 2026-10-25 01:00 UTC (UTC+2 to UTC+1) and enters it
+  // on 2026-03-29 01:00 UTC (UTC+1 to UTC+2).
+  // Berlin's real spring night has no eligible template for these installs (the engine only fires on
+  // high-index and full-moon nights), so the spring case moves the same rule onto the full-moon week.
+  const autumnAt = Date.UTC(2026, 9, 25, 1);
+  const springAt = Date.UTC(2026, 8, 26, 1);
+  const berlinAutumn = (ms: number) => (ms < autumnAt ? 120 : 60);
+  const springForward = (ms: number) => (ms < springAt ? 60 : 120);
+  const berlin = berlinAutumn;
+  const installAtMinute = (minute: number): number => {
+    for (let ms = Date.UTC(2026, 0, 1); ; ms += 1000) if (deliveryMinute(ms) === minute) return ms;
+  };
+  const hhmm = (m: number) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+
+  // The Refuter's finding: an install minute in the middle of the window never leaves it, so the
+  // old test could not fail. 18:07 and 21:29 sit next to the window edges, where a one-hour drift
+  // from a stale offset puts the line outside 18:00 to 22:00 or off the install minute.
+  for (const minute of [18 * 60 + 7, 21 * 60 + 29]) {
+    for (const [name, from, to, year, month, zone] of [['autumn', 18, 27, 2026, 9, berlinAutumn], ['spring', 20, 27, 2026, 8, springForward]] as const) {
+      it(`keeps local ${hhmm(minute)} on every night across the ${name} DST change`, async () => {
+        const install = installAtMinute(minute);
+        let crossed = false;
+        let total = 0;
+        for (let startDay = from; startDay <= to; startDay++) {
+          const h = harness({ zone, start: { intensity: 'brave' } });
+          const now = Date.UTC(year, month, startDay, 10);
+          h.setNow(now);
+          h.plan.setInstallMs(install);
+          h.plan.touchOpen(now);
+          await reconcileNow(h.deps, 'open');
+          const lines = scheduled(h.log);
+          total += lines.length;
+          const offsets = new Set<number>();
+          for (const l of lines) {
+            offsets.add(zone(l.fireAtMs));
+            expect(localMinuteOfDay(l.fireAtMs, zone(l.fireAtMs)), `start ${startDay}, fire ${new Date(l.fireAtMs).toISOString()}`).toBe(minute);
+            expect(inWindow(l.fireAtMs, zone)).toBe(true);
+          }
+          if (offsets.size > 1) crossed = true;
+        }
+        expect(total, 'lines were scheduled').toBeGreaterThan(0);
+        expect(crossed, 'at least one run spans the change').toBe(true);
+      });
+    }
+  }
 
   it('holds for every night across a DST change', async () => {
     for (let startDay = 18; startDay <= 27; startDay++) {
@@ -230,11 +273,30 @@ describe('the 18:00 to 22:00 promise', () => {
       await reconcileNow(h.deps, 'open');
       for (const l of scheduled(h.log)) {
         expect(inWindow(l.fireAtMs, berlin), `start ${startDay}, fire ${new Date(l.fireAtMs).toISOString()}`).toBe(true);
-        const m = localMinuteOfDay(l.fireAtMs, berlin(l.fireAtMs));
-        expect(m).toBeGreaterThanOrEqual(1080);
-        expect(m).toBeLessThan(1320);
       }
     }
+  });
+
+  it('atNightOffset moves an instant to the same wall clock under the offset of its own night', () => {
+    const assumed = 120; // the offset when the search ran
+    const fire = Date.UTC(2026, 9, 26, 16, 7); // 18:07 at UTC+2 on the 26th, as the engine computes it
+    expect(atNightOffset(fire, assumed, berlin)).toBe(Date.UTC(2026, 9, 26, 17, 7)); // 18:07 at UTC+1
+    expect(atNightOffset(fire, assumed, () => 120)).toBe(fire);
+  });
+
+  it('a permission revoked in system settings is seen on the next open and cancels the lines', async () => {
+    const h = harness({ start: { intensity: 'brave' } });
+    await reconcileNow(h.deps, 'open');
+    expect(scheduled(h.log).length).toBeGreaterThan(0);
+    h.log.length = 0;
+    const system = { permission: async () => 'denied' as const };
+    const deps: Deps = { ...h.deps, refreshPermission: () => refreshRelay(h.relay, system as unknown as NotifyBackend) };
+    await reconcileNow(deps, 'focus'); // only an open re-reads the permission
+    expect(h.relay.get().system).toBe('granted');
+    await reconcileNow(deps, 'open');
+    expect(h.relay.get()).toMatchObject({ system: 'denied', enabled: false });
+    expect(h.log.some((l) => l.call === 'cancel')).toBe(true);
+    expect(scheduled(h.log)).toEqual([]);
   });
 
   it('holds for the time zones from UTC-12 to UTC+14 on the first night', async () => {

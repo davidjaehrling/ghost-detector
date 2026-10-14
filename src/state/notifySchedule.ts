@@ -184,6 +184,8 @@ export type Deps = {
   offsetAt: (ms: number) => number;
   /** A fresh seed for call number `n` at `nowMs`. */
   seed: (nowMs: number, n: number) => number;
+  /** Re-reads the stored system permission (it may have been revoked in system settings). Run on app open. */
+  refreshPermission?: () => Promise<void>;
 };
 
 const idFor = (fireAtMs: number) => `fl-${fireAtMs}`;
@@ -194,6 +196,17 @@ export function inWindow(fireAtMs: number, offsetAt: (ms: number) => number): bo
   return m >= WINDOW_START_MIN && m < WINDOW_END_MIN;
 }
 
+/**
+ * Re-expresses an instant computed with `assumedOffsetMin` as the same local date and minute under
+ * the offset of that night, so a DST change between now and the night never moves the local minute.
+ */
+export function atNightOffset(fireAtMs: number, assumedOffsetMin: number, offsetAt: (ms: number) => number): number {
+  const local = fireAtMs + assumedOffsetMin * 60_000; // wall clock as if UTC
+  let x = fireAtMs;
+  for (let i = 0; i < 3; i++) x = local - offsetAt(x) * 60_000;
+  return x;
+}
+
 function caseOpen(records: readonly ScanRecord[], caseId: number | undefined): boolean {
   const r = records.find((x) => Number(x.id) === caseId);
   return !!r && r.deepScanAt === undefined && r.declined !== true;
@@ -201,7 +214,10 @@ function caseOpen(records: readonly ScanRecord[], caseId: number | undefined): b
 
 export async function reconcileNow(d: Deps, reason: Reason): Promise<void> {
   const nowMs = d.nowMs();
-  if (reason === 'open') d.plan.touchOpen(nowMs);
+  if (reason === 'open') {
+    d.plan.touchOpen(nowMs);
+    await d.refreshPermission?.().catch(() => {});
+  }
   const rs = d.relay.get();
   const intensity = d.intensity();
   const jumpScaresOff = d.jumpScaresOff();
@@ -244,11 +260,11 @@ export async function reconcileNow(d: Deps, reason: Reason): Promise<void> {
   state = build();
   for (let n = 0; n < MAX_CHAIN; n++) {
     let next = nextNotification(state, d.seed(nowMs, n));
-    // The engine reads one offset for the whole search; if the device zone moves before the fire
-    // day (DST), ask again with the offset of that day and keep the line only if it holds.
-    if (next && !inWindow(next.fireAtMs, d.offsetAt)) {
-      next = nextNotification({ ...state, utcOffsetMin: d.offsetAt(next.fireAtMs) }, d.seed(nowMs, n));
-      if (next && !inWindow(next.fireAtMs, d.offsetAt)) next = null;
+    // The engine reads one offset for the whole search. Put the fire instant at the same local
+    // minute on its own night, using the offset in force that night (DST), and keep it only if it holds.
+    if (next) {
+      const fireAtMs = atNightOffset(next.fireAtMs, state.utcOffsetMin, d.offsetAt);
+      next = fireAtMs > nowMs && inWindow(fireAtMs, d.offsetAt) ? { ...next, fireAtMs } : null;
     }
     if (!next) break;
     const rec: SentRecord = { id: idFor(next.fireAtMs), templateId: next.templateId, ...(next.caseId !== undefined ? { caseId: next.caseId } : {}), sentAtMs: next.fireAtMs, opened: false };

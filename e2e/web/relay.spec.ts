@@ -6,7 +6,9 @@ import { expect, test, type Page } from '@playwright/test';
 
 const BODY = 'Fit the relay? At most one field-log line a night. Index, moon or an open case. 18:00 to 22:00. No sound. Lines are simulated.';
 
-const calls = (page: Page) => page.evaluate(() => (window.__notifyLog ?? []).map((e) => e.call));
+// `getPermission` is the silent re-read of the stored permission on app open; it never asks. The
+// opt-in assertions are about what is asked and created, so it is left out of the list.
+const calls = (page: Page) => page.evaluate(() => (window.__notifyLog ?? []).map((e) => e.call).filter((c) => c !== 'getPermission'));
 
 async function backFromACase(page: Page) {
   await page.getByTestId('history-row-0001').filter({ visible: true }).click();
@@ -36,7 +38,7 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   await expect(page.getByTestId('relay-body')).toHaveText(BODY);
   // Nothing has been requested yet: the dialog follows the tap.
   expect(await calls(page)).toEqual([]);
-  // The keys sit on the hardware row, slots 1 and 4, inside the key band and outside the module.
+  // The keys sit on the hardware row, slots 1 and 2 (CAPTURE keeps slot 4), inside the key band and outside the module.
   await expect(mod.getByTestId('relay-fit')).toHaveCount(0);
   await expect(mod.getByTestId('relay-notnow')).toHaveCount(0);
   const slots = await Promise.all(['relay-fit', 'relay-notnow'].map((id) => page.getByTestId(id).boundingBox()));
@@ -57,6 +59,11 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
       return [cs.color, cs.fontSize, cs.fontWeight, cs.fontFamily, bs.backgroundColor, bs.borderColor];
     });
   expect(await style('relay-fit')).toEqual(await style('relay-notnow'));
+  // CAPTURE stays live in its usual slot (last, right of the relay keys, same row).
+  const cap = (await page.getByTestId('key-capture').boundingBox())!;
+  expect(cap.x).toBeGreaterThan(slots[1]!.x);
+  expect(Math.round(cap.y)).toBe(Math.round(slots[0]!.y));
+  await expect(page.getByTestId('key-capture')).toBeEnabled();
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot('relay-module.png', { maxDiffPixels: 150 });
 
@@ -87,6 +94,20 @@ test('a system denial reports it, and the Settings row opens system settings wit
   await expect.poll(() => calls(page)).toContain('openSystemSettings');
   expect((await calls(page)).filter((c) => c === 'requestPermission')).toHaveLength(1);
   await expect(page.getByTestId('setting-relay-state')).toHaveText('OFF');
+});
+
+test('CAPTURE during the module counts as NOT NOW: no request, offered stays true, module never returns', async ({ page }) => {
+  await start(page, '&notify=granted');
+  await backFromACase(page);
+  await expect(page.getByTestId('relay-module')).toBeVisible();
+  await page.getByTestId('key-capture').click();
+  await expect(page.getByTestId('relay-module')).toHaveCount(0);
+  expect(await calls(page)).toEqual([]);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('fs4.relay.v1') ?? 'null'))).toMatchObject({ offered: true, enabled: false });
+  await page.goto('/history?static=1&log=demo3&session=1&notify=granted');
+  await backFromACase(page);
+  await page.waitForTimeout(300);
+  await expect(page.getByTestId('relay-module')).toHaveCount(0);
 });
 
 test('NOT NOW is final: no request, no second module, a RELAY row in Settings', async ({ page }) => {

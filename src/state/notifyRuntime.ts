@@ -3,7 +3,7 @@ import { getBelief } from './belief';
 import { cadenceStore } from './cadence';
 import { notifyBackend } from './notifyBackend';
 import { type Deps, type PlanStore, type Reason, type TapRoute, createPlanStore, handleTap, reconcileNow } from './notifySchedule';
-import { type ScheduleBackend, relayStore } from './relay';
+import { type ScheduleBackend, refreshRelay, relayStore } from './relay';
 import { type ScanRecord, getIntensity, listScans } from './scans';
 import { getSettings } from './settings';
 import { platformStorage } from './storage';
@@ -38,6 +38,7 @@ const defaultDeps = (): Deps => ({
   nowMs: harnessNow,
   offsetAt: (ms) => -new Date(ms).getTimezoneOffset(),
   seed: seedFor,
+  refreshPermission: () => refreshRelay(relayStore, notifyBackend),
 });
 
 let chain: Promise<void> = Promise.resolve();
