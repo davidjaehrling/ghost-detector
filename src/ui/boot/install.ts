@@ -1,4 +1,5 @@
 import { mulberry32 } from './seed';
+import { platformStorage } from '../../state/storage';
 
 // Per-install identity (Bible section 1 and 11): serial FS4-YYWW-NNNNN-C with a
 // Luhn check digit, CAL date, and an inspector stamp PRÜF 01 to 12.
@@ -46,9 +47,7 @@ export function identityFromSeed(seed: number, date: Date): InstallIdentity {
   return { serial: serialFor(yy, ww, unit), cal: iso(date), pruef: String(pruef).padStart(2, '0') };
 }
 
-// The install seed is created once and kept. Web keeps it in localStorage;
-// native persistence arrives with the state layer, until then it lives for the
-// process (see decisions log). Never throws.
+// The install seed is created once and kept in the platform storage. Never throws.
 const KEY = 'install-seed';
 let memorySeed: number | null = null;
 
@@ -56,7 +55,7 @@ export function readInstallSeed(): number {
   if (memorySeed !== null) return memorySeed;
   let seed: number | null = null;
   try {
-    const ls = (globalThis as { localStorage?: Storage }).localStorage;
+    const ls = platformStorage();
     const raw = ls?.getItem(KEY);
     if (raw) seed = Number(raw);
     if (seed === null || !Number.isFinite(seed)) {

@@ -1,7 +1,8 @@
 import type { EntityProfile, Intensity, Outcome, OutcomeHistory } from '../engine';
+import { platformStorage } from './storage';
 
-// In-memory scan store. Web mirrors it to localStorage (guarded); native has no
-// persistence yet, so records live for the process. The engine reads history
+// In-memory scan store. Persisted through ./storage (localStorage on web,
+// expo-sqlite kv-store on native); memory-only when neither is available. The engine reads history
 // (docs: src/engine/README.md), so getHistory() derives it from the records.
 
 export type ScanRecord = {
@@ -41,13 +42,9 @@ const DEFAULT_INTENSITY: Intensity = 'standard';
 const INTENSITIES: readonly Intensity[] = ['calm', 'standard', 'brave'];
 const DRY_TIERS = new Set(['quiet', 'trace', 'active']);
 
+/** The storage every store defaults to: localStorage on web, expo-sqlite kv-store on native. */
 export function webStorage(): KeyValueStore | null {
-  try {
-    const ls = (globalThis as { localStorage?: KeyValueStore }).localStorage;
-    return ls ?? null;
-  } catch {
-    return null;
-  }
+  return platformStorage();
 }
 
 export function createScanStore(opts: { storage?: KeyValueStore | null; sessionStartMs?: number } = {}): ScanStore {
