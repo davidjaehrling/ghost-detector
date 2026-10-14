@@ -76,7 +76,7 @@
   "result.line.critical": "Fragmento EVP registado. CH2 {hz} Hz.",
   "result.coldSpot": "PONTO FRIO ΔT {dt} °C · DERIVA {khz} kHz",
   "result.hidden.designation": "DESIGNAÇÃO",
-  "result.hidden.behaviour": "COMPORTAMENTO",
+  "result.hidden.behaviour": "COMPORT.",
   "deep.legend": "DEEP SCAN",
   "deep.label": "Deep scan",
   "deep.sub": "VÍDEO PUBLICITÁRIO PRIMEIRO",

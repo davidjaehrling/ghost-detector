@@ -222,3 +222,7 @@ Over the +25% allowance for status lines after review: ES `scan.phase.4` and PT 
 ## Review round 2
 
 Errors only. DE `engine.profile.behaviour.14`, `deep.evp.10` (`mach es aus`) and `engine.profile.attachment.00` corrected; ES `lore.outdoors.1` now reads `por encima de`; PT `history.relayLabelOn` and `history.relayLabelOff` end `Abrir Definições`. The ES table row for `result.back` now lists `ESCANEAR` (8), as in the file.
+
+### Review round 2 addendum
+
+PT `result.hidden.behaviour` is `COMPORT.` (8 against `BEHAVIOUR` 9). The round 1 value `COMPORTAMENTO` (13) broke mid-word in the entity-card label column at 390 px. `CONDUTA` was not used: it means moral conduct or a duct, which the reviewer flagged. `COMPORT.` keeps the reviewer's term. The siblings pass the same budget: `result.hidden.designation` DE 11, ES 11, PT 10 against EN 11; `result.hidden.behaviour` DE `VERHALTEN` 9, ES `CONDUCTA` 8.
