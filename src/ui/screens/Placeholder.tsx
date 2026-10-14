@@ -9,6 +9,7 @@ import { color, radius, type } from '../tokens';
 
 export type KeySpec = KeySlot;
 
+
 // In-character placeholder: housing frame, nameplate with the screen code, one
 // readout line on the glass, and keys (the forward key last, right of centre).
 export function Placeholder({
@@ -17,13 +18,17 @@ export function Placeholder({
   readout,
   sub,
   keys,
+  graticule = true,
   children,
 }: {
   testID: string;
   code: string;
   readout?: string;
   sub?: string;
-  keys: KeySpec[];
+  /** Up to four slots, left to right; fewer than four sit right-aligned. `null` leaves a slot blank. */
+  keys: (KeySpec | null)[];
+  /** List screens draw none: the grid's outer columns would show at the glass edges beside the list. */
+  graticule?: boolean;
   children?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -37,7 +42,7 @@ export function Placeholder({
       <View style={s.windowWrap}>
         <View style={s.glass}>
           <View style={StyleSheet.absoluteFill} onLayout={onLayout} pointerEvents="none" />
-          <Graticule w={size.w} h={size.h} />
+          {graticule ? <Graticule w={size.w} h={size.h} /> : null}
           <View style={s.readoutBlock}>
             <Text style={s.sub}>{code}</Text>
             {sub ? <Text style={s.sub}>{sub}</Text> : null}

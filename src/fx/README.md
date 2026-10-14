@@ -695,3 +695,97 @@ Script: Playwright opens the route at 390 x 844 (1x), waits 2.5 s, records
 - The `FeedTint` RN path has no barrel; a frame processor would be needed for the shader path on
   the live camera.
 - Tier extent 14 and 17% (D-017) cannot be met under the 15% cap; implemented as 13 and 14.5%.
+
+## Share card (P6-01)
+`src/fx/share/`: the field card from docs/p6-brief.md section 1, drawn offscreen with Skia.
+
+### API (Builder A)
+```ts
+import { renderShareCard, STORE_NAME } from '../src/fx/share';
+renderShareCard(record: ScanRecord, opts: { format: 'story' | 'square'; beliefBand?: [number, number]; store?: string }): Promise<ShareCard>
+// ShareCard: { uri, png: Uint8Array, fileName, width, height, image: SkImage, texts, marks, strip, figure, ... }
+```
+- `uri`: native writes `field-card-<case>-simulated.png` to `Paths.cache` (expo-file-system `File`) and
+  returns its `file://` URI; web returns a `data:image/png;base64,` URL (`save.ts` / `save.web.ts`).
+  The PNG is re-encoded from pixels, so no EXIF or location travels.
+- Pass `beliefBand: BELIEF_PROFILE[getBelief()].opacityRange` when the user answered, exactly as the
+  result screen does, so the figure keeps the opacity the user saw. Throws on failure (show
+  `E-31 PRINTER FAULT. CARD NOT SAVED.`).
+- `STORE_NAME = '[STORE NAME]'` in `constants.ts`, filled at Gate 1. Nameplate `VELDEN  FS-4/87-P` (Bible section 2), no serial.
+- `expo-file-system` (57.0.7) is installed as a dependency of `expo`, not listed in package.json;
+  Builder A should add it with `npx expo install expo-file-system` when wiring the share flow.
+
+### What it draws (layouts in `constants.ts`, brief section 1.4 as amended by D-034)
+Housing (n3, 6% corner falloff, 2.5% seeded noise, worn edge streaks, the cast top highlight and
+bottom shadow), the n5 nameplate (engraved border groove, two domed rivets at each end, the seeded
+scuff, engraved n2 B612 Mono Bold text), the photo, the reading row and the footer. Every string
+comes from `text.ts` (`cardTexts` lists them; `CardRender.texts` lists the runs as broken into
+lines); the renderer has no path, line or arc drawing.
+- Housing detail (D-034 b, Bible section 2), in the dead bands only (story: above the nameplate
+  and beside the footer, outside the safe zone 250 to 1580; square: beside the nameplate and the
+  footer): four Phillips screws with seeded slot angles, one burred; seeded paint-wear streaks; a
+  textless calibration sticker rotated -1.5° with its bottom-right corner lifted over a shadow. One
+  hue (the n ramp), rects and circles only, no asset files.
+- Photo: the compositor drawn with no React tree (`compositor/offscreen.ts`, `drawComposite`) with
+  the same set-up, ghost layer, shader and uniforms as `<Composite>` in its final state. The panel
+  is laid out at half the card's photo size and drawn at 2x (HIRES_SCALE). `figure.ts` repeats the
+  result screen's placement rule (caseSeed, belief band, tier ladder, TRACE smudge, crop on figure);
+  only the frame differs, so the opacity is the screen's (tested).
+- Data strip (D-034 a): one burned record, every run at one size, `stripSize` = the mark floor or
+  the on-screen strip scaled to the photo if larger: VT323 76 px (cap 43) on story, 47 px (cap 27)
+  on square. Where it fits on one line (square) it reads `CASE 0004 · SPI 94 · ΔT -9.9 °C · 22:48 ·
+  SIMULATED`. Where it does not (story: the case data alone is 1186 px at 76 px against 940 px), the
+  case data breaks at its ` · ` joints into the fewest balanced lines and SIMULATED takes the last
+  line, left-aligned, on the same baseline grid (pitch 1.5 cap): `CASE 0004 · SPI 94` /
+  `ΔT -9.9 °C · 22:48` / `SIMULATED`. p3 with a 2 px n0 drop copy, drawn before the grain (the
+  composite runs with grain 0, then `GRAIN_SKSL` adds the compositor's grain step over the photo,
+  figure and strip together, FractalNoise at 0.9 / 2 per card pixel, same seed).
+- The strip sits bottom-left, or bottom-right when the figure's centre is in the left half of the
+  panel, so the scrim never boxes the figure.
+- Scrim: starts at the on-screen 40% n0 and rises until p3 holds 5:1 over the brightest channels
+  under the strip with the grain against it (0.93 on the bright fixture). Deviation (D-033 a): the
+  brief's fixed 40% cannot hold 4.5:1 on a bright photo; the acceptance governs.
+- Reading row (D-034 b): `SPI TIER` (p5, CRITICAL in red), then the EVP quote after a Deep Scan or
+  `SIGNATURE n% DECODED` (`NO SIGNATURE` on QUIET) in p5, then `CLASS: ... · ERA ...` in p3 after
+  a Deep Scan. Story 96 / 62 / 42 px in y 1558 to 1772; square 80 / 62 / 36 px (line cap 35) in
+  y 816 to 1008. The block is centred on its cap boxes.
+- Footer: `[STORE NAME] · READINGS ARE SIMULATED`, one run at the mark's size in B612 Mono n6
+  (56 px story, 32 px square). Deviation: on story the run is 1347 px (B612 Mono advance 0.65 em)
+  against 1032 px, so it breaks at its dot into two centred lines at the same size (`[STORE NAME]`
+  / `READINGS ARE SIMULATED`, y 1794 to 1899). To fit that and the larger row, the story photo is
+  1000 x 1240 at y 300 (was 1250 at 320) and the nameplate moved to y 228.
+- CPU raster surfaces throughout, so two renders of a record are byte-identical.
+
+### Measured (Vitest on CanvasKit in Node, `src/fx/share/__tests__/shareCard.test.ts`)
+Cap height = ink rows of the mark, in a window around the mark's own line; contrast =
+10th-percentile glyph-core luminance against the 95th-percentile luminance of pixels more than 3 px
+from any glyph, after scrim and grain. The test also asserts every strip run and the footer are at
+one size (no enlarged token).
+
+| format | fixture | strip cap | strip contrast | scrim | footer cap | footer contrast | floor |
+|---|---|---|---|---|---|---|---|
+| story | cellar critical deep | 43 | 6.20 | 0.40 | 43 | 7.57 | 38.4 |
+| story | bright strong | 43 | 5.78 | 0.93 | 43 | 7.57 | 38.4 |
+| story | outdoors active | 43 | 5.95 | 0.89 | 43 | 7.57 | 38.4 |
+| story | black quiet | 43 | 6.40 | 0.40 | 43 | 7.57 | 38.4 |
+| square | cellar critical deep | 27 | 6.17 | 0.40 | 24 | 7.57 | 21.6 |
+| square | bright strong | 27 | 5.57 | 0.93 | 24 | 7.57 | 21.6 |
+| square | outdoors active | 27 | 5.76 | 0.89 | 24 | 7.57 | 21.6 |
+| square | black quiet | 27 | 6.40 | 0.40 | 24 | 7.57 | 21.6 |
+
+Story strip scrim y 1319 to 1520 (safe zone 250 to 1580). Reading row: SPI/tier cap 55 (story) and
+45 (square); `SIGNATURE n% DECODED` cap 35 on both. Render time on CanvasKit CPU (Node): about 5 s
+square and 8 s story, most of it the composite shader on 1.24 M pixels.
+
+### L2
+`/share-probe?format=story|square&case=<demo>[-deep|-undecoded]&fixture=<f>` renders through
+`renderShareCard` (web data URL) scaled to fit; `e2e/web/share.spec.ts` checks the data URL and
+its 1080 x 1920 / 1080 x 1080 size and takes `share-story.png`, `share-square.png` (CRITICAL, Deep
+Scanned) and `share-story-undecoded.png` (STRONG, `SIGNATURE n% DECODED`) at 390
+(`maxDiffPixels: 400`).
+
+### Unverified
+- Native: font loading through expo-asset, `Data.fromURI` on the photo, the cache write, and the
+  render time (CPU raster; the brief's 800 ms target is not measured, no device). If it is slow on
+  a phone, the composite step can move to `makeSurface` (GPU) at the cost of cross-device byte identity.
+- Feed compression of a faint figure (phone check 3, brief section 1.4).

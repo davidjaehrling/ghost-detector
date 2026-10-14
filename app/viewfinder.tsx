@@ -1,7 +1,11 @@
 import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
-import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { type RefObject, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { cadenceStore } from '../src/state/cadence';
+import { syncRelay } from '../src/state/notifyRuntime';
+import { relayDue, relayStore } from '../src/state/relay';
+import { listScans } from '../src/state/scans';
 import { sessionActivity } from '../src/state/session';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
 import type { KeySlot } from '../src/ui/boot/parts';
@@ -18,7 +22,9 @@ import { useReduceMotion } from '../src/ui/useReduceMotion';
 import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
+import { takeReturnNote } from '../src/ui/interstitial';
 import { gateOpenFor } from '../src/ui/interstitialParams';
+import { RelayModule, useRelayModule } from '../src/ui/relay/RelayModule';
 import { useInterstitialGate } from '../src/ui/useInterstitialGate';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
 import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier } from '../src/ui/viewfinder/flux';
@@ -104,6 +110,32 @@ function Viewfinder({
   // An interstitial may show only once the camera permission is granted (or on web, where there is none).
   useInterstitialGate(gateOpenFor(source));
 
+  // The FIELD LOG RELAY opt-in: on the first eligible return from a result (after the 3rd scan or the
+  // first STRONG), never when that return shows an interstitial (the next eligible return gets it).
+  const [relayOpen, setRelayOpen] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      void syncRelay('focus');
+      const note = takeReturnNote();
+      if (!note) return;
+      const scans = listScans();
+      const due = relayDue({
+        state: relayStore.get(),
+        scanCount: scans.length,
+        hasStrong: scans.some((r) => r.outcome.tier === 'strong' || r.outcome.tier === 'critical'),
+        sessionIndex: cadenceStore.sessionIndex(),
+        fromResult: true,
+        interstitial: note.interstitial,
+      });
+      if (due) {
+        relayStore.markOffered();
+        setRelayOpen(true);
+      }
+    }, []),
+  );
+  const closeRelay = useCallback(() => setRelayOpen(false), []);
+  const relayModule = useRelayModule(isStatic, closeRelay);
+
   const reduceMotion = useReduceMotion();
   const active = useActive();
   const [fluxSeed] = useState(() => (isStatic ? STATIC_SEED : Date.now() % 2 ** 31));
@@ -168,12 +200,17 @@ function Viewfinder({
   const state = source === 'denied' ? copy['hud.stored'] : source === 'ask' || source === 'loading' ? copy['hud.wait'] : copy['hud.live'];
   const lore = hasSeenTag(tag) ? null : LORE[tag];
 
+  // While the relay module is up its keys take slots 1 and 2; CAPTURE stays live in slot 4 and pressing
+  // it counts as NOT NOW (offered stays true, the module closes).
+  const relayKeys = relayOpen ? relayModule.keys : null;
   const keySlots: (KeySlot | null)[] = [
     // History is one tap from here (the result screen's key row carries THERM instead).
-    { testID: 'key-log', label: copy['hud.logLabel'], legend: copy['hud.log'], onPress: () => router.push('/history') },
-    null,
-    showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
-    canCapture ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => void capture(), backlit: true } : null,
+    relayKeys?.[0] ?? { testID: 'key-log', label: copy['hud.logLabel'], legend: copy['hud.log'], onPress: () => router.push('/history') },
+    relayKeys ? (relayKeys[1] ?? null) : null,
+    !relayKeys && showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
+    canCapture
+      ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => { if (relayOpen) closeRelay(); void capture(); }, backlit: true }
+      : null,
   ];
 
   return (
@@ -226,6 +263,8 @@ function Viewfinder({
                 <Text style={s.noticeText}>{copy['permission.denied.next']}</Text>
               </View>
             ) : null}
+
+            {relayOpen ? <RelayModule bottom={bandH + 12} line={relayModule.line} onDone={closeRelay} /> : null}
 
             <View style={[s.band, { height: bandH }]} testID="hud-band">
               <View style={s.tagRow} accessibilityRole="tablist">

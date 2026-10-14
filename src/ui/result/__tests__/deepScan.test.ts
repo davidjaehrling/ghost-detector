@@ -53,10 +53,11 @@ vi.mock('../../../ads', () => ({
   rewarded: { subscribe: () => () => {}, status: () => 'ready', load: () => load(), show: () => show() },
 }));
 vi.mock('../../../state/useConsent', () => ({ useConsent: () => ({ status: 'obtained', canRequestAds: consent.requestable }) }));
-vi.mock('../../../state/scans', () => ({ unlockDeepScan: vi.fn() }));
+const markDeclined = vi.fn();
+vi.mock('../../../state/scans', () => ({ unlockDeepScan: vi.fn(), markDeclined: (id: string) => markDeclined(id) }));
 vi.mock('../../interstitial', () => ({ onRewardedShown: vi.fn() }));
 
-function renderDeepScan() {
+function renderDeepScan(persist = false) {
   let out!: ReturnType<typeof useDeepScan>;
   const render = () => {
     for (let pass = 0; pass < 5; pass++) {
@@ -64,7 +65,7 @@ function renderDeepScan() {
       rt.dirty = false;
       // The harness stands in for a component render, so the hook is called here on purpose.
       // eslint-disable-next-line react-hooks/rules-of-hooks
-      out = useDeepScan({ id: 'scan-1', enabled: true, unlockedAt: undefined, persist: false });
+      out = useDeepScan({ id: 'scan-1', enabled: true, unlockedAt: undefined, persist });
       const todo = rt.effects.splice(0);
       for (const e of todo) e.fn();
       if (!rt.dirty && todo.length === 0) break;
@@ -139,6 +140,23 @@ describe('DEEP SCAN analytics', () => {
     const render = renderDeepScan();
     await render().press();
     expect(track).not.toHaveBeenCalledWith('deep_scan_rewarded');
+  });
+
+  it('marks the case declined when the ad is dismissed without the reward', async () => {
+    show.mockResolvedValueOnce({ shown: true, earned: false });
+    await renderDeepScan(true)().press();
+    expect(markDeclined).toHaveBeenCalledWith('scan-1');
+  });
+
+  it('does not mark the case declined when the reward is earned, or for a record not in the store', async () => {
+    markDeclined.mockClear();
+    await renderDeepScan(true)().press();
+    expect(markDeclined).not.toHaveBeenCalled();
+    rt.slots = [];
+    rt.effects = [];
+    show.mockResolvedValueOnce({ shown: true, earned: false });
+    await renderDeepScan(false)().press();
+    expect(markDeclined).not.toHaveBeenCalled();
   });
 
   it('a declined ad requests a fresh one, and a second tap plays it', async () => {

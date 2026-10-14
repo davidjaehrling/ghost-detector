@@ -64,3 +64,25 @@ Invariants (each covered by a 10,000-sequence property test in `__tests__/adCade
   (1 h, the AdMob expiry); a decision never has `preload` and `show` both true.
 A backwards clock on `appLaunch` (reboot) clamps the last show and rewarded times to the new now,
 so gaps can only grow. `show` also resets the counters itself; `interstitialShown` re-syncs them.
+
+## Notification scheduler (`notify.ts`, docs/p6-brief.md section 2 and 4, D-032)
+Pure and seeded (mulberry32). No clock: the caller passes `nowMs` and `utcOffsetMin` (local offset from UTC at `nowMs`).
+
+- `nextNotification(state: NotifyState, seed) -> Notification | null` where
+  `Notification = { templateId: 1..5, title, body, fireAtMs, caseId? }`. Returns the next single item to schedule.
+  After scheduling, append it to `state.sent` (`sentAtMs = fireAtMs`, `opened: false`) and call again for the one after.
+  `sent` items with `sentAtMs > nowMs` count as pending for the night and weekly rules. Update `opened` when a tap lands.
+  Use a fresh seed per call (for example `seedFrom(installId, nowMs)`).
+- `applyIntensityChange(prev, next: NotifyState, pending: PendingItem[]) -> { cancelIds, reschedule }`. A switch to Calm cancels all pending;
+  otherwise items the new template set or cap no longer allow are cancelled (earliest kept first). Call it whenever intensity or the jump-scare toggle changes, then call `nextNotification` if `reschedule`.
+- `NotifyState`: `intensity`, `belief` ('yes' | 'unsure' | 'no'), `jumpScaresOff`, `sessionCount` (sessions started, current included), `optedIn`,
+  `installMs`, `lastAppOpenMs`, `scans: ScanSummary[]` (`caseId, atMs, tier, spi, decodedPct, decoded, declined, newClass, tags`),
+  `loggedTags` (one entry per logged case), `catalogueCount` (of 24), optional `lastLoggedClass` (template 5 names it; omitted drops the clause), `sent: SentItem[]` (`SentItem.catalogueCount?` records the count a template 5 went out at), `nowMs`, `utcOffsetMin`.
+- Rules: opt-in and `sessionCount >= 2`; first delivery on a later calendar day and 20 h after install; fire time is one fixed minute per install inside 18:00 to 21:30 local inclusive (`DELIVERY_END_MIN` = 1290, slack for inexact Android alarms, D-035) (`deliveryMinute(installMs)`, seeded from `installMs`, same every night; the `seed` argument is now unused);
+  one per local night; caps Brave 3, Standard 2, Calm 1 over every 7 day window; jump-scares off and two ignored in a row each drop one level (floor 1);
+  no scheduling once `nowMs - lastAppOpenMs >= 7 days`, and nothing lands past that mark. Calm sends templates 2 and 5 only.
+  Template 4: unresolved (41..73% decoded, not deep-scanned, not declined), case under 7 days old, once per case, not on Calm.
+  Priority 2, 3, 1, 5, 4. Believers get one lore line on template 3; sceptics and "not sure" get numbers only.
+- Sky: `forecastIndex(ms, utcOffsetMin)` is a port of `activityIndex` in `src/ui/boot/activity.ts` (tested equal over 1,000 timestamps) and returns `{ index, moonPct }`. Every number in a title or body is computed, never hard-coded: `N/5` is `forecastIndex` at the hour the sentence names (22:00 of the delivery night, or 03:00 after it for template 2's second figure), `m%` is the moon at the delivery instant (tested over 1,000 states). Template 1 needs the 22:00 index at 4 (moon lift), because the 03:00 index alone is 4 on every night.
+- Templates: 1 `FIELD LOG · IDX [i22]/5 AT 22:00` / `Moon [m]%. Forecast [i22]/5 after 22:00. [i03]/5 at 03:00.`; 2 `FIELD LOG · MOON [m]%` / `Full moon. Forecast index [i22]/5 from 22:00. [i03]/5 at 03:00.`; 3 `FIELD LOG · [TAG]` / `[Tag] on file, [n] cases. Forecast index [i22]/5 after 22:00.`; 4 `FIELD LOG · CASE [0000]` / `Signature [p]% decoded. Unresolved.`; 5 `FIELD LOG · CATALOGUE [c]/24` / `[n] classes unlogged. Last logged: [CLASS].` (once per `catalogueCount`).
+- Copy: titles open with `FIELD LOG`; no EVP text; no claim words (`CLAIM_WORDS`); tags are sanitised and dropped if they contain a banned or claim word.

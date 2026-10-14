@@ -1,10 +1,13 @@
 import { B612Mono_400Regular, B612Mono_700Bold } from '@expo-google-fonts/b612-mono';
 import { VT323_400Regular } from '@expo-google-fonts/vt323';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ensureConsent } from '../src/ads';
 import { track } from '../src/analytics';
+// Loaded at start so the web stub latches ?notify= before the router drops the query.
+import '../src/state/notifyBackend';
+import { listenForTaps, syncRelay } from '../src/state/notifyRuntime';
 import { useSkiaReady } from '../src/fx/useSkiaReady';
 import { AppState } from 'react-native';
 import { startCadence } from '../src/ui/interstitial';
@@ -28,9 +31,24 @@ export default function RootLayout() {
   useEffect(() => {
     startCadence(AppState);
   }, []);
+  // FIELD LOG RELAY: reconcile the scheduled lines on every open and every return to the foreground;
+  // a tap on a line opens the case or the viewfinder and nothing else.
+  const router = useRouter();
+  useEffect(() => {
+    void syncRelay('open');
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void syncRelay('open');
+    });
+    return () => sub.remove();
+  }, []);
   const [loaded] = useFonts({ VT323_400Regular, B612Mono_400Regular, B612Mono_700Bold });
   // Web waits for CanvasKit (Skia's wasm backend) before the first screen; native is ready at once.
   const skia = useSkiaReady();
-  if (!loaded || !skia) return null;
+  const ready = loaded && skia;
+  useEffect(() => {
+    if (!ready) return;
+    return listenForTaps((route) => router.navigate(route));
+  }, [ready, router]);
+  if (!ready) return null;
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.n3 } }} />;
 }

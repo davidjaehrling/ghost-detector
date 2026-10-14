@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_GAP_MS, cadenceStore } from '../../state/cadence';
-import { SHOW_DELAY_MS, TAP_EXPIRY_MS, onBackToViewfinder, onFreshResult, resetInterstitialRuntime, setGate, startCadence } from '../interstitial';
+import { SHOW_DELAY_MS, TAP_EXPIRY_MS, onBackToViewfinder, onCardShared, onFreshResult, resetInterstitialRuntime, setGate, startCadence, takeReturnNote } from '../interstitial';
 
 const load = vi.fn(async () => true);
 const show = vi.fn(async () => ({ shown: true, earned: false }));
@@ -37,6 +37,45 @@ beforeEach(() => {
   cadenceStore.reset();
 });
 afterEach(() => vi.useRealTimers());
+
+describe('return note for the relay opt-in', () => {
+  it('says the return shows an ad when the cadence decides show, once', () => {
+    sessionOne();
+    onFreshResult();
+    onBackToViewfinder();
+    expect(takeReturnNote()).toEqual({ interstitial: true });
+    expect(takeReturnNote()).toBeNull();
+  });
+
+  it('says no ad for a return from a reopened case, and null when no return happened', () => {
+    sessionOne();
+    expect(takeReturnNote()).toBeNull();
+    onBackToViewfinder();
+    expect(takeReturnNote()).toEqual({ interstitial: false });
+  });
+});
+
+describe('mid-share', () => {
+  it('skips the interstitial on the return after a share', async () => {
+    sessionOne();
+    onFreshResult();
+    onCardShared();
+    onBackToViewfinder();
+    expect(takeReturnNote()).toEqual({ interstitial: false });
+    setGate(true);
+    await vi.advanceTimersByTimeAsync(SHOW_DELAY_MS + 100);
+    expect(show).not.toHaveBeenCalled();
+  });
+
+  it('a new fresh result clears the flag', () => {
+    sessionOne();
+    onFreshResult();
+    onCardShared();
+    onFreshResult();
+    onBackToViewfinder();
+    expect(takeReturnNote()).toEqual({ interstitial: true });
+  });
+});
 
 describe('interstitial show rules', () => {
   it('drops a pending show whose gate opens more than 3 s after the tap', async () => {

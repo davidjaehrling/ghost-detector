@@ -1,4 +1,5 @@
 import type { EntityProfile, Intensity, Outcome, OutcomeHistory } from '../engine';
+import { createMoonsStore, createNightsStore, type MoonsStore, type NightsStore } from './log';
 import { platformStorage } from './storage';
 
 // In-memory scan store. Persisted through ./storage (localStorage on web,
@@ -17,6 +18,8 @@ export type ScanRecord = {
   profile: EntityProfile;
   /** Set when a rewarded DEEP SCAN finished for this scan (P5-04): full profile, high-resolution apparition, EVP line. */
   deepScanAt?: number;
+  /** Set when a rewarded ad for this scan was dismissed without the reward. The log shows ARCHIVED instead of UNRESOLVED. */
+  declined?: boolean;
 };
 
 export type KeyValueStore = { getItem(k: string): string | null; setItem(k: string, v: string): void };
@@ -27,6 +30,14 @@ export type ScanStore = {
   /** Marks the scan as deep-scanned and persists it. False when the case does not exist. Idempotent. */
   unlockDeepScan(id: string, atMs?: number): boolean;
   listScans(): ScanRecord[];
+  /** Marks the scan as declined (rewarded ad dismissed without reward) and persists it. False when the case does not exist. Idempotent. */
+  markDeclined(id: string): boolean;
+  /** Harness only: stores these records, with their ids, when the store is empty. False when it is not. */
+  seedScans(records: ScanRecord[]): boolean;
+  /** Distinct local nights with a scan. Only rises, even when old records are dropped. */
+  nightsLogged(): number;
+  /** Distinct full moons with a scan in their window. Only rises, even when old records are dropped. */
+  moonsLogged(): number;
   getHistory(nowMs?: number): OutcomeHistory;
   getRecentNames(): string[];
   /** Trait lines of the last 20 records, newest last (no-repeat input for the profile generator). */
@@ -47,8 +58,10 @@ export function webStorage(): KeyValueStore | null {
   return platformStorage();
 }
 
-export function createScanStore(opts: { storage?: KeyValueStore | null; sessionStartMs?: number } = {}): ScanStore {
+export function createScanStore(opts: { storage?: KeyValueStore | null; sessionStartMs?: number; nights?: NightsStore; moons?: MoonsStore } = {}): ScanStore {
   const storage = opts.storage === undefined ? webStorage() : opts.storage;
+  const nights = opts.nights ?? createNightsStore(storage);
+  const moons = opts.moons ?? createMoonsStore(storage);
   const sessionStart = opts.sessionStartMs ?? Date.now();
   let records: ScanRecord[] | null = null;
   let intensity: Intensity | null = null;
@@ -81,6 +94,8 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
       const id = String(next).padStart(4, '0');
       all.push({ ...record, id });
       if (all.length > MAX_RECORDS) all.splice(0, all.length - MAX_RECORDS);
+      nights.record(record.createdAt);
+      moons.record(record.createdAt);
       persist();
       return id;
     },
@@ -94,7 +109,29 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
       }
       return true;
     },
+    markDeclined(id) {
+      const rec = load().find((r) => r.id === id);
+      if (!rec) return false;
+      if (!rec.declined) {
+        rec.declined = true;
+        persist();
+      }
+      return true;
+    },
     listScans: () => [...load()],
+    seedScans(seed) {
+      const all = load();
+      if (all.length > 0) return false;
+      for (const r of seed) {
+        all.push({ ...r });
+        nights.record(r.createdAt);
+        moons.record(r.createdAt);
+      }
+      persist();
+      return true;
+    },
+    nightsLogged: () => nights.count(load()),
+    moonsLogged: () => moons.count(load()),
     getRecentNames: () => load().map((r) => r.profile.name).slice(-20),
     getRecentLines: () => load().slice(-20).flatMap((r) => r.profile.traits ?? []),
     getHistory(nowMs = Date.now()) {
@@ -158,7 +195,11 @@ const store = createScanStore();
 export const saveScan = store.saveScan;
 export const getScan = store.getScan;
 export const unlockDeepScan = store.unlockDeepScan;
+export const markDeclined = store.markDeclined;
 export const listScans = store.listScans;
+export const seedScans = store.seedScans;
+export const nightsLogged = store.nightsLogged;
+export const moonsLogged = store.moonsLogged;
 export const getHistory = store.getHistory;
 export const getRecentNames = store.getRecentNames;
 export const getRecentLines = store.getRecentLines;

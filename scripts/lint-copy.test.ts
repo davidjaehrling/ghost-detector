@@ -17,6 +17,16 @@ describe('lint-copy', () => {
     expect(r.stderr).toContain('banned.txt:4: framing "not X, but Y"');
   });
 
+  it('flags claim words inside user-facing strings only', () => {
+    const r = run('scripts/__fixtures__/claims.ts');
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('claims.ts:1: claim word "confirmed"');
+    expect(r.stderr).toContain('claims.ts:2: claim word "DETECTED"');
+    expect(r.stderr).not.toContain('claims.ts:3');
+    expect(r.stderr).not.toContain('claims.ts:4');
+    expect(r.stderr).not.toContain('claims.ts:5');
+  });
+
   it('passes on app/', () => {
     expect(run('app').status).toBe(0);
   });

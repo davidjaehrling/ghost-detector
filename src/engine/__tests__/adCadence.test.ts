@@ -102,6 +102,9 @@ describe('example flow', () => {
   });
 });
 
+// Generous second guard: idle runs take 1 to 2 s, a loaded CI runner must not hit the 5 s default.
+const LONG = 60_000;
+
 describe('property tests (10,000 random sequences)', () => {
   it('generator reaches shows, preloads and blocked returns (not vacuous)', () => {
     let shows = 0, preloads = 0, blocked = 0;
@@ -113,109 +116,128 @@ describe('property tests (10,000 random sequences)', () => {
     expect(shows).toBeGreaterThan(2000);
     expect(preloads).toBeGreaterThan(2000);
     expect(blocked).toBeGreaterThan(2000);
-  });
+  }, LONG);
 
   it('never shows in the first session (sessionIndex 0)', () => {
-    for (const tr of traces) {
+    const violations: string[] = [];
+    traces.forEach((tr, t) => {
       let idx = 0;
-      for (const { event, decision } of tr) {
+      tr.forEach(({ event, decision }, k) => {
         if (event.type === 'sessionStart') idx = event.sessionIndex;
-        if (decision.show) expect(idx).toBeGreaterThanOrEqual(1);
-      }
-    }
-  });
+        if (decision.show && idx < 1) violations.push(`trace ${t} step ${k}: show in sessionIndex ${idx}`);
+      });
+    });
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('never shows on appLaunch, sessionStart, scanComplete, resultShown, rewardedShown (show only on returnToViewfinder)', () => {
-    for (const tr of traces) for (const { event, decision } of tr) {
-      if (event.type !== 'returnToViewfinder') expect(decision.show).toBe(false);
-    }
-  });
+    const violations: string[] = [];
+    traces.forEach((tr, t) => tr.forEach(({ event, decision }, k) => {
+      if (event.type !== 'returnToViewfinder' && decision.show) violations.push(`trace ${t} step ${k}: show on ${event.type}`);
+    }));
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('shows only after a result was on screen', () => {
-    for (const tr of traces) {
+    const violations: string[] = [];
+    traces.forEach((tr, t) => {
       let open = false;
-      for (const { event, decision } of tr) {
+      tr.forEach(({ event, decision }, k) => {
         const was = open;
         if (event.type === 'resultShown') open = true;
         else if (event.type === 'returnToViewfinder' || event.type === 'sessionStart' || event.type === 'appLaunch') open = false;
-        if (decision.show) expect(was).toBe(true);
-      }
-    }
-  });
+        if (decision.show && !was) violations.push(`trace ${t} step ${k}: show without a result on screen`);
+      });
+    });
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('shows at most once per 2 completed scans (counted from install for the first)', () => {
-    for (const tr of traces) {
+    const violations: string[] = [];
+    traces.forEach((tr, t) => {
       let scans = 0;
-      for (const { event, decision } of tr) {
+      tr.forEach(({ event, decision }, k) => {
         if (event.type === 'scanComplete') scans++;
-        if (decision.show) { expect(scans).toBeGreaterThanOrEqual(MIN_SCANS_BETWEEN); scans = 0; }
+        if (decision.show) {
+          if (scans < MIN_SCANS_BETWEEN) violations.push(`trace ${t} step ${k}: show after only ${scans} scans`);
+          scans = 0;
+        }
         if (event.type === 'interstitialShown') scans = 0;
-      }
-    }
-  });
+      });
+    });
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('shows at most once per 180 s', () => {
-    for (const tr of traces) {
+    const violations: string[] = [];
+    traces.forEach((tr, t) => {
       let last: number | null = null;
       let now = 0;
-      for (const { event, decision } of tr) {
+      tr.forEach(({ event, decision }, k) => {
         if (event.type === 'appLaunch' && event.atMs < now && last !== null) last = Math.min(last, event.atMs);
         now = event.type === 'appLaunch' ? event.atMs : Math.max(now, event.atMs);
         if (decision.show) {
-          if (last !== null) expect(now - last).toBeGreaterThanOrEqual(MIN_INTERVAL_MS);
+          if (last !== null && now - last < MIN_INTERVAL_MS) violations.push(`trace ${t} step ${k}: show ${now - last} ms after the last`);
           last = now;
         }
         if (event.type === 'interstitialShown') last = now;
-      }
-    }
-  });
+      });
+    });
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('never shows within 60 s after rewardedShown', () => {
-    for (const tr of traces) {
+    const violations: string[] = [];
+    traces.forEach((tr, t) => {
       let rew: number | null = null;
       let now = 0;
-      for (const { event, decision } of tr) {
+      tr.forEach(({ event, decision }, k) => {
         if (event.type === 'appLaunch' && event.atMs < now && rew !== null) rew = Math.min(rew, event.atMs);
         now = event.type === 'appLaunch' ? event.atMs : Math.max(now, event.atMs);
         if (event.type === 'rewardedShown') rew = now;
-        if (decision.show && rew !== null) expect(now - rew).toBeGreaterThanOrEqual(REWARDED_COOLDOWN_MS);
-      }
-    }
-  });
+        if (decision.show && rew !== null && now - rew < REWARDED_COOLDOWN_MS) violations.push(`trace ${t} step ${k}: show ${now - rew} ms after a rewarded ad`);
+      });
+    });
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('requests a preload on an earlier event before every show, and never show with preload', () => {
-    for (const tr of traces) {
+    const violations: string[] = [];
+    traces.forEach((tr, t) => {
       let at: number | null = null; // time of the outstanding preload request
       let now = 0;
-      for (const { event, decision } of tr) {
+      tr.forEach(({ event, decision }, k) => {
         now = event.type === 'appLaunch' ? event.atMs : Math.max(now, event.atMs);
         if (event.type === 'appLaunch') at = null;
         if (decision.show) {
-          expect(decision.preload).toBe(false);
-          expect(at).not.toBeNull();
-          expect(now - at!).toBeLessThan(PRELOAD_TTL_MS);
+          if (decision.preload) violations.push(`trace ${t} step ${k}: show together with preload`);
+          if (at === null) violations.push(`trace ${t} step ${k}: show with no outstanding preload`);
+          else if (now - at >= PRELOAD_TTL_MS) violations.push(`trace ${t} step ${k}: show on a stale preload (${now - at} ms)`);
           at = null;
         } else if (decision.preload) at = now;
         if (event.type === 'interstitialShown') at = null;
-      }
-    }
-  });
+      });
+    });
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('never requests a preload twice without a show, a launch or the timeout between', () => {
-    for (const tr of traces) {
+    const violations: string[] = [];
+    traces.forEach((tr, t) => {
       let at: number | null = null;
       let now = 0;
-      for (const { event, decision } of tr) {
+      tr.forEach(({ event, decision }, k) => {
         now = event.type === 'appLaunch' ? event.atMs : Math.max(now, event.atMs);
         if (event.type === 'appLaunch' || event.type === 'interstitialShown') at = null;
         if (decision.show) at = null;
         if (decision.preload) {
-          if (at !== null) expect(now - at).toBeGreaterThanOrEqual(PRELOAD_TTL_MS);
+          if (at !== null && now - at < PRELOAD_TTL_MS) violations.push(`trace ${t} step ${k}: second preload after ${now - at} ms`);
           at = now;
         }
-      }
-    }
-  });
+      });
+    });
+    expect(violations).toEqual([]);
+  }, LONG);
 
   it('is deterministic and unchanged by a JSON round trip of the state at any point', () => {
     for (let i = 0; i < 500; i++) {
@@ -229,5 +251,5 @@ describe('property tests (10,000 random sequences)', () => {
         a = ra.state; b = rb.state;
       }
     }
-  });
+  }, LONG);
 });

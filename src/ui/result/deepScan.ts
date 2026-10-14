@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { canRequestAds, consentState, ensureConsent, rewarded } from '../../ads';
 import { track } from '../../analytics';
-import { unlockDeepScan } from '../../state/scans';
+import { markDeclined, unlockDeepScan } from '../../state/scans';
 import { useConsent } from '../../state/useConsent';
 import { onRewardedShown } from '../interstitial';
 
@@ -24,6 +24,8 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
   const [unlocked, setUnlocked] = useState(unlockedAt !== undefined);
   const [running, setRunning] = useState(false);
   const [failed, setFailed] = useState(false);
+  /** When the last rewarded ad closed (wall ms); the share offer keeps 3.0 s clear of it. */
+  const [closedAt, setClosedAt] = useState<number | null>(null);
   const offered = useRef(false);
   // The consent check has resolved in this launch. Until then the key warms; it never reads OFFLINE.
   const [resolved, setResolved] = useState(() => consentState().resolved);
@@ -68,6 +70,7 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
     setRunning(true);
     const result = await rewarded.show();
     setRunning(false);
+    if (result.shown) setClosedAt(Date.now());
     if (!result.shown) {
       // The ad did not appear: the key goes offline rather than looking live while doing nothing.
       setFailed(true);
@@ -79,11 +82,12 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
       track('deep_scan_rewarded');
       setUnlocked(true);
     } else {
-      // Dismissed without the reward: the slot is spent, so the key warms while a fresh ad loads.
+      // Dismissed without the reward: the case is archived (the log shows ARCHIVED), the slot is spent, so the key warms while a fresh ad loads.
       // A second tap, user initiated, plays it.
+      if (persist) markDeclined(id);
       void rewarded.load();
     }
   };
 
-  return { state, press };
+  return { state, press, closedAt };
 }
