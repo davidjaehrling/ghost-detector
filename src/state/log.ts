@@ -119,6 +119,58 @@ export function createNightsStore(storage: KeyValueStore | null = platformStorag
 
 export type NightsStore = ReturnType<typeof createNightsStore>;
 
+const KEY_MOONS = 'fs4.moons.v1';
+
+/** The lunation a time falls in (counted from the reference new moon), or null outside a full-moon window. */
+export function fullMoonId(ms: number): number | null {
+  const off = offsetMin(ms);
+  if (!isFullMoonWindow(ms, off)) return null;
+  return Math.floor((ms + off * 60_000 - NEW_MOON_REF_MS) / 86_400_000 / SYNODIC_DAYS);
+}
+
+/**
+ * The full moons with at least one case in their window. Same pattern as the nights store: kept
+ * apart from the capped records so FULL MOONS LOGGED only rises. `count(records)` folds in records
+ * not yet recorded (seeded demo data).
+ */
+export function createMoonsStore(storage: KeyValueStore | null = platformStorage()) {
+  let moons: Set<number> | null = null;
+  const load = () => {
+    if (moons) return moons;
+    moons = new Set();
+    try {
+      const raw: unknown = JSON.parse(storage?.getItem(KEY_MOONS) ?? '[]');
+      if (Array.isArray(raw)) for (const n of raw) if (typeof n === 'number' && Number.isFinite(n)) moons.add(n);
+    } catch {
+      // memory only
+    }
+    return moons;
+  };
+  return {
+    record(ms: number) {
+      const id = fullMoonId(ms);
+      const m = load();
+      if (id === null || m.has(id)) return;
+      m.add(id);
+      try {
+        storage?.setItem(KEY_MOONS, JSON.stringify([...m].sort((a, b) => a - b)));
+      } catch {
+        // memory only
+      }
+    },
+    count(records: readonly ScanRecord[] = []): number {
+      const all = new Set(load());
+      for (const r of records) {
+        const id = fullMoonId(r.createdAt);
+        if (id !== null) all.add(id);
+      }
+      return all.size;
+    },
+  };
+}
+
+export type MoonsStore = ReturnType<typeof createMoonsStore>;
+
 export const tagLabel = (tag: string) => tag.toUpperCase();
 export const casesLabel = (n: number) => `${n} ${n === 1 ? 'CASE' : 'CASES'}`;
 
@@ -174,27 +226,34 @@ export function catalogue(records: readonly ScanRecord[]): Catalogue {
 
 const offsetMin = (ms: number) => -new Date(ms).getTimezoneOffset();
 
-/** Full moons with at least one case in their window (within a day of full). Counts each moon once; only rises. */
+/** Full moons with at least one case in their window (within a day of full), counted once each, from the records alone. */
 export function fullMoonsLogged(records: readonly ScanRecord[]): number {
-  const moons = new Set<number>();
-  for (const r of records) {
-    const off = offsetMin(r.createdAt);
-    if (!isFullMoonWindow(r.createdAt, off)) continue;
-    moons.add(Math.floor((r.createdAt + off * 60_000 - NEW_MOON_REF_MS) / 86_400_000 / SYNODIC_DAYS));
-  }
-  return moons.size;
+  return createMoonsStore(null).count(records);
 }
 
 export type MoonNight = { date: string; moonPct: number; index: 1 | 2 | 3 | 4 | 5 };
 
-/** The next seven local nights, tonight first: `MM-DD`, moon percentage and the forecast index at 22:00 local. */
-export function moonTable(nowMs: number): MoonNight[] {
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+function nightAt(nowMs: number, k: number): MoonNight {
   const now = new Date(nowMs);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return Array.from({ length: 7 }, (_, k) => {
+  const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k, 22, 0).getTime();
+  const d = new Date(at);
+  const f = forecastIndex(at, offsetMin(at));
+  return { date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, moonPct: f.moonPct, index: f.index };
+}
+
+/** The next seven local nights, tonight first: `YYYY-MM-DD`, moon percentage and the forecast index at 22:00 local. */
+export function moonTable(nowMs: number): MoonNight[] {
+  return Array.from({ length: 7 }, (_, k) => nightAt(nowMs, k));
+}
+
+/** The first local night, tonight included, whose 22:00 falls in a full-moon window: `YYYY-MM-DD`. */
+export function nextFullMoon(nowMs: number): string {
+  for (let k = 0; k < 40; k++) {
+    const now = new Date(nowMs);
     const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k, 22, 0).getTime();
-    const d = new Date(at);
-    const f = forecastIndex(at, offsetMin(at));
-    return { date: `${p(d.getMonth() + 1)}-${p(d.getDate())}`, moonPct: f.moonPct, index: f.index };
-  });
+    if (isFullMoonWindow(at, offsetMin(at))) return nightAt(nowMs, k).date;
+  }
+  return nightAt(nowMs, 0).date;
 }

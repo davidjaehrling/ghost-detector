@@ -1,5 +1,5 @@
 import type { EntityProfile, Intensity, Outcome, OutcomeHistory } from '../engine';
-import { createNightsStore, type NightsStore } from './log';
+import { createMoonsStore, createNightsStore, type MoonsStore, type NightsStore } from './log';
 import { platformStorage } from './storage';
 
 // In-memory scan store. Persisted through ./storage (localStorage on web,
@@ -36,6 +36,8 @@ export type ScanStore = {
   seedScans(records: ScanRecord[]): boolean;
   /** Distinct local nights with a scan. Only rises, even when old records are dropped. */
   nightsLogged(): number;
+  /** Distinct full moons with a scan in their window. Only rises, even when old records are dropped. */
+  moonsLogged(): number;
   getHistory(nowMs?: number): OutcomeHistory;
   getRecentNames(): string[];
   /** Trait lines of the last 20 records, newest last (no-repeat input for the profile generator). */
@@ -56,9 +58,10 @@ export function webStorage(): KeyValueStore | null {
   return platformStorage();
 }
 
-export function createScanStore(opts: { storage?: KeyValueStore | null; sessionStartMs?: number; nights?: NightsStore } = {}): ScanStore {
+export function createScanStore(opts: { storage?: KeyValueStore | null; sessionStartMs?: number; nights?: NightsStore; moons?: MoonsStore } = {}): ScanStore {
   const storage = opts.storage === undefined ? webStorage() : opts.storage;
   const nights = opts.nights ?? createNightsStore(storage);
+  const moons = opts.moons ?? createMoonsStore(storage);
   const sessionStart = opts.sessionStartMs ?? Date.now();
   let records: ScanRecord[] | null = null;
   let intensity: Intensity | null = null;
@@ -92,6 +95,7 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
       all.push({ ...record, id });
       if (all.length > MAX_RECORDS) all.splice(0, all.length - MAX_RECORDS);
       nights.record(record.createdAt);
+      moons.record(record.createdAt);
       persist();
       return id;
     },
@@ -121,11 +125,13 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
       for (const r of seed) {
         all.push({ ...r });
         nights.record(r.createdAt);
+        moons.record(r.createdAt);
       }
       persist();
       return true;
     },
     nightsLogged: () => nights.count(load()),
+    moonsLogged: () => moons.count(load()),
     getRecentNames: () => load().map((r) => r.profile.name).slice(-20),
     getRecentLines: () => load().slice(-20).flatMap((r) => r.profile.traits ?? []),
     getHistory(nowMs = Date.now()) {
@@ -193,6 +199,7 @@ export const markDeclined = store.markDeclined;
 export const listScans = store.listScans;
 export const seedScans = store.seedScans;
 export const nightsLogged = store.nightsLogged;
+export const moonsLogged = store.moonsLogged;
 export const getHistory = store.getHistory;
 export const getRecentNames = store.getRecentNames;
 export const getRecentLines = store.getRecentLines;

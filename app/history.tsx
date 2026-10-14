@@ -8,16 +8,16 @@ import {
   caseStatus,
   catalogue,
   clock,
-  fullMoonsLogged,
   groupByTag,
   moonTable,
+  nextFullMoon,
   recordLine,
   stamp,
   tagLabel,
 } from '../src/state/log';
 import { relayOn } from '../src/state/relay';
 import { useRelay } from '../src/state/useRelay';
-import { listScans, nightsLogged, type ScanRecord } from '../src/state/scans';
+import { listScans, moonsLogged, nightsLogged, type ScanRecord } from '../src/state/scans';
 import { sound } from '../src/ui/audio';
 import { readHarness } from '../src/ui/harness';
 import { isDemoLog, seedDemoLog } from '../src/ui/log/demo';
@@ -38,6 +38,8 @@ const copy = {
   catalogue: 'CATALOGUE',
   moon: 'MOON TABLE',
   moons: 'FULL MOONS LOGGED',
+  nextMoon: 'NEXT FULL MOON',
+  moonCol: 'IDX AT 22:00',
   relay: 'FIELD LOG RELAY',
 };
 
@@ -60,9 +62,10 @@ export default function History() {
   const best = bestOnFile(records);
   const nights = nightsLogged();
   const cat = catalogue(records);
-  const moons = fullMoonsLogged(records);
+  const moons = moonsLogged();
   const [nowMs] = useState(() => (readHarness().isStatic ? HARNESS_NOW : Date.now()));
   const table = moonTable(nowMs);
+  const nextMoon = nextFullMoon(nowMs);
   const relay = relayOn(useRelay());
   const empty = records.length === 0;
   // Nothing plays here; a scene left running from the result ends.
@@ -74,7 +77,6 @@ export default function History() {
         testID="screen-history"
         code={copy.code}
         graticule={false}
-        readout={empty ? copy.empty : undefined}
         keys={[
           ...(empty
             ? [
@@ -96,7 +98,7 @@ export default function History() {
           },
         ]}
       >
-        <View style={[s.list, records.length === 0 && s.listEmpty]} testID="history-list-box">
+        <View style={s.list} testID="history-list-box">
           {nights > 0 || best ? (
             <View style={s.head} testID="history-head">
               {nights > 0 ? <Text style={s.nights} testID="history-nights">{`${copy.nights} ${nights}`}</Text> : null}
@@ -109,6 +111,11 @@ export default function History() {
             </View>
           ) : null}
           <ScrollView testID="history-list" style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+            {empty ? (
+              <Text style={s.empty} testID="history-empty" accessibilityLabel={copy.empty}>
+                {copy.empty}
+              </Text>
+            ) : null}
             {groups.map((g) => (
               <View key={g.tag} testID={`history-group-${g.tag}`} style={s.group}>
                 <View style={s.tagRow} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
@@ -136,12 +143,16 @@ export default function History() {
                       hitSlop={{ top: 4, bottom: 4 }}
                       style={s.row}
                     >
-                      <Text style={s.rowMain}>
+                      <Text style={s.rowMain} numberOfLines={1}>
                         {`${r.id} · ${r.outcome.spi} `}
                         <Text style={tierStyle(r)}>{tierWord(r)}</Text>
-                        {` · ${clock(r.createdAt)}`}
+                        <Text style={s.rowClock}>{` ${clock(r.createdAt)}`}</Text>
                       </Text>
-                      {status === null ? null : <Text style={[s.rowOpen, r.declined && s.archived]}>{status}</Text>}
+                      {status === null ? null : (
+                        <Text style={[s.rowOpen, r.declined && s.archived]} numberOfLines={1}>
+                          {status}
+                        </Text>
+                      )}
                     </Pressable>
                   );
                 })}
@@ -149,7 +160,7 @@ export default function History() {
             ))}
             <View style={s.group} testID="history-catalogue">
               <Text style={s.section} testID="history-catalogue-head">{`${copy.catalogue} ${cat.count}/${cat.total}`}</Text>
-              {cat.rows.map((c) => (
+              {(empty ? [] : cat.rows).map((c) => (
                 <View key={c.cls} style={s.catRow} testID={`history-cat-${c.cls}`}>
                   <Text style={c.last ? s.catOn : s.catOff}>{`${c.prefix} ${c.cls}`}</Text>
                   <Text style={c.last ? s.catOn : s.catOff}>{c.last ? `LOGGED · ${c.last.id}` : 'UNLOGGED'}</Text>
@@ -158,13 +169,18 @@ export default function History() {
             </View>
             <View style={s.group} testID="history-moon">
               <Text style={s.section}>{copy.moon}</Text>
+              <Text style={s.moons} testID="history-next-moon">{`${copy.nextMoon} ${nextMoon}`}</Text>
+              <View style={s.catRow}>
+                <Text style={s.catOff}>DATE</Text>
+                <Text style={s.catOff}>{`MOON % · ${copy.moonCol}`}</Text>
+              </View>
               {table.map((n) => (
                 <View key={n.date} style={s.catRow} testID={`history-moon-${n.date}`}>
                   <Text style={s.catOn}>{n.date}</Text>
-                  <Text style={s.catOn}>{`MOON ${n.moonPct}% · IDX ${n.index}/5`}</Text>
+                  <Text style={s.catOn}>{`${n.moonPct}% · ${n.index}/5`}</Text>
                 </View>
               ))}
-              <Text style={s.moons} testID="history-moons">{`${copy.moons} ${moons}`}</Text>
+              {moons > 0 ? <Text style={s.moons} testID="history-moons">{`${copy.moons} ${moons}`}</Text> : null}
             </View>
             <Pressable
               testID="history-relay"
@@ -195,7 +211,7 @@ const s = StyleSheet.create({
     bottom: 52,
     backgroundColor: color.n0,
   },
-  listEmpty: { bottom: 130 },
+  empty: { ...type.rdM, color: color.p4, paddingTop: 4 },
   head: { paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: color.p1 },
   nights: { ...type.rdM, color: color.p4 },
   best: { ...type.rdXS, color: color.p3 },
@@ -208,15 +224,16 @@ const s = StyleSheet.create({
   row: {
     minHeight: 36,
     paddingVertical: 2,
-    flexWrap: 'wrap',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: color.p1,
   },
-  rowMain: { ...type.rdS, color: color.p4 },
-  rowOpen: { ...type.rdXS, color: color.p4, marginLeft: 'auto' },
+  rowMain: { ...type.rdS, color: color.p4, flexShrink: 1 },
+  rowClock: { ...type.rdXS, color: color.p3 },
+  // A fixed right column, so the status never wraps under the case at 360 dp.
+  rowOpen: { ...type.rdXS, color: color.p4, width: 98, flexShrink: 0, textAlign: 'right' },
   archived: { color: color.p3 },
   crit: { color: color.red },
   section: {

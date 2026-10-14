@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NEW_MOON_REF_MS, SYNODIC_DAYS, type Outcome, type Tier } from '../../engine';
 import { CLASSES } from '../../engine/profileBank';
-import { bestOnFile, catalogue, clock, fullMoonsLogged, moonTable, caseStatus, recordLine, createNightsStore, groupByTag, nightKey, stamp, unresolvedPct, UNTAGGED } from '../log';
+import { bestOnFile, catalogue, clock, fullMoonsLogged, moonTable, nextFullMoon, createMoonsStore, fullMoonId, caseStatus, recordLine, createNightsStore, groupByTag, nightKey, stamp, unresolvedPct, UNTAGGED } from '../log';
 import { createScanStore, type KeyValueStore, type ScanRecord } from '../scans';
 
 const mem = (): KeyValueStore => {
@@ -163,7 +163,7 @@ describe('fullMoonsLogged', () => {
 describe('moonTable', () => {
   it('lists seven consecutive local nights from tonight with moon percentage and an index of 1 to 5', () => {
     const t = moonTable(at(13, 12));
-    expect(t.map((n) => n.date)).toEqual(['10-13', '10-14', '10-15', '10-16', '10-17', '10-18', '10-19']);
+    expect(t.map((n) => n.date)).toEqual(['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19']);
     for (const n of t) {
       expect(n.index).toBeGreaterThanOrEqual(1);
       expect(n.index).toBeLessThanOrEqual(5);
@@ -172,6 +172,54 @@ describe('moonTable', () => {
     }
   });
   it('crosses a month end', () => {
-    expect(moonTable(new Date(2026, 9, 29, 9).getTime()).map((n) => n.date).slice(2, 5)).toEqual(['10-31', '11-01', '11-02']);
+    expect(moonTable(new Date(2026, 9, 29, 9).getTime()).map((n) => n.date).slice(2, 5)).toEqual(['2026-10-31', '2026-11-01', '2026-11-02']);
+  });
+});
+
+describe('nextFullMoon', () => {
+  it('is a YYYY-MM-DD night whose 22:00 sits in a full-moon window, tonight included, within one lunation', () => {
+    for (let d = 0; d < 30; d++) {
+      const now = new Date(2026, 9, 1 + d, 12).getTime();
+      const next = nextFullMoon(now);
+      expect(next).toMatch(/^\d{4}-\d\d-\d\d$/);
+      const [y, m, day] = next.split('-').map(Number);
+      const night = new Date(y!, m! - 1, day!, 22).getTime();
+      expect(fullMoonId(night)).not.toBeNull();
+      expect(night).toBeGreaterThanOrEqual(new Date(2026, 9, 1 + d, 22).getTime());
+      expect(night - now).toBeLessThan(31 * 86_400_000);
+    }
+  });
+  it('agrees with moonTable on nights inside the table', () => {
+    const now = new Date(2026, 9, 13, 12).getTime();
+    const next = nextFullMoon(now);
+    const t = moonTable(now);
+    if (t.some((n) => n.date === next)) expect(t[0]!.date <= next).toBe(true);
+  });
+});
+
+describe('moons store', () => {
+  const mem = () => {
+    const data = new Map<string, string>();
+    return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
+  };
+  const full = NEW_MOON_REF_MS + (310.5) * SYNODIC_DAYS * 86_400_000;
+  it('keeps the count when the records are gone, counts a moon once, never falls', () => {
+    const storage = mem();
+    const a = createMoonsStore(storage);
+    expect(a.count([])).toBe(0);
+    a.record(full);
+    a.record(full + 3_600_000);
+    a.record(NEW_MOON_REF_MS + 311 * SYNODIC_DAYS * 86_400_000); // new moon: ignored
+    expect(a.count([])).toBe(1);
+    a.record(full + SYNODIC_DAYS * 86_400_000);
+    const b = createMoonsStore(storage);
+    expect(b.count([])).toBe(2);
+    expect(b.count([rec('1', 'a', 50, 'quiet', full + 2 * SYNODIC_DAYS * 86_400_000)])).toBe(3);
+  });
+  it('persists under its own key and survives broken storage', () => {
+    const storage = mem();
+    createMoonsStore(storage).record(full);
+    expect(JSON.parse(storage.getItem('fs4.moons.v1')!)).toHaveLength(1);
+    expect(() => createMoonsStore({ getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } }).record(full)).not.toThrow();
   });
 });

@@ -11,6 +11,13 @@ test('empty log', async ({ page }) => {
   // NIGHTS LOGGED hides while it reads 0.
   await expect(page.getByTestId('history-nights')).toHaveCount(0);
   await expect(page.getByTestId('history-catalogue-head')).toHaveText('CATALOGUE 0/24');
+  // Collapsed to its header: no class rows while there are no records.
+  await expect(page.locator('[data-testid^="history-cat-"]:not([data-testid="history-catalogue-head"])')).toHaveCount(0);
+  // The empty readout sits above the catalogue header.
+  const [readout, head] = await Promise.all([page.getByTestId('history-empty').boundingBox(), page.getByTestId('history-catalogue-head').boundingBox()]);
+  expect(readout!.y + readout!.height).toBeLessThanOrEqual(head!.y);
+  await expect(page.getByTestId('key-viewfinder')).toBeVisible();
+  await expect(page.getByTestId('history-moons')).toHaveCount(0);
   await expect(page.locator('[data-testid^="history-row-"]')).toHaveCount(0);
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot('history-empty.png', { maxDiffPixels: 150 });
@@ -27,7 +34,7 @@ test('three tags: record rows, case rows, nights, no DEEP SCAN key in the list',
   expect(await label('bedroom')).toMatch(/^BEDROOM · 2 CASES · PEAK \d+ \w+ · 2026-10-\d\d \d\d:\d\d$/);
   // Case rows: ID, SPI, tier; UNRESOLVED only where a Deep Scan is still open.
   const strong = page.getByTestId('history-row-0003');
-  await expect(strong).toContainText('0003 · 80 STRONG · 22:48');
+  await expect(strong).toContainText('0003 · 80 STRONG 22:48');
   await expect(strong).toContainText(/UNRESOLVED \d+%/);
   await expect(page.getByTestId('history-row-0001')).not.toContainText('UNRESOLVED');
   // A declined rewarded ad archives the case: ARCHIVED replaces UNRESOLVED, same percent.
@@ -40,6 +47,37 @@ test('three tags: record rows, case rows, nights, no DEEP SCAN key in the list',
   for (const w of ['DEEP SCAN', 'STREAK', 'BADGE', 'EXPIRE', 'COME BACK', 'MISSED']) expect(body).not.toContain(w);
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot('history-3tags.png', { maxDiffPixels: 150 });
+});
+
+test('every case row keeps one line, status in a fixed right column', async ({ page }) => {
+  await page.goto(DEMO);
+  const rows = page.locator('[data-testid^="history-row-"]');
+  await expect(page.getByTestId('history-row-0001')).toBeVisible();
+  const n = await rows.count();
+  expect(n).toBeGreaterThanOrEqual(6);
+  const statusX = new Set<number>();
+  for (let i = 0; i < n; i++) {
+    const row = rows.nth(i);
+    const info = await row.evaluate((e) => {
+      const lines = new Set<number>();
+      for (const t of Array.from(e.querySelectorAll('div,span'))) {
+        if (t.children.length > 0 && t.querySelector('div,span')) continue;
+        const r = document.createRange();
+        r.selectNodeContents(t);
+        for (const q of Array.from(r.getClientRects())) lines.add(Math.round(q.top / 4));
+      }
+      const box = e.getBoundingClientRect();
+      const kids = Array.from(e.children) as HTMLElement[];
+      const last = kids[kids.length - 1]!.getBoundingClientRect();
+      return { h: box.height, right: Math.round(last.right), kids: kids.length, lines: lines.size };
+    });
+    expect(info.h, await row.innerText()).toBeLessThan(44);
+    // No truncation: the case text shows in full (the clock is never cut to an ellipsis).
+    const clipped = await row.evaluate((e) => Array.from(e.querySelectorAll('div,span')).some((t) => (t as HTMLElement).scrollWidth > (t as HTMLElement).clientWidth + 1));
+    expect(clipped, await row.innerText()).toBe(false);
+    if (info.kids > 1) statusX.add(info.right);
+  }
+  expect(statusX.size).toBe(1);
 });
 
 test('no wrap on the settings key legend', async ({ page }) => {
@@ -95,12 +133,15 @@ test('moon table: seven nights, index 1 to 5, relay row opens settings', async (
   await expect(rows).toHaveCount(7);
   const texts = await rows.allInnerTexts();
   for (const t of texts) {
-    const m = /^(\d\d-\d\d)\s+MOON (\d+)% · IDX ([1-5])\/5$/.exec(t.replace(/\n/g, ' ').trim());
+    const m = /^(\d{4}-\d\d-\d\d)\s+(\d+)% · ([1-5])\/5$/.exec(t.replace(/\n/g, ' ').trim());
     expect(m, t).not.toBeNull();
   }
-  expect(texts[0]).toContain('10-13');
-  expect(texts[6]).toContain('10-19');
-  await expect(page.getByTestId('history-moons')).toHaveText('FULL MOONS LOGGED 0');
+  expect(texts[0]).toContain('2026-10-13');
+  expect(texts[6]).toContain('2026-10-19');
+  await expect(page.getByTestId('history-moon')).toContainText('IDX AT 22:00');
+  await expect(page.getByTestId('history-next-moon')).toHaveText(/^NEXT FULL MOON \d{4}-\d\d-\d\d$/);
+  // FULL MOONS LOGGED hides at 0 (the demo log has no case in a full-moon window).
+  await expect(page.getByTestId('history-moons')).toHaveCount(0);
   await expect(page.getByTestId('history-relay')).toHaveText('FIELD LOG RELAY: OFF');
   await page.getByTestId('history-relay').scrollIntoViewIfNeeded();
   await page.getByTestId('history-relay').click();
@@ -116,4 +157,12 @@ test('CRITICAL is red in the log, other tier words are not', async ({ page }) =>
     }, word);
   expect(await colour('history-row-0004', 'CRITICAL')).toBe('rgb(255, 74, 58)');
   expect(await colour('history-row-0003', 'STRONG')).not.toBe('rgb(255, 74, 58)');
+});
+
+test('FULL MOONS LOGGED is a stored count: shows from 1, never falls with the records gone', async ({ page }) => {
+  await page.goto('/history?static=1');
+  await page.evaluate(() => localStorage.setItem('fs4.moons.v1', JSON.stringify([310, 311])));
+  await page.reload();
+  await expect(page.getByTestId('history-moons')).toHaveText('FULL MOONS LOGGED 2');
+  await expect(page.getByTestId('history-nights')).toHaveCount(0);
 });
