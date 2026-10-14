@@ -1219,64 +1219,177 @@
       "phase": "P7",
       "description": "i18n layer and string extraction",
       "acceptance": "`src/i18n/`: `t(key, params)` with ICU-style placeholders and plural forms, device locale from expo-localization, fallback `en`, locales `en`, `de`, `es`, `pt`; a LANGUAGE row in Settings cycling SYSTEM / EN / DE / ES / PT persisted through `platformStorage()`; `?lang=` harness param; every user-facing string in `app/`, `src/ui/`, `src/state/` (copy constants such as relayCopy, shareCopy, deepCopy, settings labels, legends, status lines) moves to `locales/en.json` under one flat key namespace with a comment file documenting key naming; number, date and time formatting per locale (decimal comma in DE, 24-hour everywhere, ISO dates stay ISO); unit tests: every `t()` key in the code exists in `en.json`, every `en.json` key is referenced, missing keys throw in tests and fall back to `en` at runtime; goldens unchanged in `en` except the Settings screens, which gain the LANGUAGE row, and the 360 result goldens, where the data strip now scales so the SIMULATED mark is never clipped (D-040); the disclosure keys (sticker head lines and body with the `generated`/`erzeugt`/`genera`/`geradas` and `detects nothing` markers, the ABOUT line with its fiction marker, `deep.offline`, the `engine.notify.prefix`, ABOUT line, card mark and footer, on-screen strip mark, DEEP SCAN sublabel and offer line, relay body's simulated sentence, notification channel name) are fallback-forbidden: a disclosure-contract test asserts each is present in all four locales, differs from `en` in de/es/pt, and matches the per-language marker regex from docs/decisions.md D-038",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm exec vitest run src/i18n (i18n, keys, glyphs, profile tests)",
+          "output": "t() with placeholders and plural pairs, fallback en at runtime, missing keys throw in tests; every code key exists in en.json and every en.json key is referenced; disclosure contract over DISCLOSURE_KEYS with the generated/detects-nothing/fiction markers; keys test fails for a missing shipped locale",
+          "by": "builder-a",
+          "date": "2026-10-14"
+        },
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/android-390x844/settings*.png, android-360x800/result-*.png; e2e/web/settings.spec.ts (?lang= param)",
+          "output": "LANGUAGE row cycles SYSTEM/EN/DE/ES/PT persisted under fs4.lang.v1; en goldens at 390 and 428 differ from main only in the six Settings files, the 360 result goldens only in the strip band (D-040, D-042)",
+          "by": "qa-runner",
+          "date": "2026-10-14"
+        },
+        {
+          "kind": "command",
+          "ref": "Refuter D-041 and D-042: English sticker.head2 or deep.offline under de",
+          "output": "disclosure contract fails on either (HOLD at 0011381); D-041 gaps (sticker.head2, deep.offline, engine.notify.prefix, generated stem, fiction word) closed",
+          "by": "refuter",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     },
     {
       "id": "P7-02",
       "phase": "P7",
       "description": "Engine copy as locale resources",
       "acceptance": "The profile bank (class names, designations, behaviour lines, EVP lines, lore lines) and the notification templates become locale-keyed resources in `locales/engine/<lang>.json` (merged by the i18n loader into one namespace, prefixed `engine.`); `src/engine` functions take a strings table as an input (pure, no locale detection in the engine) and keep their seeds and distributions byte-identical in `en` (existing tests pass unchanged); a vitest loads all four `locales/engine/*.json`, runs `checkStrings` with the per-language lists from `scripts/claim-words.json` and asserts no hits, and asserts key parity and placeholder parity against `en` (in addition to the copy lint in smoke)",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm exec vitest run src/engine (profile, notify, strings, localeFiles tests)",
+          "output": "generateProfileWith and nextNotificationWith take a strings table and a number formatter; en seeds and distributions unchanged (existing tests pass as before); localeFiles.test loads locales/engine/{en,de,es,pt}.json: key parity 173/173, placeholder parity, claim-word and framing checks from scripts/claim-words.json, capitals notification prefix",
+          "by": "builder-b",
+          "date": "2026-10-14"
+        },
+        {
+          "kind": "command",
+          "ref": "Refuter D-041 then D-042",
+          "output": "D-041 disproved narrowly (helpers ran only on synthetic tables); the engine locale vitest added; HOLD on re-check",
+          "by": "refuter",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     },
     {
       "id": "P7-03",
       "phase": "P7",
       "description": "DE, ES and PT written per culture",
       "acceptance": "`locales/de.json`, `es.json`, `pt.json` written by the Copy agent as field-manual prose in each language (register per `docs/voice-guide.md`, formal address where the culture expects an instrument to use it, no literal translation, cultural references adjusted), with the instrument's units kept (mG, ΔT °C, Hz) and numbers formatted per locale; hardware key legends and glass keys fit their widths (abbreviation table per locale); `scripts/lint-copy.mjs` rewritten Unicode-aware (`(?<![\\p{L}])…(?![\\p{L}])` with the `u` flag, stem matching for inflected entries) with the per-language claim-word lists and the separate per-language banned-framing list for notification titles, channel names, relay copy and prompts from D-038, an exempt-literal list for tier names, codes and units, failing when a language list is empty; run over all four `locales/*.json`, `locales/engine/*.json` and the code in `pnpm smoke`; register per D-038: impersonal instrument voice, `Sie` / `usted` / polite third person on consequence surfaces (Deep Scan offer, permission rationale, relay opt-in, consent, Settings help), never mixed on one screen; the DEEP SCAN sublabel and offer line name the video and carry an advertising word in every language (DE `WERBEVIDEO LÄUFT ZUERST`, ES `VIDEO PUBLICITARIO PRIMERO`, PT `VÍDEO PUBLICITÁRIO PRIMEIRO`); disclosures per D-038 tables (sticker keeps `detects nothing` in each language; ABOUT, footer, relay sentence as ruled; no `Messwert`/`medición`/`medição`, no `prank` words); `FIELD LOG` prefix localised in capitals (`FELDPROTOKOLL`, `REGISTRO DE CAMPO`, `REGISTO DE CAMPO`) and the channel name in sentence case as Android shows it (`Feldprotokoll`, `Registro de campo`, `Registo de campo`); key parity with `en.json`; `pt` is European Portuguese (`utilizador`, `registo`, `deteta`, `ecrã`), store locale pt-PT; a Brazilian pass is a P10 decision (D-038)",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm smoke (scripts/lint-copy.mjs, Unicode-aware, per-language lists in scripts/claim-words.json)",
+          "output": "lint clean over locales/*.json, locales/engine/*.json and the code; stems, phrases, re: exemptions, case-sensitive exempt literals; an empty language list fails",
+          "by": "copy-localization",
+          "date": "2026-10-14"
+        },
+        {
+          "kind": "command",
+          "ref": "Refuter D-041",
+          "output": "P7-03 HOLDS: parity 244/244 and 173/173, placeholders exact, legends within +2, disclosures exact per D-038 tables, European Portuguese forms, DEEP SCAN sublabels WERBEVIDEO LAEUFT ZUERST / VIDEO PUBLICITARIO PRIMERO / VIDEO PUBLICITARIO PRIMEIRO",
+          "by": "refuter",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     },
     {
       "id": "P7-04",
       "phase": "P7",
       "description": "Second-model review of each locale",
       "acceptance": "A reviewer on a different model family tier from the Copy agent (Opus-class: the Art Director or Dr. Hollow role) reads each locale against `en` and the voice guide and returns, per language, errors, register slips, literal translations and claim-word risks with the key and a fix; every finding is fixed or ruled on by the Director and logged in docs/decisions.md; a second pass finds no errors",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-039, D-040; locales/README.md (review fix lists per language)",
+          "output": "round 1 by Opus-class native reviewers: all findings fixed or ruled; round 2 found no errors; review cost 330k",
+          "by": "director",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     },
     {
       "id": "P7-05",
       "phase": "P7",
       "description": "Layout at the longest strings",
       "acceptance": "Goldens for boot, viewfinder, scan, result (active and deep-scan unlocked), history (3 tags), settings, the relay module and the share offer in all four locales at 390, and in `de` also at 360; e2e assertions that no text is clipped or overflows (scroll-width checks on rows, legends and status lines), that hardware key legends stay on at most two lines, and that the data strip and SIMULATED mark stay inside their boxes; one hue, two faces, no new fonts (Latin coverage of VT323 and B612 Mono checked for ã, ç, ñ, ß, ü and the ordinal indicators by reading the font files' character maps in a unit test (not `document.fonts.check`, which cannot see missing glyphs); if a glyph is missing, say so and propose the smallest fix)",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/android-390x844/*-{de,es,pt}.png (36 files), android-360x800/*-de-360.png (11 files)",
+          "output": "boot, boot-calib, viewfinder, scan-hold, scan-phase2, result-active, result-deepscan-unlocked, result-share-offer, history-3tags, relay-module, settings, share-story per locale; e2e/web/i18n-layout.spec.ts: 34 passed at 390, brokenWords and profileColumns sweeps, legends at most two lines, strip and mark inside their boxes",
+          "by": "qa-runner",
+          "date": "2026-10-14"
+        },
+        {
+          "kind": "command",
+          "ref": "pnpm exec vitest run src/i18n/__tests__/glyphs.test.ts",
+          "output": "VT323 and B612 Mono cmaps read from the font files: a, c-cedilla, n-tilde, sharp s, u-umlaut and the ordinal indicators present (fontTools cross-check in D-041)",
+          "by": "builder-a",
+          "date": "2026-10-14"
+        },
+        {
+          "kind": "command",
+          "ref": "Refuter re-check at 6eed148 (D-043): tableFor(en) mutation in src/i18n/profile.ts; COMPORTAMENTO restored in locales/pt.json",
+          "output": "profile test fails 2 of 5 (KEEPER instead of a German class); the sweep fails all 3 pt result cases with \"a word is split across two lines\" before any golden compare; goldens show KLASSE RAUNEN / CLASSE GUARDIAO with locale era labels and decimal commas; 670 tests pass",
+          "by": "refuter",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     },
     {
       "id": "P7-06",
       "phase": "P7",
       "description": "Share card and notifications per locale",
       "acceptance": "The field card renders from the active locale (strip, reading row, footer) with the mark localised per D-038 (EN SIMULATED, DE SIMULIERT, ES/PT SIMULADO with the footer sentences `WERTE SIND SIMULIERT`, `LECTURAS SIMULADAS`, `LEITURAS SIMULADAS`), the mark last in the strip in every locale, the on-screen strip the same, measured for cap height and contrast in every locale; notification titles and bodies come from the locale table with computed numbers and locale number formats; goldens `share-story` per locale at 390; the claim-word test per locale covers templates and card text",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm exec vitest run src/fx/share (shareCard.test.ts per locale)",
+          "output": "mark SIMULATED / SIMULIERT / SIMULADO last in the strip, footer sentences per D-038, cap height and contrast measured from pixels in every locale; the mark mutation fails six tests (D-042)",
+          "by": "fx-engineer",
+          "date": "2026-10-14"
+        },
+        {
+          "kind": "screenshot",
+          "ref": "e2e/screenshots/golden/android-390x844/share-story-{de,es,pt}.png; src/engine/__tests__/notify.test.ts with the locale tables",
+          "output": "card from the active locale; notification titles and bodies from the table with computed numbers in locale number formats",
+          "by": "qa-runner",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     },
     {
       "id": "P7-07",
       "phase": "P7",
       "description": "Compliance review of localised copy",
       "acceptance": "Compliance rules before the build on the SIMULATED mark per language (localised word or English kept), the simulated-readings disclosures (sticker, ABOUT line, card footer, share text) per language, the claim-word lists per language, and the Data safety and privacy policy language plan for P9 (DE at least); reviews the diff before merge; VETOs fixed; logged; pre-ruling logged as D-038 (C1 to C8)",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-038 (C1 to C8), D-041; docs/data-safety.md (4338713)",
+          "output": "pre-ruling on the mark per language, disclosures, claim lists and the P9 legal-language plan; diff review PASS on P7-01 to P7-06, no veto; new rule: a disclosure is never clipped",
+          "by": "compliance",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     },
     {
       "id": "P7-08",
       "phase": "P7",
       "description": "Refuter sweep of P7",
       "acceptance": "The Refuter tries to disprove P7-01 to P7-06 from command outputs, goldens and the diff, including a check that no user-facing English string remains in `app/`, `src/ui/`, `src/state/`, `src/fx/share` and the engine resources when `?lang=de` is active (DOM text scan on the key screens), and that the `en` goldens are unchanged from P6; HOLDs flipped by the Director",
-      "evidence": [],
-      "passes": false
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-041, D-042, D-043",
+          "output": "sweep at 4338713 disproved P7-01, P7-02 (fixed) and found the glyph probe vacuous (replaced); re-check at 0011381 held the fixes and disproved P7-05 twice (profile English, pt mid-word break); final re-check at 6eed148: both fixes HOLD, 68 files, 670 tests",
+          "by": "refuter",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true
     }
   ]
 }

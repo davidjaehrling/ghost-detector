@@ -3,11 +3,12 @@
 Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what is next, what blocks.
 
 ## Current phase
-**P7 Localisation** on branch `claude/p7-localisation` (from `main` at 8df1e12, the P6 squash merge). P8 carries the design-loop leftovers (D-022, D-029, D-034, D-035) and the believability loop on real photographs; P9 launch. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
+**P8 Polish** on branch `claude/p8-polish` (from `main` after the P7 squash merge). P8 carries the design-loop leftovers (D-022, D-029, D-034, D-035) and the believability loop on real photographs; P9 launch. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
 
-P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4, P5 as PR #5, P6 as PR #6 (2026-10-14). Web preview: GitHub Pages workflow on main (owner enables Pages once). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
+P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4, P5 as PR #5, P6 as PR #6, P7 as PR #7 (2026-10-14). Web preview: GitHub Pages workflow on main (owner enables Pages once). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
 
 ## Last thing done
+- P7 verified and merged as PR #7: i18n layer, engine resources, DE/ES/PT written per culture and reviewed twice, localised card and notifications, layout goldens in four languages plus de at 360, Compliance PASS (D-041), Refuter sweep and two re-checks (D-041 to D-043). P7-01..08 flipped. P8 contract next.
 - P6 merged as PR #6 (8df1e12) with the GitHub Pages web-preview workflow. P7 contract P7-01 to P7-08 written (D-037); wave 1 launching.
 - P6 verified: panel rounds (D-034, D-035; five of six surfaces at 8+), Compliance diff review (FCM veto fixed by a config plugin, lifted pending device check), Refuter sweep and re-check (D-035, D-036). P6-01..08 flipped; P6-05 device clauses owner-blocked. Merge PR #6 on CI green after the test hardening commit.
 - P5 merged as PR #5 (c4e8954). P6 contract P6-01 to P6-08 written from docs/p6-brief.md (D-031); wave 1 launched: Compliance pre-review, share card renderer, notification scheduler, investigation log and opt-in module.
@@ -30,8 +31,8 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. P7 wave 1: Compliance pre-ruling on the SIMULATED mark per language, Builder A i18n layer and extraction, Builder B engine resources; then Copy writes DE/ES/PT, second-model review, layout goldens, Compliance diff review, Refuter, merge.
-2. P6 share card, notifications and investigation log (parallel with P5 once wave 1 lands); P7 localisation after.
+1. P8 contract (D-044): Impeccable audit and polish sweep, performance, accessibility, crash-free flows, three Maestro device profiles, the D-022/D-029/D-034/D-035 leftovers; believability loop waits on real photographs.
+2. P9 launch prep: per-language legal URLs, DE Impressum and policy, ES/PT policies, localised listings, `[STORE NAME]` after Gate 1.
 3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase; plus 5 to 8 real dark-room photos for `e2e/fixtures/real/` (D-023).
 
 ## Blockers (owner)
@@ -52,4 +53,5 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 | P4 | ~0.25M (engine 133k, test fix 61k; the screen wiring is counted under P3) | P4-07 phone check waits on the owner |
 | P5 | ~2.3M | Subagents: compliance 76k+147k+151k, cadence 76k, Builder A 140k+286k+79k+85k+84k, release 60k, QA diagnosis 126k + fix 102k, FX 84k, Refuter 148k+69k, Hollow P6 brief 106k; Director context ~0.15M |
 | P6 | ~3.6M | Subagents: Hollow brief 110k, Compliance 84k+149k+155k, FX 248k+165k, Builder B 106k+79k+71k, Builder A 186k+214k+171k+200k+143k+162k, panel 220k+265k, Refuter 137k+83k, Release 68k+72k, FX wasm fix 60k, Refuter re-check 83k, Builder B tests 65k; Director context ~0.25M |
-| P7 | (running) | |
+| P7 | ~3.0M | Subagents: Compliance pre-ruling and diff review ~90k+91k, Builder A i18n ~1.0M over six resumes, Builder B resources and locale tests ~150k, Copy 198k, review rounds 330k, QA goldens ~200k, Refuter 132k+83k+62k; Director context ~0.3M |
+| P8 | (running) | |
