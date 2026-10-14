@@ -25,7 +25,7 @@ import { DEMO_CASES, SCARE_CASE, demoRecord, isDemoName } from '../../src/ui/res
 import { bestSoFar, NO_PRIOR } from '../../src/ui/result/best';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
-import { PINNED_TIERS, stampText, thermalDelta } from '../../src/ui/result/stamp';
+import { PINNED_TIERS, screenStampText, thermalDelta } from '../../src/ui/result/stamp';
 import { Readout } from '../../src/ui/Readout';
 import { scareEligible } from '../../src/ui/result/scare';
 import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../../src/ui/result/deepCopy';
@@ -228,7 +228,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     shareMode === 'format'
       ? { testID: 'key-back', label: shareCopy.cancelLabel, legend: shareCopy.cancel, onPress: () => setShareMode('idle') }
       : { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder, inert: shareMode === 'printing' },
-    { testID: 'key-share', label: shareCopy.keyLabel, legend: shareCopy.key, onPress: openFormat, inert: !digitLanded || shareOpen, backlit: offer.line !== null || shareMode === 'format' },
+    { testID: 'key-share', label: shareCopy.keyLabel, legend: shareCopy.key, onPress: openFormat, inert: !digitLanded || shareOpen, backlit: offer.line !== null && !shareOpen },
     therm
       ? { testID: 'key-therm', label: copy.photoKeyLabel, legend: copy.photoKey, onPress: () => setTherm(false), backlit: true }
       : { testID: 'key-therm', label: copy.thermKeyLabel, legend: copy.thermal, onPress: () => setTherm(true) },
@@ -251,7 +251,6 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
           isStatic={harness.isStatic}
           speed={harness.speed}
           share={{ mode: shareMode, line: offer.line, onPick: pickFormat }}
-          shareOpen={shareOpen}
           onLanded={setDigitLanded}
           scare={scareMode}
           therm={therm}
@@ -288,7 +287,6 @@ type GlassProps = {
   isStatic: boolean;
   speed: number;
   share: { mode: ShareMode; line: OfferKind | null; onPick: (f: CardFormat) => void };
-  shareOpen: boolean;
   onLanded: (landed: boolean) => void;
   scare: ScareMode;
   therm: boolean;
@@ -297,7 +295,7 @@ type GlassProps = {
   onStable: (stable: boolean) => void;
 };
 
-function ResultGlass({ size, record, isStatic, speed, share, shareOpen, onLanded, scare, therm, deep, onPhotoLoaded, onStable }: GlassProps) {
+function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, therm, deep, onPhotoLoaded, onStable }: GlassProps) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -307,7 +305,7 @@ function ResultGlass({ size, record, isStatic, speed, share, shareOpen, onLanded
   const reading = readingsFor(record.seed, tier);
   // One thermal number per result: the cold spot on STRONG and CRITICAL, the THERM reading below.
   const deltaC = thermalDelta(tier, reading);
-  const stamp = stampText({ id: record.id, spi: outcome.spi, deltaC, createdAt: record.createdAt });
+  const stamp = screenStampText({ id: record.id, spi: outcome.spi, deltaC, createdAt: record.createdAt });
 
   // Reveal (psych brief 2.6): 1.2 s of silence with the number blank, the needle at
   // rest and the photo up; then the needle springs and the number lands in one frame at
@@ -387,6 +385,8 @@ function ResultGlass({ size, record, isStatic, speed, share, shareOpen, onLanded
   const resultLine = share.mode === 'fault' ? shareCopy.fault : share.line === 'ready' ? shareCopy.ready(record.id) : share.line === 'updated' ? shareCopy.updated : mainLine;
   const lineCount = PINNED_TIERS.includes(tier) ? 2 : 1;
   const sharePanel = share.mode === 'format' || share.mode === 'printing';
+  // No ad-starting key shares the glass with the share moment: the offer line, format, printing, fault.
+  const shareMoment = share.line !== null || share.mode !== 'idle';
   const unlocked = deep.state === 'unlocked';
   const pct = unlocked ? 100 : profile.signatureDecodedPct;
   const innerW = size.w - 24;
@@ -501,7 +501,7 @@ function ResultGlass({ size, record, isStatic, speed, share, shareOpen, onLanded
           </View>
         )}
         {quiet ? null : <View style={s.spacer} />}
-        {wide ? <DeepKey state={deep.state} onPress={deep.press} shareOpen={shareOpen} /> : null}
+        {wide && !shareMoment ? <DeepKey state={deep.state} onPress={deep.press} /> : null}
         {quiet ? (
           <View style={s.best} testID="result-best">
             {best ? (
@@ -552,9 +552,11 @@ function SharePanel({ mode, height, still, onPick }: { mode: ShareMode; height: 
         <View style={s.shareKeys}>
           <Pressable testID="share-916" accessibilityRole="button" accessibilityLabel={shareCopy.storyLabel} onPress={() => onPick('story')} style={s.shareKey}>
             <Text style={s.shareKeyText}>{shareCopy.story}</Text>
+            <Text style={s.shareKeySub}>{shareCopy.storySub}</Text>
           </Pressable>
           <Pressable testID="share-11" accessibilityRole="button" accessibilityLabel={shareCopy.squareLabel} onPress={() => onPick('square')} style={s.shareKey}>
             <Text style={s.shareKeyText}>{shareCopy.square}</Text>
+            <Text style={s.shareKeySub}>{shareCopy.squareSub}</Text>
           </Pressable>
         </View>
       )}
@@ -571,7 +573,7 @@ const DEEP_LEGEND: Record<Exclude<DeepState, 'unlocked'>, string> = {
   running: deepCopy.running,
 };
 
-function DeepKey({ state, onPress, shareOpen }: { state: DeepState; onPress: () => void; shareOpen: boolean }) {
+function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) {
   if (state === 'unlocked') {
     return (
       <Text style={s.deepDone} testID="deepscan-done">
@@ -579,8 +581,7 @@ function DeepKey({ state, onPress, shareOpen }: { state: DeepState; onPress: () 
       </Text>
     );
   }
-  // No ad is offered while the share flow is open.
-  const live = state === 'ready' && !shareOpen;
+  const live = state === 'ready';
   return (
     <View style={s.deepWrap}>
       <Pressable
@@ -897,6 +898,7 @@ const s = StyleSheet.create({
   shareKeys: { flexDirection: 'row', gap: 12, marginTop: BODY.gap },
   shareKey: { width: 96, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: color.p3 },
   shareKeyText: { ...type.rdS, color: color.p5 },
+  shareKeySub: { ...type.lbXS, color: color.p3 },
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },

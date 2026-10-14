@@ -3,7 +3,7 @@ import { drawOutcome, freshHistory } from '../../../engine';
 import { DEMO_CASES, DEMO_SEEDS, SCARE_CASE } from '../demo';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../panel';
 import { readingsFor } from '../readings';
-import { clock, stampText, thermalDelta } from '../stamp';
+import { clock, screenStampText, stampText, thermalDelta } from '../stamp';
 import { placeGhost } from '../../../fx/ghostV0/placement';
 
 describe('data strip', () => {
@@ -11,6 +11,7 @@ describe('data strip', () => {
     const at = new Date(2026, 9, 13, 22, 48).getTime();
     expect(clock(at)).toBe('22:48');
     expect(stampText({ id: '0007', spi: 80, deltaC: -6.25, createdAt: at })).toBe('CASE 0007 · SPI 80 · ΔT -6.3 °C · 22:48');
+    expect(screenStampText({ id: '0007', spi: 80, deltaC: -6.25, createdAt: at })).toBe('CASE 0007 · SPI 80 · ΔT -6.3 °C · 22:48 · SIMULATED');
   });
 
   it('pins ΔT to the cold spot on STRONG and CRITICAL, to THERM below', () => {

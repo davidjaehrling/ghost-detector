@@ -19,3 +19,10 @@ export function clock(ms: number): string {
 export function stampText({ id, spi, deltaC, createdAt }: { id: string; spi: number; deltaC: number; createdAt: number }): string {
   return `CASE ${id} · SPI ${spi} · ΔT ${deltaC.toFixed(1)} °C · ${clock(createdAt)}`;
 }
+
+/**
+ * The strip as the result screen draws it: the card's data run plus ` · SIMULATED`, so a plain
+ * screenshot carries the mark (D-034). The share card prints the same two parts itself
+ * (src/fx/share/text.ts), so `stampText` stays the data run alone.
+ */
+export const screenStampText = (d: Parameters<typeof stampText>[0]): string => `${stampText(d)} · SIMULATED`;

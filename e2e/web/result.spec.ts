@@ -173,14 +173,14 @@ test('SHARE opens the format choice, and the only ad surface on the result is th
   await expect(page.getByTestId('result-line')).toHaveText('Activity logged.');
   await page.getByTestId('key-share').click();
   await expect(page.getByTestId('share-line')).toHaveText('Print field card. Format?');
-  // While the flow is open the DEEP SCAN key is not live: no ad is on offer.
-  await expect(page.getByTestId('deepscan-key')).toBeDisabled();
-  // No banner or interstitial surface; the one sponsor line is the DEEP SCAN sublabel.
+  // While the flow is open the DEEP SCAN key and its sublabel are gone: no ad shares the glass.
+  await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
+  // No banner or interstitial surface and no sponsor line.
   const ids = await page.locator('[data-testid]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
   expect(ids.length).toBeGreaterThan(10);
   expect(ids.filter((id) => /banner|interstitial/i.test(id))).toEqual([]);
   const body = await page.locator('body').innerText();
-  expect(body.match(/sponsored/gi)).toHaveLength(1);
+  expect(body.match(/sponsored/gi)).toBeNull();
   expect(body).not.toMatch(/advertisement/i);
   check();
 });
@@ -274,7 +274,7 @@ for (const { demo } of DEMOS) {
     await settle(page);
     const strip = page.getByTestId('result-stamp');
     const label = (await strip.getAttribute('aria-label'))!;
-    const m = /^CASE (\d{4}) · SPI (\d+) · ΔT (-?\d+\.\d) °C · (\d\d:\d\d)$/.exec(label);
+    const m = /^CASE (\d{4}) · SPI (\d+) · ΔT (-?\d+\.\d) °C · (\d\d:\d\d) · SIMULATED$/.exec(label);
     expect(m, label).not.toBeNull();
     expect(m![2]).toBe((await page.getByTestId('result-spi').innerText()).trim());
     expect(m![4]).toBe('22:48');
