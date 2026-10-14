@@ -41,3 +41,15 @@ describe('readingsFor', () => {
     });
   });
 });
+
+describe('driftKhz', () => {
+  it('sits in 1.0 to 4.0 kHz on one decimal and leaves the other readings alone', () => {
+    for (let seed = 1; seed < 200; seed++) {
+      const r = readingsFor(seed, 'strong');
+      expect(r.driftKhz).toBeGreaterThanOrEqual(1);
+      expect(r.driftKhz).toBeLessThanOrEqual(4);
+      expect(Math.round(r.driftKhz * 10)).toBeCloseTo(r.driftKhz * 10, 6);
+    }
+    expect(readingsFor(95, 'active')).toMatchObject({ evpHz: readingsFor(95, 'active').evpHz });
+  });
+});

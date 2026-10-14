@@ -1,16 +1,18 @@
+import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { ScopeLayer } from '../../fx/scope';
 import { GRID_COLS, GRID_ROWS, GRID_TOP, Graticule, GridLabels, gridDiv, useBlink } from '../boot/parts';
-import { mulberry32 } from '../boot/seed';
 import { Readout } from '../Readout';
 import type { GlassSize } from '../screens/Housing';
 import { color, type } from '../tokens';
-import { BLOCKS, BlockBar } from './BlockBar';
+import { BLOCKS, BlockBar, RATE_MAX_H } from './BlockBar';
 import {
   FAULT_LINE,
   type Phase,
   type ScanFrame,
   barBlocks,
   faultOn,
+  heldThermal,
   liveAt,
   logBefore,
   phaseLine,
@@ -24,10 +26,16 @@ const copy = {
   sens: '10 mG/DIV',
 };
 
-const SEG = 6;
 const CH_S = 8.5; // rdS advance: 0.4 em plus 0.5 tracking
-// Live row 44, RATE 24, rate bar 16, gaps and the bottom margin.
-const PINNED_H = 12 + 16 + 4 + 44 + 24;
+// Live row 44, RATE 24, rate ramp, gaps and the bottom margin.
+const RATE_BAR_BOTTOM = 12;
+const PINNED_BOTTOM = RATE_BAR_BOTTOM + RATE_MAX_H + 6;
+const LIVE_H = 44;
+const RATE_H = 24;
+const TELEMETRY_GAP = 12; // least gap between the telemetry and the pinned live row
+const GRID_ROWS_MAX = 12;
+// Progress bar 24 px under the grid, telemetry 52 px under it (three log rows, then the status row).
+const TELEMETRY_TOP = 52;
 const FAULT_INDENT = 'E-07 '.length * CH_S;
 
 // Glass content of the scan theatre: graticule, sweep line with persistence
@@ -40,13 +48,22 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   const { w, h } = size;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
-  const gh = div * GRID_ROWS;
+  const narrow = gw < 304;
+  // The graticule takes the height the telemetry and the pinned live row leave over, in whole
+  // divisions (8 at the least, the Bible's grid); what is left below that is the gap between the
+  // telemetry and the live row, 12 px or a little more. Every state shares this layout.
+  const telemetryH = 3 * 24 + (narrow ? 48 : 24);
+  const below = TELEMETRY_TOP + telemetryH + TELEMETRY_GAP + LIVE_H + RATE_H + PINNED_BOTTOM;
+  const rows = Math.max(GRID_ROWS, Math.min(GRID_ROWS_MAX, Math.floor((h - GRID_TOP - below) / div)));
+  const gh = div * rows;
   const gridLeft = Math.round((w - gw) / 2);
   const gridBottom = GRID_TOP + gh;
   const hold = frame.kind === 'hold' || frame.kind === 'done';
   const fault = frame.kind === 'fault';
   const phase: Phase = hold ? 4 : frame.phase;
   const live = hold || fault ? null : liveAt(seed, phase, frame.tick);
+  // The hold keeps the last thermal reading of phase 2, dimmed to p2, with a block blinking after it.
+  const held = hold ? heldThermal(seed, frame.t) : null;
   const pct = Math.floor(frame.progress * 100);
   const blink = useBlink(still);
 
@@ -55,7 +72,6 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   const status = fault ? (faultVisible ? FAULT_LINE : '') : phaseLine(seed, phase);
   const statusColor = hold ? color.p3 : frame.final || fault ? color.p5 : color.p4;
   // The fault line hangs its second row under the text after `E-07 ` on a narrow glass.
-  const narrow = gw < 304;
   const rate = live ? rateAt(seed, frame.tick, frame.activeFrac, cap) : 0;
   const barLeft = gridLeft;
   const lit = barBlocks(frame.progress);
@@ -63,10 +79,21 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
 
   return (
     <>
-      <Graticule w={w} h={h} />
-      <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} sens={copy.sens} />
-      <Trace seed={seed} frame={frame} left={gridLeft} cy={GRID_TOP + gh / 2} gw={gw} gh={gh} flat={fault} dim={hold} />
-      <Sweep turns={frame.sweep} left={gridLeft} gw={gw} gh={gh} dim={hold} />
+      <StaticGraticule w={w} h={h} rows={rows} />
+      <StaticGridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} sens={copy.sens} rows={rows} />
+      {/* Trace, afterglow and sweep in Skia (src/fx/scope); the fault beat tears the grid and dips the glass. */}
+      <ScopeLayer
+        seed={seed}
+        frame={{ tick: frame.tick, sweep: frame.sweep, activeFrac: frame.activeFrac, faultT: frame.kind === 'fault' ? frame.faultT : -1 }}
+        left={gridLeft}
+        top={GRID_TOP}
+        gw={gw}
+        gh={gh}
+        div={div}
+        flat={fault}
+        dim={hold}
+        still={still}
+      />
       <BlockBar lit={lit} left={barLeft} top={gridBottom + 24} width={gw - 48} hideLast={fault && !faultVisible} testID="scan-bar" label={`Progress ${pct} percent`} />
       {hold ? (
         <View style={[s.holdBlock, { left: gridLeft + gw - 10, top: gridBottom + 26, opacity: blink ? 1 : 0 }]} testID="scan-percent" />
@@ -75,7 +102,8 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
           {`${String(pct).padStart(3, ' ')}%`}
         </Text>
       )}
-      <View style={[s.block, { left: gridLeft, bottom: PINNED_H + 8, width: gw }]} testID="scan-readout">
+      {/* Telemetry sits directly under the progress bar: no dead band between them. */}
+      <View style={[s.block, { left: gridLeft, top: gridBottom + TELEMETRY_TOP, width: gw }]} testID="scan-readout">
         {[0, 1, 2].map((slot) => (
           <Text key={slot} style={s.log} numberOfLines={1}>
             {lines[slot - (3 - lines.length)] ?? ''}
@@ -92,92 +120,62 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
           </Text>
         )}
       </View>
-      <View style={[s.pinned, { left: gridLeft, width: gw }]}>
+      <View style={[s.pinned, { left: gridLeft, width: gw, bottom: PINNED_BOTTOM }]}>
         <View style={s.live} testID="scan-live">
           {live ? <Readout size="rdL" label={live.label} value={live.value} unit={live.unit} labelCh={4} valueCh={5} unitCh={5} /> : null}
-        </View>
-        <View style={s.rate} testID="scan-rate">
-          {live ? (
-            <Readout
-              size="rdS"
-              label="RATE"
-              value={String(rate)}
-              unit="c/s"
-              labelCh={5}
-              valueCh={3}
-              unitCh={3}
-              labelColor={frame.final ? color.p5 : color.p3}
-              valueColor={frame.final ? color.p5 : color.p4}
-              unitColor={frame.final ? color.p5 : color.p3}
-            />
+          {held ? (
+            <View style={s.heldRow} testID="scan-held">
+              <Readout
+                size="rdL"
+                label={held.label}
+                value={held.value}
+                unit={held.unit}
+                labelCh={4}
+                valueCh={5}
+                unitCh={2}
+                labelColor={color.p2}
+                valueColor={color.p2}
+                unitColor={color.p2}
+              />
+              <View style={[s.heldBlock, { opacity: blink ? 1 : 0 }]} testID="scan-held-block" />
+            </View>
           ) : null}
         </View>
+        <View style={s.rate} testID="scan-rate">
+          {/* The label stays through the hold and the fault beat; only the value goes blank. */}
+          <Readout
+            size="rdS"
+            label="RATE"
+            value={live ? String(rate) : '--'}
+            unit="c/s"
+            labelCh={5}
+            valueCh={3}
+            unitCh={3}
+            labelColor={frame.final && live ? color.p5 : color.p3}
+            valueColor={live ? (frame.final ? color.p5 : color.p4) : color.p2}
+            unitColor={live ? (frame.final ? color.p5 : color.p3) : color.p2}
+          />
+        </View>
       </View>
-      <BlockBar lit={rateLit} left={gridLeft} bottom={12} width={gw} litColor={frame.final ? color.p5 : color.p4} testID="scan-rate-bar" label="Event rate" />
+      <BlockBar variant="rate" lit={rateLit} left={gridLeft} bottom={RATE_BAR_BOTTOM} width={gw} litColor={frame.final ? color.p5 : color.p4} testID="scan-rate-bar" label="Event rate" />
     </>
   );
 }
 
-// Noise trace: points every SEG px joined by straight segments.
-function Trace({ seed, frame, left, cy, gw, gh, flat, dim }: { seed: number; frame: ScanFrame; left: number; cy: number; gw: number; gh: number; flat: boolean; dim: boolean }) {
-  const n = Math.ceil(gw / SEG) + 1;
-  const rnd = mulberry32((seed ^ Math.imul(frame.tick + 1, 2246822519)) >>> 0);
-  const amp = flat ? 0 : (0.12 + 0.5 * frame.activeFrac) * (gh / 2);
-  const drift = frame.tick * 0.9;
-  const pts = Array.from({ length: n }, (_, i) => {
-    const dy = amp * (0.6 * Math.sin(i * 0.21 + drift) + 0.4 * (rnd() * 2 - 1));
-    return { x: Math.min(gw, i * SEG), y: Math.round((cy + dy) * 2) / 2 };
-  });
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {pts.slice(1).map((b, i) => {
-        const a = pts[i]!;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const len = Math.hypot(dx, dy);
-        return (
-          <View
-            key={i}
-            style={[
-              s.trace,
-              {
-                left: left + (a.x + b.x) / 2 - len / 2,
-                top: (a.y + b.y) / 2 - 0.75,
-                width: len,
-                backgroundColor: dim ? color.p2 : color.p4,
-                transform: [{ rotate: `${Math.atan2(dy, dx)}rad` }],
-              },
-            ]}
-          />
-        );
-      })}
-    </View>
-  );
-}
-
-const TAIL = [color.p5, color.p4, color.p3, color.p2, color.p1];
-
-function Sweep({ turns, left, gw, gh, dim }: { turns: number; left: number; gw: number; gh: number; dim: boolean }) {
-  const x = Math.floor((turns % 1) * gw);
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      {TAIL.map((c, i) => {
-        const tx = x - i * 7;
-        if (tx < 0) return null;
-        return <View key={i} style={{ position: 'absolute', left: left + tx, top: GRID_TOP, width: i === 0 ? 2 : 3, height: gh, backgroundColor: dim ? color.p2 : c, opacity: dim ? (i === 0 ? 0.9 : 0.35) : i === 0 ? 0.9 : 0.55 }} />;
-      })}
-    </View>
-  );
-}
+// The grid and its labels never change during a scan: memoised so the 20 Hz scan clock does not
+// re-render a hundred views each tick.
+const StaticGraticule = memo(Graticule);
+const StaticGridLabels = memo(GridLabels);
 
 const s = StyleSheet.create({
-  trace: { position: 'absolute', height: 1.5, backgroundColor: color.p4 },
   pct: { ...type.rdXS, position: 'absolute', color: color.p4, textAlign: 'right' },
   block: { position: 'absolute' },
   log: { ...type.rdS, color: color.p3, height: 24 },
   status: { ...type.rdS, height: 24 },
+  heldRow: { flexDirection: 'row', alignItems: 'center' },
+  heldBlock: { width: 12, height: 26, marginLeft: 6, backgroundColor: color.p3 },
   holdBlock: { position: 'absolute', width: 10, height: 14, backgroundColor: color.p4 },
-  pinned: { position: 'absolute', bottom: 12 + 16 + 4 },
+  pinned: { position: 'absolute' },
   live: { height: 44 },
   rate: { height: 24 },
 });

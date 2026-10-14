@@ -10,8 +10,11 @@ const DEMOS = [
   { demo: 'critical', tier: 'CRITICAL' },
 ] as const;
 
-// The same active demo over the other photos, with a second case number.
-const FIXTURES = ['bright', 'outdoors'] as const;
+// The active demo over the other photos: each has its own seed (so its own profile) and case number.
+const FIXTURES = [
+  { fixture: 'bright', caseNo: '0003' },
+  { fixture: 'outdoors', caseNo: '0007' },
+] as const;
 
 function watch(page: import('@playwright/test').Page) {
   const consoleErrors: string[] = [];
@@ -26,10 +29,17 @@ function watch(page: import('@playwright/test').Page) {
   };
 }
 
+const frames = (page: import('@playwright/test').Page) => page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+
 async function settle(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('result-photo')).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0));
+  // The data strip's font has loaded (its canvas is drawn once aria-busy clears).
+  await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-busy', 'false');
+  // The photo and digit canvases have drawn and the warped snapshot has been retaken.
+  await frames(page);
+  await page.waitForTimeout(400);
 }
 
 for (const { demo, tier } of DEMOS) {
@@ -45,24 +55,27 @@ for (const { demo, tier } of DEMOS) {
       await expect(page.getByTestId('key-deepscan')).toHaveCount(0);
       await expect(page.getByTestId('result-offer')).toHaveCount(0);
       await expect(page.getByTestId('result-profile').getByText('NO SIGNATURE')).toBeVisible();
-      await expect(page.getByTestId('ghost-v0')).toHaveCount(0);
+      await expect(page.getByTestId('composite')).toHaveCount(0);
     } else {
       await expect(page.getByTestId('key-deepscan')).toBeVisible();
       await expect(page.getByTestId('result-offer')).toHaveText('Run DEEP SCAN to resolve designation, behaviour and EVP. Short video plays.');
       await expect(page.getByTestId('result-decoded')).toContainText('SIGNATURE PARTIALLY DECODED:');
       await expect(page.getByTestId('profile-mask')).toHaveCount(3);
-      await expect(page.getByTestId('ghost-v0')).toHaveCount(1);
+      await expect(page.getByTestId('composite')).toHaveCount(1);
+      await expect(page.getByTestId('ghost-v0')).toHaveCount(0);
+      await expect(page.getByTestId('profile-era')).toHaveText(/^[^a-z]+$/);
     }
     await expect(page.getByTestId('key-back')).toHaveText('NEW SCAN');
     const line = page.getByTestId('result-line');
-    if (demo === 'strong') {
-      await expect(line).toHaveText('Strong. Signature resolving.');
-      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT dT -\d+\.\d °C$/);
-      const cold = await page.getByTestId('result-coldspot').innerText();
-      const therm = await page.getByText(/^THERM/).first().innerText();
-      expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD SPOT dT ', ''));
+    if (demo === 'strong' || demo === 'critical') {
+      if (demo === 'strong') await expect(line).toHaveText('Strong. Signature resolving.');
+      await expect(page.getByTestId('result-coldspot')).toHaveText(/^COLD SPOT ΔT -\d+\.\d °C · DRIFT \d\.\d kHz$/);
+      const cold = (await page.getByTestId('result-coldspot').innerText()).split(' · ')[0]!;
+      const therm = await page.getByText(/^THERM\s+-?\d/).first().innerText();
+      expect(therm.replace(/\s+/g, ' ')).not.toContain(cold.replace('COLD SPOT ΔT ', ''));
     } else {
       await expect(page.getByTestId('result-coldspot')).toHaveCount(0);
+      if (demo === 'active') await expect(line).toHaveText('Activity logged.');
     }
     if (demo === 'critical') {
       const text = await line.innerText();
@@ -93,20 +106,65 @@ for (const { demo, tier } of DEMOS) {
   });
 }
 
-for (const fixture of FIXTURES) {
+for (const { fixture, caseNo } of FIXTURES) {
   test(`result active over ${fixture}`, async ({ page }, testInfo) => {
     const check = watch(page);
-    await page.goto(`/result/demo?static=1&fixture=${fixture}&demo=active&case=0002`);
+    await page.goto(`/result/demo?static=1&fixture=${fixture}&demo=active&case=${caseNo}`);
     await expect(page.getByTestId('screen-result')).toBeVisible();
     await settle(page);
-    await expect(page.getByText('CASE 0002')).toBeVisible();
+    await expect(page.getByText(`CASE ${caseNo}`)).toBeVisible();
     await expect(page.getByTestId('result-tier')).toHaveText('ACTIVE');
-    await expect(page.getByTestId('ghost-v0')).toHaveCount(1);
+    await expect(page.getByTestId('composite')).toHaveCount(1);
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-active-${fixture}.png` });
     await expect(page).toHaveScreenshot(`result-active-${fixture}.png`, { maxDiffPixels: 150 });
     check();
   });
 }
+
+test('THERM swaps the photo for the thermal view of the same frame and PHOTO swaps back', async ({ page }) => {
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=cellar&demo=critical');
+  await settle(page);
+  const photo = (await page.getByTestId('result-photo').boundingBox())!;
+  await expect(page.getByTestId('key-therm')).toHaveText('THERM');
+  await expect(page.getByTestId('thermal-view')).toHaveCount(0);
+  await page.getByTestId('key-therm').click();
+  await expect(page.getByTestId('thermal-view')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('key-therm')).toHaveText('PHOTO');
+  const view = (await page.getByTestId('thermal-view').boundingBox())!;
+  expect(Math.abs(view.x - photo.x)).toBeLessThan(1.5);
+  expect(Math.abs(view.width - photo.width)).toBeLessThan(1.5);
+  expect(view.y).toBeGreaterThanOrEqual(photo.y - 1.5);
+  expect(view.y + view.height).toBeLessThanOrEqual(photo.y + photo.height + 1.5);
+  // One number on screen: on CRITICAL the view prints the COLD SPOT line's ΔT (not the THERM reading).
+  const cold = (await page.getByTestId('result-coldspot').innerText()).replace(/\s+/g, ' ');
+  const dt = /ΔT (-\d+\.\d) °C/.exec(cold)?.[1];
+  expect(dt).toBeDefined();
+  await expect(page.getByTestId('thermal-view')).toHaveAttribute('aria-label', new RegExp(`ΔT ${dt!} `));
+  await page.getByTestId('key-therm').click();
+  await expect(page.getByTestId('thermal-view')).toHaveCount(0);
+  await expect(page.getByTestId('key-therm')).toHaveText('THERM');
+  check();
+});
+
+test('result-therm-critical: the thermal view', async ({ page }, testInfo) => {
+  test.skip(page.viewportSize()?.width !== 390, 'one golden, at 390');
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=cellar&demo=critical&therm=1');
+  await expect(page.getByTestId('screen-result')).toBeVisible();
+  await expect(page.getByTestId('thermal-view')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('key-therm')).toHaveText('PHOTO');
+  await page.evaluate(() => document.fonts.ready);
+  await frames(page);
+  await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-therm-critical.png` });
+  // The thermal panel is a Skia shader; the runner's software renderer differs from the
+  // container by about 2% of the panel, so this golden uses the Skia tolerance (400 px for
+  // probes, more here because the whole 318x303 panel is shader output). The label above
+  // guards the content.
+  await expect(page.getByTestId('thermal-view')).toHaveAttribute('aria-label', /ΔT -\d+\.\d °C/);
+  await expect(page).toHaveScreenshot('result-therm-critical.png', { maxDiffPixels: 2500 });
+  check();
+});
 
 test('inert keys show one line and no ad surface exists', async ({ page }) => {
   const check = watch(page);
@@ -139,6 +197,11 @@ test('QUIET fills the lower glass with the best earlier case', async ({ page }) 
   await page.goto('/result/demo?static=1&fixture=cellar&demo=quiet&case=0002');
   await settle(page);
   await expect(page.getByTestId('result-best')).toHaveText('BEST SO FAR: 84 STRONG · CELLAR · 23:41');
+  const best = await page.getByTestId('result-best').boundingBox();
+  const text = await page.getByTestId('result-best').locator('div,span').first().boundingBox();
+  // Glass text under a rule, left aligned, not a boxed card.
+  expect(await page.getByTestId('result-best').evaluate((el) => getComputedStyle(el).borderLeftWidth)).toBe('0px');
+  expect(text!.x - best!.x).toBeLessThan(4);
   check();
 });
 
@@ -151,13 +214,25 @@ test('the reveal holds silent for 1.2 s, then lands the number', async ({ page }
     profile: { class: 'KEEPER', era: 'Era est. 1905 to 1973', name: 'RSD-9', traits: [], signatureDecodedPct: 61 },
   };
   await page.addInitScript((r) => localStorage.setItem('fs4.scans.v1', JSON.stringify([r])), rec);
+  // Time the number from the page itself: a slow headless frame must not make the 1.2 s hold look short.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __spi: { dash?: number; num?: number } };
+    w.__spi = {};
+    const look = () => {
+      const el = document.querySelector('[data-testid="result-spi"]');
+      const text = el?.textContent;
+      if (text === '--' && w.__spi.dash === undefined) w.__spi.dash = performance.now();
+      if (text === '62' && w.__spi.num === undefined) w.__spi.num = performance.now();
+    };
+    new MutationObserver(look).observe(document, { childList: true, subtree: true, characterData: true });
+  });
   await page.goto('/result/0001');
   await expect(page.getByTestId('result-photo')).toBeVisible();
   const spi = page.getByTestId('result-spi');
-  await expect(spi).toHaveText('--');
-  await page.waitForTimeout(800);
-  await expect(spi).toHaveText('--');
-  await expect(spi).toHaveText('62', { timeout: 5000 });
+  await expect(spi).toHaveText('62', { timeout: 8000 });
+  const { dash, num } = await page.evaluate(() => (window as unknown as { __spi: { dash?: number; num?: number } }).__spi);
+  expect(dash).toBeDefined();
+  expect(num! - dash!).toBeGreaterThanOrEqual(1100);
   check();
 });
 
@@ -170,3 +245,50 @@ test('a missing case shows NO RECORD and a way back', async ({ page }) => {
   await expect(page.getByTestId('screen-viewfinder')).toBeVisible();
   check();
 });
+
+// The photo window is one height on every tier, and the demos of one photo differ tier to tier.
+test('the photo window is the same height on every tier and each cellar case has its own number', async ({ page }) => {
+  const heights: number[] = [];
+  const stamps: string[] = [];
+  for (const { demo } of DEMOS) {
+    await page.goto(`/result/demo?static=1&fixture=cellar&demo=${demo}`);
+    await settle(page);
+    heights.push(Math.round((await page.getByTestId('result-photo').boundingBox())!.height));
+    stamps.push((await page.getByTestId('result-stamp').getAttribute('aria-label'))!);
+  }
+  expect(new Set(heights).size).toBe(1);
+  expect(new Set(stamps.map((t) => /^CASE (\d{4})/.exec(t)![1])).size).toBe(4);
+  await page.goto('/result/demo?static=1&fixture=cellar&demo=critical&scare=1');
+  await settle(page);
+  expect(Math.round((await page.getByTestId('result-photo').boundingBox())!.height)).toBe(heights[0]);
+  expect(stamps.map((t) => /^CASE (\d{4})/.exec(t)![1])).not.toContain(/^CASE (\d{4})/.exec((await page.getByTestId('result-stamp').getAttribute('aria-label'))!)![1]);
+});
+
+// The data strip burned into the photo's lower left: case, SPI, ΔT, time (share crop).
+for (const { demo } of DEMOS) {
+  test(`the data strip on ${demo} carries case, SPI, ΔT and the time, bottom-left on the photo`, async ({ page }) => {
+    await page.goto(`/result/demo?static=1&fixture=cellar&demo=${demo}`);
+    await settle(page);
+    const strip = page.getByTestId('result-stamp');
+    const label = (await strip.getAttribute('aria-label'))!;
+    const m = /^CASE (\d{4}) · SPI (\d+) · ΔT (-?\d+\.\d) °C · (\d\d:\d\d)$/.exec(label);
+    expect(m, label).not.toBeNull();
+    expect(m![2]).toBe((await page.getByTestId('result-spi').innerText()).trim());
+    expect(m![4]).toBe('22:48');
+    // One thermal number: the cold spot on STRONG and CRITICAL, the THERM reading below.
+    if (demo === 'strong' || demo === 'critical') {
+      expect(await page.getByTestId('result-coldspot').innerText()).toContain(`ΔT ${m![3]} °C`);
+    } else {
+      expect((await page.getByText(/^THERM\s+-?\d/).first().innerText()).replace(/\s+/g, ' ')).toContain(m![3]);
+    }
+    const photo = (await page.getByTestId('result-photo').boundingBox())!;
+    const box = (await strip.boundingBox())!;
+    expect(box.x).toBeLessThan(photo.x + 4);
+    expect(box.y + box.height).toBeGreaterThan(photo.y + photo.height - 4);
+    expect(box.y).toBeGreaterThan(photo.y + photo.height / 2);
+    // Drawn into a canvas on the photo, under the glass overlay (the overlay comes later in the tree).
+    await expect(strip.locator('canvas')).toHaveCount(1);
+    await page.getByTestId('key-therm').click();
+    await expect(page.getByTestId('result-stamp')).toHaveCount(0);
+  });
+}

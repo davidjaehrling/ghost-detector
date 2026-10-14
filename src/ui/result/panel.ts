@@ -1,4 +1,5 @@
-import type { RegionInput } from '../../fx/ghostV0';
+import type { Tier } from '../../engine';
+import { DEFAULT_OPACITY_RANGE, OPACITY_MAX, OPACITY_MIN, type RegionInput } from '../../fx/ghostV0/placement';
 
 // The result photo is laid out at its natural 3:4 shape (width W, height imgH)
 // and cropped by a shorter panel. The ghost is placed against what is seen, so
@@ -59,4 +60,32 @@ export function cropOnFigure(panelH: number, imgH: number, top: number, fig: { y
     }
   }
   return { top: top + best, dy: best };
+}
+
+// Placement seed per case: the record's seed mixed with its case number, so two cases on one
+// photo (or one demo seed on two photos) do not land in the same spot with the same variant.
+export function caseSeed(seed: number, id: string): number {
+  let h = 2166136261;
+  for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return (Math.imul(seed >>> 0, 0x9e3779b1) ^ h) >>> 0;
+}
+
+// Opacity rises with tier inside the belief band: ACTIVE takes the lower middle, STRONG the upper
+// middle, CRITICAL the top. The FX tier caps fall with tier (0.22, 0.20, 0.18), which would make
+// STRONG fainter than ACTIVE, so the ladder is passed as `tierCap` (placeGhost clamps it to
+// 0.08..0.25, and the band itself never leaves the belief answer's range).
+const LADDER: Partial<Record<Tier, [number, number]>> = {
+  active: [0.2, 0.6],
+  strong: [0.65, 0.85],
+  critical: [0.9, 1],
+};
+
+export function tierOpacity(tier: Tier, band: readonly [number, number] = DEFAULT_OPACITY_RANGE): { opacityRange?: [number, number]; tierCap?: Partial<Record<Tier, number>> } {
+  const at = LADDER[tier];
+  if (!at) return {};
+  const lo = Math.min(OPACITY_MAX, Math.max(OPACITY_MIN, Math.min(band[0], band[1])));
+  const hi = Math.min(OPACITY_MAX, Math.max(OPACITY_MIN, Math.max(band[0], band[1])));
+  const a = lo + (hi - lo) * at[0];
+  const b = lo + (hi - lo) * at[1];
+  return { opacityRange: [a, b], tierCap: { [tier]: b } };
 }

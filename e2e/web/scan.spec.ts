@@ -34,15 +34,25 @@ for (const [name, phase] of [
     if (phase === 'hold') {
       // The hold blanks only the live row and the percentage; the last telemetry stays.
       await expect(page.getByTestId('scan-percent')).toHaveText('');
-      await expect(page.getByTestId('scan-live')).toHaveText('');
-      await expect(page.getByTestId('scan-rate')).toHaveText('');
+      // The live row keeps the last ΔT of the thermal phase, dimmed to p2, with a block blinking after it.
+      await expect(page.getByTestId('scan-live')).toContainText(/^ΔT\s+-\d\.\d\s+°C$/);
+      await expect(page.getByTestId('scan-held-block')).toHaveCount(1);
+      const held = page.getByTestId('scan-held').locator('div[dir="auto"] > span').first();
+      expect(await held.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(47, 122, 69)');
+      expect(await page.getByTestId('scan-held-block').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(79, 180, 106)');
+      // The rate label stays through the hold; the value is a dash pair.
+      await expect(page.getByTestId('scan-rate')).toHaveText(/^RATE\s+--\s+c\/s$/);
       await expect(page.getByTestId('scan-status')).toHaveText('DECODE 2048 BLOCKS');
       await expect(page.getByTestId('scan-readout')).toContainText('ACOUSTIC');
     } else if (phase === 'fault') {
       await expect(page.getByTestId('scan-status')).toHaveText(/^E-07 SENSOR DRIFT\.\s*RECALIBRATING\.$/);
       await expect(page.getByTestId('scan-live')).toHaveText('');
+      await expect(page.getByTestId('scan-rate')).toHaveText(/^RATE\s+--\s+c\/s$/);
     } else {
-      await expect(page.getByTestId('scan-readout')).toContainText('THERMAL dT');
+      // The pinned live row is the only thermal value; the log line carries none.
+      await expect(page.getByTestId('scan-readout')).toContainText('THERMAL PROBE ZEROED');
+      await expect(page.getByTestId('scan-live')).toContainText('ΔT');
+      await expect(page.getByTestId('scan-readout')).not.toContainText(/THERMAL.*\d/);
       await expect(page.getByTestId('scan-rate')).toContainText('RATE');
     }
     await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/${name}.png` });
@@ -77,4 +87,22 @@ test('cancel returns to the viewfinder and saves nothing', async ({ page }) => {
   const saved = await page.evaluate(() => localStorage.getItem('fs4.scans.v1'));
   expect(saved).toBeNull();
   check();
+});
+
+// A live run (nothing frozen): in the 1.2 s hold the block after the held ΔT blinks at 1 Hz. The page
+// records the block's opacity itself every 25 ms (a test round trip is too slow under load).
+test('the block after the held ΔT blinks', async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __blink: string[] };
+    w.__blink = [];
+    setInterval(() => {
+      const e = document.querySelector('[data-testid="scan-held-block"]');
+      if (e) w.__blink.push(getComputedStyle(e).opacity);
+    }, 25);
+  });
+  await page.goto(`/scan?seed=${STRONG_SEED}`);
+  await expect(page.getByTestId('screen-result')).toBeVisible({ timeout: 30_000 });
+  const seen = await page.evaluate(() => [...new Set((window as unknown as { __blink: string[] }).__blink)].sort());
+  expect(seen).toEqual(['0', '1']);
 });

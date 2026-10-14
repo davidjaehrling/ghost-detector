@@ -111,7 +111,8 @@ export function phaseLine(seed: number, phase: Phase): string {
     case 1:
       return `FLUX SAMPLE ${Math.round(300 + b1 * 260)} mG`;
     case 2:
-      return `THERMAL dT ${(-(0.4 + b1 * 3.2)).toFixed(1)} °C`;
+      // No value: the pinned ΔT row is the only live thermal reading on the screen (D-011).
+      return 'THERMAL PROBE ZEROED';
     case 3:
       return `ACOUSTIC ${Math.round(-(30 + b1 * 20))} dBFS`;
     default:
@@ -134,12 +135,20 @@ export function liveAt(seed: number, phase: Phase, tick: number): Live {
     case 1:
       return { label: 'FLUX', value: String(Math.round((300 + b1 * 260) * wob)), unit: 'mG' };
     case 2:
-      return { label: 'dT', value: (-(0.4 + b1 * 3.2) * wob).toFixed(1), unit: '°C' };
+      return { label: 'ΔT', value: (-(0.4 + b1 * 3.2) * wob).toFixed(1), unit: '°C' };
     case 3:
       return { label: 'LVL', value: String(Math.round(-(30 + b1 * 20) * wob)), unit: 'dBFS' };
     default:
       return { label: 'BLK', value: String(Math.min(2048, Math.round(tick * 9.7 + b1 * 40))).padStart(4, '0'), unit: '/2048' };
   }
+}
+
+// The ΔT the hold keeps on the glass: the last reading of phase 2 (the thermal phase), from the
+// active time at which the hold starts. A pure function of (seed, activeMs), so the held frame
+// and the one logged live agree.
+export function heldThermal(seed: number, activeMs: number): Live {
+  const lastTick = Math.max(0, Math.ceil((activeMs * 3) / 5 / TICK_MS) - 1);
+  return liveAt(seed, 2, lastTick);
 }
 
 export const readingAt = (seed: number, phase: Phase, tick: number): string => {

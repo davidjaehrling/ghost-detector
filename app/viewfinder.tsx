@@ -1,20 +1,28 @@
 import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AccessibilityInfo, Image, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { sessionActivity } from '../src/state/session';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
-import { activityIndex } from '../src/ui/boot/activity';
 import type { KeySlot } from '../src/ui/boot/parts';
 import { captureSeed } from '../src/ui/capture';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
-import { fixtureSource, fixtureUri } from '../src/ui/fixtures';
+import { fixtureUri } from '../src/ui/fixtures';
+import { FeedTint } from '../src/fx/glass';
+import { readBootParams } from '../src/ui/boot/params';
 import { type Harness, readHarness } from '../src/ui/harness';
+import { sound } from '../src/ui/audio';
 import { Readout } from '../src/ui/Readout';
+import { useActive } from '../src/ui/useActive';
+import { useReduceMotion } from '../src/ui/useReduceMotion';
 import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
-import { type FluxSample, createFluxWalk, fluxAngle, formatFlux, formatGeo, liveLeds, liveThermal } from '../src/ui/viewfinder/flux';
-import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend } from '../src/ui/viewfinder/lore';
+import { Sweep } from '../src/ui/viewfinder/Sweep';
+import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier } from '../src/ui/viewfinder/flux';
+import { useFlux } from '../src/ui/viewfinder/useFlux';
+import { useLiveThermal } from '../src/ui/viewfinder/useLiveThermal';
+import { FIXTURE_TAG, LORE, TAG_HIT, TAG_LABEL, TAG_ROW_PAD, tagLegend, tagTracking } from '../src/ui/viewfinder/lore';
 
 // Copy keys follow docs/voice-guide.md section 3. The denied-permission strings are
 // placeholders in the same voice: Copy will add their keys to the voice guide.
@@ -30,6 +38,8 @@ const copy = {
   'hud.tagLabel': 'Location tag, step to the next',
   'hud.allow': 'ALLOW',
   'hud.allowLabel': 'Allow camera access',
+  'hud.log': 'LOG',
+  'hud.logLabel': 'Open history',
   'hud.capture': 'CAPTURE',
   'hud.captureLabel': 'Capture photo',
 };
@@ -37,13 +47,10 @@ const copy = {
 // Harness: a fixed capture time so the scan seed, and the result golden, repeat.
 const STATIC_CAPTURE_MS = Date.UTC(2026, 9, 13, 12);
 const STATIC_SEED = 417;
-const TICK_MS = 100;
-const NEEDLE_JITTER_DEG = 0.006 * 100;
 const FIXTURE_SIZE = { w: 768, h: 1024 };
-// Harness: tonight's activity index is read at a fixed time so the golden repeats.
-const STATIC_NOW = new Date(2026, 9, 13, 12);
 const BAND = 0.3; // scrim band: lower 30% of the glass, never less than it needs
 const BAND_MIN = TAG_HIT + 36 + 96; // tag row, two lore rows, dial plate height
+const RETICLE_TOP = 68; // keep in step with s.reticle.top
 const SCRIM = 'rgba(10, 15, 11, 0.64)';
 
 let cached: Harness | null = null;
@@ -88,32 +95,49 @@ function Viewfinder({
   const router = useRouter();
   const { width: windowW } = useWindowDimensions();
   const { isStatic } = harness;
+  // Under 380 px the dial plate leaves 126 px beside GEO: the thermal digit drops its spaces to fit.
+  const narrow = windowW < 380;
   const fixture = harness.fixture ?? DEFAULT_FIXTURE;
   const source = sourceFor(permission, Platform.OS === 'web');
 
-  const [walk] = useState(() => createFluxWalk(isStatic ? STATIC_SEED : Date.now() % 2 ** 31));
-  const [sample, setSample] = useState<FluxSample>(() => walk.next());
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const reduceMotion = useReduceMotion();
+  const active = useActive();
+  const [fluxSeed] = useState(() => (isStatic ? STATIC_SEED : Date.now() % 2 ** 31));
+  const { sample } = useFlux({ seed: fluxSeed, isStatic, active });
   const [tag, setTag] = useState<LocationTag>(() => (harness.fixture ? FIXTURE_TAG[harness.fixture] : LOCATION_TAGS[0]));
   const busy = useRef(false);
-  const { index } = activityIndex(isStatic ? STATIC_NOW : new Date());
+  // One index per session (boot fixes it first). Under ?static=1 the clock is the boot screen's:
+  // ?date=&time= when given, else the harness time, so a direct visit shows the same number.
+  const { index } = sessionActivity(isStatic ? readBootParams().date : new Date());
 
+  // Sound follows the screen: on while it is focused and in the foreground, off on a blur or when
+  // the app goes to the background (useActive). The flux and its tier drive the clicks and the hum.
+  const tierNow = liveTier(sample.mg);
+  const tierRef = useRef(tierNow);
   useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion, () => {});
-  }, []);
+    tierRef.current = tierNow;
+  }, [tierNow]);
+  useEffect(() => sound.setReducedMotion(reduceMotion), [reduceMotion]);
   useEffect(() => {
-    if (isStatic) return;
-    const id = setInterval(() => setSample(walk.next()), TICK_MS);
-    return () => clearInterval(id);
-  }, [isStatic, walk]);
+    if (!active) return;
+    sound.start('vf', tierRef.current);
+    return () => sound.stop('vf');
+  }, [active]);
+  useEffect(() => {
+    if (active) sound.setTier(tierNow);
+  }, [active, tierNow]);
+  useEffect(() => {
+    if (active) sound.setFlux(sample.mg);
+  }, [active, sample.mg]);
 
-  const angle = fluxAngle(sample.mg) + (reduceMotion ? 0 : sample.jitter * NEEDLE_JITTER_DEG);
+  const angle = jitteredAngle(sample.mg, sample.jitter, reduceMotion);
   const flux = formatFlux(sample.mg);
-  const dT = liveThermal(sample.mg);
+  const dT = useLiveThermal({ mg: sample.mg, seed: fluxSeed, isStatic, active });
 
   const capture = async () => {
     if (busy.current) return;
     busy.current = true;
+    sound.capture();
     try {
       let uri = fixtureUri(fixture);
       let size = FIXTURE_SIZE;
@@ -141,7 +165,8 @@ function Viewfinder({
   const lore = hasSeenTag(tag) ? null : LORE[tag];
 
   const keySlots: (KeySlot | null)[] = [
-    null,
+    // History is one tap from here (the result screen's key row carries THERM instead).
+    { testID: 'key-log', label: copy['hud.logLabel'], legend: copy['hud.log'], onPress: () => router.push('/history') },
     null,
     showAllow ? { testID: 'key-allow', label: copy['hud.allowLabel'], legend: copy['hud.allow'], onPress: onAllow } : null,
     canCapture ? { testID: 'key-capture', label: copy['hud.captureLabel'], legend: copy['hud.capture'], onPress: () => void capture(), backlit: true } : null,
@@ -159,18 +184,30 @@ function Viewfinder({
         const bandH = Math.max(Math.round(h * BAND), BAND_MIN);
         return (
           <>
+            {/* The feed seen through the tube: the phosphor ramp mixed over the colour, lifted blacks (FeedTint). */}
             {source === 'camera' ? (
-              <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
+              <FeedTint testID="hud-feed">
+                <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back" />
+              </FeedTint>
             ) : source === 'fixture' || source === 'denied' ? (
-              <Image source={fixtureSource(fixture)} style={[StyleSheet.absoluteFill, s.photo]} accessibilityLabel="" />
+              <FeedTint testID="hud-feed" image={fixtureUri(fixture)} />
             ) : null}
             <View style={s.dim} pointerEvents="none" />
+            <Sweep
+              width={w}
+              height={h - bandH}
+              cx={w / 2}
+              cy={Math.round((RETICLE_TOP + h - bandH - 12) / 2)}
+              mg={sample.mg}
+              isStatic={isStatic}
+              running={active}
+              reduceMotion={reduceMotion}
+            />
             <Reticle bottom={bandH + 12} />
 
             <View style={s.topScrim} pointerEvents="none" />
             <View style={s.topLeft} pointerEvents="none" testID="hud-top">
               <Readout label="IDX" value={`${index}/5`} labelCh={3} valueCh={5} unitCh={0} {...HUD} />
-              <Readout label="ΔT" value={dT.toFixed(1)} unit="°C" labelCh={3} valueCh={5} unitCh={2} {...HUD} />
             </View>
 
             {source === 'ask' ? (
@@ -198,9 +235,12 @@ function Viewfinder({
                     accessibilityState={{ selected: tg === tag }}
                     style={s.tagHit}
                   >
-                    <Text style={[s.tag, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
-                      {tagLegend(tg, windowW)}
-                    </Text>
+                    <View>
+                      <Text style={[s.tag, { letterSpacing: tagTracking(windowW) }, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
+                        {tagLegend(tg, windowW)}
+                      </Text>
+                      {tg === tag ? <View style={s.tagLine} testID="tag-underline" /> : null}
+                    </View>
                   </Pressable>
                 ))}
               </View>
@@ -216,14 +256,20 @@ function Viewfinder({
                   <Text style={s.fluxValue}>{String(sample.mg).padStart(4, ' ')}</Text>
                   <Text style={s.fluxUnit}>mG</Text>
                 </View>
-                <Text style={s.geo} testID="hud-geo">
-                  {formatGeo(sample.mg)}
-                </Text>
+                <View style={s.geoRow}>
+                  <Text style={s.geo} testID="hud-geo">
+                    {formatGeo(sample.mg)}
+                  </Text>
+                  <Text style={[s.dt, narrow && s.dtNarrow]} testID="hud-dt" accessibilityLabel={formatThermal(dT)}>
+                    <Text style={s.dtLabel}>{narrow ? 'ΔT' : 'ΔT '}</Text>
+                    {`${dT.toFixed(1)}${narrow ? '' : ' '}°C`}
+                  </Text>
+                </View>
                 <Text style={s.state} testID="hud-state">
                   {state}
                 </Text>
               </View>
-              <View style={s.dialPlate}>
+              <View style={s.dialPlate} testID="hud-dial">
                 <View style={[s.plateDot, { left: 5 }]} />
                 <View style={[s.plateDot, { right: 5 }]} />
                 <EmfDial angle={angle} frozen={isStatic} reduceMotion={reduceMotion} />
@@ -271,11 +317,10 @@ function Reticle({ bottom }: { bottom: number }) {
 
 const s = StyleSheet.create({
   empty: { flex: 1, backgroundColor: color.n3 },
-  photo: { width: '100%', height: '100%', resizeMode: 'cover' },
   dim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(10, 15, 11, 0.22)' },
   topScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: 56, backgroundColor: SCRIM },
   topLeft: { position: 'absolute', left: 12, top: 4 },
-  reticle: { position: 'absolute', left: 12, right: 12, top: 68 },
+  reticle: { position: 'absolute', left: 12, right: 12, top: RETICLE_TOP },
   crossHo: { position: 'absolute', left: '50%', top: '50%', width: 17, height: 3, marginLeft: -8, marginTop: -1, backgroundColor: color.n0 },
   crossVo: { position: 'absolute', left: '50%', top: '50%', width: 3, height: 17, marginLeft: -1, marginTop: -8, backgroundColor: color.n0 },
   crossH: { position: 'absolute', left: '50%', top: '50%', width: 15, height: 1, marginLeft: -7, backgroundColor: color.p4 },
@@ -285,7 +330,9 @@ const s = StyleSheet.create({
   tagRow: { position: 'absolute', left: TAG_ROW_PAD, right: TAG_ROW_PAD, top: 0, flexDirection: 'row', justifyContent: 'space-between' },
   tagHit: { minWidth: TAG_HIT, height: TAG_HIT, alignItems: 'center', justifyContent: 'center' },
   tag: { ...type.lbXS, color: color.n5 },
-  tagOn: { color: color.p5, textDecorationLine: 'underline' },
+  // Selected: p5 text with a 1 px p4 rule under it (its own view, so the rule is not the text's colour).
+  tagOn: { color: color.p5 },
+  tagLine: { position: 'absolute', left: 0, right: 0, bottom: -2, height: 1, backgroundColor: color.p4 },
   lore: { position: 'absolute', left: 12, right: 12, top: TAG_HIT },
   loreText: { ...type.rdXS, color: color.p4, height: 18 },
   fluxBlock: { position: 'absolute', left: 12, bottom: 8 },
@@ -293,7 +340,11 @@ const s = StyleSheet.create({
   fluxLabel: { ...type.rdXS, color: color.p3, marginBottom: 2, marginRight: 4 },
   fluxValue: { ...type.rdL, color: color.p4, width: 4 * 19.2, textAlign: 'right' },
   fluxUnit: { ...type.rdXS, color: color.p3, marginBottom: 2, marginLeft: 4 },
+  geoRow: { flexDirection: 'row', alignItems: 'center' },
   geo: { ...type.rdXS, color: color.p3, height: 18 },
+  dt: { ...type.rdXS, color: color.p4, height: 18, marginLeft: 12 },
+  dtNarrow: { marginLeft: 6 },
+  dtLabel: { color: color.p3 },
   state: { ...type.lbS, color: color.p3 },
   dialPlate: {
     position: 'absolute',

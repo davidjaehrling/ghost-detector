@@ -1,20 +1,32 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Rect as SkRect, Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
+import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import type { Tier } from '../../src/engine';
-import { GhostV0, placeGhost, regionFromImage, type Placement, type RegionResult } from '../../src/fx/ghostV0';
+import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
+import { PhosphorText, SnapshotCanvas, useVT323 } from '../../src/fx/glass';
+import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
+import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
+import { useSkiaReady } from '../../src/fx/useSkiaReady';
 import { BELIEF_PROFILE, getBelief } from '../../src/state/belief';
 import { getScan, listScans, type ScanRecord } from '../../src/state/scans';
+import { consumeReveal } from '../../src/state/session';
+import { useSettings } from '../../src/state/useSettings';
 import { mulberry32 } from '../../src/ui/boot/seed';
 import type { KeySlot } from '../../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
 import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
-import { demoRecord, isDemoName } from '../../src/ui/result/demo';
+import { DEMO_CASES, SCARE_CASE, demoRecord, isDemoName } from '../../src/ui/result/demo';
 import { bestSoFar, NO_PRIOR } from '../../src/ui/result/best';
-import { cropOnFigure, panelRegion, panelTop } from '../../src/ui/result/panel';
+import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
+import { PINNED_TIERS, stampText, thermalDelta } from '../../src/ui/result/stamp';
 import { Readout } from '../../src/ui/Readout';
+import { scareEligible } from '../../src/ui/result/scare';
+import { type ScareMode, useScare } from '../../src/ui/result/useScare';
+import { useReduceMotion } from '../../src/ui/useReduceMotion';
 import { SpiDial } from '../../src/ui/result/SpiDial';
 import { type GlassSize, Housing } from '../../src/ui/screens/Housing';
 import { color, motion, needle, type } from '../../src/ui/tokens';
@@ -32,7 +44,7 @@ const copy = {
     strong: 'Strong. Signature resolving.',
     critical: (hz: number) => `EVP fragment logged. CH2 ${hz} Hz.`,
   },
-  coldSpot: (dt: string) => `COLD SPOT dT ${dt} °C`,
+  coldSpot: (dt: string, khz: string) => `COLD SPOT ΔT ${dt} °C · DRIFT ${khz} kHz`,
   flux: 'FLUX',
   thermal: 'THERM',
   acoustic: 'ACOUST',
@@ -48,12 +60,18 @@ const copy = {
   shareLabel: 'Share result',
   deep: 'DEEP SCAN',
   deepLabel: 'Deep scan',
-  log: 'LOG',
-  logLabel: 'Open history',
+  thermKeyLabel: 'Thermal view',
+  photoKey: 'PHOTO',
+  photoKeyLabel: 'Photo view',
   back: 'NEW SCAN',
   backLabel: 'Back to viewfinder',
   photoLabel: 'Captured photo',
 };
+
+// The barrel warp snapshots the glass content. The photo (Composite), the thermal view, the SPI digit and
+// the data strip are SnapshotCanvas, which the web snapshot reads through makeImageSnapshot (a plain WebGL
+// canvas reads back blank). `?static=1&warp=0` turns it off for the harness.
+const WARP_RESULT = true;
 
 const NOT_FITTED_MS = 1500;
 const FADE_MS = 1500;
@@ -84,18 +102,38 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
-    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : '0001');
+    if (harness.isStatic && isDemoName(params.demo)) return demoRecord(params.demo, fixtureUri(harness.fixture ?? DEFAULT_FIXTURE), /^\d{4}$/.test(params.case ?? '') ? params.case : params.scare === '1' ? SCARE_CASE : DEMO_CASES[params.demo], harness.fixture, /^\d{1,6}$/.test(params.seed ?? '') ? Number(params.seed) : undefined);
     return getScan(String(params.id ?? ''));
-  }, [harness, params.demo, params.id, params.case]);
+  }, [harness, params.demo, params.id, params.case, params.seed, params.scare]);
+
+  // Jump-scare (psych brief section 3): the flag is the engine's roll (the first-3-scans, 24 h and
+  // per-session caps are in drawOutcome); the switch and reduced motion are the user's. It plays
+  // only on a result reached straight from a scan. ?static=1&scare=1 shows the peak frame.
+  const settings = useSettings();
+  const reduceMotion = useReduceMotion();
+  const [fresh] = useState(() => (record ? consumeReveal(record.id) : false));
+  const scareMode: ScareMode =
+    harness.isStatic && params.scare === '1'
+      ? 'peak'
+      : record && fresh && scareEligible({ jumpScare: record.outcome.jumpScare, enabled: settings.jumpScares, reduceMotion })
+        ? 'armed'
+        : 'off';
+
+  // Thermal view of the photo panel (THERM key). ?static=1&therm=1 opens it for the golden.
+  const [therm, setTherm] = useState(harness.isStatic && params.therm === '1');
+  const warp = WARP_RESULT && !(harness.isStatic && params.warp === '0');
+  // Reported by the panel and the reveal; they only feed the glass snapshot key.
+  const [photoLoaded, setPhotoLoaded] = useState(false);
+  const [stable, setStable] = useState(harness.isStatic);
 
   const toViewfinder = () => router.navigate('/viewfinder');
   const [notice, setNotice] = useState(false);
@@ -130,13 +168,15 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     );
   }
 
-  // Fixed four-slot row: BACK, SHARE, LOG, then the primary slot. DEEP SCAN
+  // Fixed four-slot row: BACK, SHARE, THERM (PHOTO while it shows), then the primary slot. DEEP SCAN
   // takes the far right on ACTIVE and up and is a dummy cap below that.
   const deepScan = record.outcome.tier !== 'quiet' && record.outcome.tier !== 'trace';
   const keySlots: (KeySlot | null)[] = [
     { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder },
     { testID: 'key-share', label: copy.shareLabel, legend: copy.share, onPress: inert },
-    { testID: 'key-forward', label: copy.logLabel, legend: copy.log, onPress: () => router.push('/history') },
+    therm
+      ? { testID: 'key-therm', label: copy.photoKeyLabel, legend: copy.photoKey, onPress: () => setTherm(false), backlit: true }
+      : { testID: 'key-therm', label: copy.thermKeyLabel, legend: copy.thermal, onPress: () => setTherm(true) },
     deepScan ? { testID: 'key-deepscan', label: copy.deepLabel, legend: copy.deep, onPress: inert, primary: true } : null,
   ];
 
@@ -147,8 +187,21 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       fixedIdentity={harness.isStatic}
       glassLabel={copy.glass}
       keys={keySlots}
+      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}` }}
     >
-      {(size) => <ResultGlass size={size} record={record} isStatic={harness.isStatic} speed={harness.speed} notice={notice} />}
+      {(size) => (
+        <ResultGlass
+          size={size}
+          record={record}
+          isStatic={harness.isStatic}
+          speed={harness.speed}
+          notice={notice}
+          scare={scareMode}
+          therm={therm}
+          onPhotoLoaded={setPhotoLoaded}
+          onStable={setStable}
+        />
+      )}
     </Housing>
   );
 }
@@ -157,7 +210,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
 const BODY = { pad: 4, reveal: 92, line: 20, readings: 60, profile: 100, profileNone: 36, best: 84, decoded: 28, offer: 36, bottom: 12, gap: 4 };
 
 function bodyHeight(tier: Tier): number {
-  const lines = tier === 'strong' ? 2 : 1;
+  const lines = PINNED_TIERS.includes(tier) ? 2 : 1;
   let h = BODY.pad + BODY.reveal + BODY.gap + BODY.line * lines + BODY.gap + BODY.readings + BODY.gap + (tier === 'quiet' ? BODY.profileNone : BODY.profile);
   if (tier === 'quiet') h += BODY.gap + BODY.best;
   else h += BODY.gap + BODY.decoded;
@@ -165,14 +218,35 @@ function bodyHeight(tier: Tier): number {
   return h + BODY.bottom;
 }
 
-function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSize; record: ScanRecord; isStatic: boolean; speed: number; notice: boolean }) {
+// The photo window is the same height on every tier (the tiers must compare in review): it takes what
+// the tallest body leaves, and a lighter body keeps its spare height as air under its last block.
+const TIERS: readonly Tier[] = ['quiet', 'trace', 'active', 'strong', 'critical'];
+export const BODY_MAX = Math.max(...TIERS.map(bodyHeight));
+export const photoHeight = (glassH: number) => Math.round(Math.max(glassH * PHOTO_MIN, glassH - BODY_MAX));
+
+type GlassProps = {
+  size: GlassSize;
+  record: ScanRecord;
+  isStatic: boolean;
+  speed: number;
+  notice: boolean;
+  scare: ScareMode;
+  therm: boolean;
+  onPhotoLoaded: (loaded: boolean) => void;
+  onStable: (stable: boolean) => void;
+};
+
+function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPhotoLoaded, onStable }: GlassProps) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
   const wide = tier === 'active' || tier === 'strong' || tier === 'critical';
   const quiet = tier === 'quiet';
-  const photoH = Math.round(Math.max(size.h * PHOTO_MIN, size.h - bodyHeight(tier)));
+  const photoH = photoHeight(size.h);
   const reading = readingsFor(record.seed, tier);
+  // One thermal number per result: the cold spot on STRONG and CRITICAL, the THERM reading below.
+  const deltaC = thermalDelta(tier, reading);
+  const stamp = stampText({ id: record.id, spi: outcome.spi, deltaC, createdAt: record.createdAt });
 
   // Reveal (psych brief 2.6): 1.2 s of silence with the number blank, the needle at
   // rest and the photo up; then the needle springs and the number lands in one frame at
@@ -223,6 +297,26 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
     };
   }, [isStatic, speed, outcome.spi, value]);
 
+  const reduceMotion = useReduceMotion();
+  const scareView = useScare(scare, landed);
+
+  // The warped glass shows a snapshot of this view, retaken when the glass key changes. The key
+  // moves to `stable` once the needle has settled, the figure has faded in and the scare is over,
+  // so the last snapshot is of the finished picture.
+  const [faded, setFaded] = useState(isStatic);
+  useEffect(() => {
+    if (isStatic || !settled) return;
+    const id = setTimeout(() => setFaded(true), FADE_MS + 150);
+    return () => clearTimeout(id);
+  }, [isStatic, settled]);
+  const stable = isStatic || (settled && faded && scareView.pop === null && scareView.flash === 0);
+  // The SPI digit draws once its font has loaded; the warped snapshot waits for it.
+  const digitFont = useVT323(72);
+  const digitReady = digitFont !== null;
+  useEffect(() => {
+    onStable(stable && digitReady);
+  }, [stable, digitReady, onStable]);
+
   const mainLine =
     tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
   const resultLine = notice ? copy.notFitted : mainLine;
@@ -238,16 +332,41 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
 
   return (
     <View style={s.glass}>
-      <PhotoPanel size={size} height={photoH} record={record} settled={settled} isStatic={isStatic} />
+      <PhotoPanel
+        size={size}
+        height={photoH}
+        record={record}
+        settled={settled}
+        isStatic={isStatic}
+        pop={scareView.pop}
+        therm={therm}
+        thermalC={deltaC}
+        stamp={stamp}
+        onPhotoLoaded={onPhotoLoaded}
+      />
       <View style={s.body}>
         <View style={s.revealRow}>
           <View style={s.revealLeft}>
             <Text style={[type.rdM, s.tier, { color: tint, opacity: landed ? 1 : 0 }]} testID="result-tier">
               {copy.tierWord[tier]}
             </Text>
-            <Text style={[type.rdXL, s.spi, { color: tint }]} testID="result-spi">
-              {landed ? String(outcome.spi) : '--'}
-            </Text>
+            <View style={s.spiBox}>
+              {/* The glyphs are drawn on the glass canvas; this node keeps the number for screen readers and tests. */}
+              <Text style={[type.rdXL, s.spi, { color: tint, opacity: 0 }]} testID="result-spi">
+                {landed ? String(outcome.spi) : '--'}
+              </Text>
+              <SnapshotCanvas style={s.spiCanvas} pointerEvents="none">
+                <PhosphorText
+                  text={landed ? String(outcome.spi) : '--'}
+                  x={SPI_PAD}
+                  y={SPI_BASE}
+                  size={72}
+                  step={tier === 'critical' ? 5 : 4}
+                  static={isStatic}
+                  reduceMotion={reduceMotion}
+                />
+              </SnapshotCanvas>
+            </View>
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
         </View>
@@ -255,9 +374,9 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
           <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
             {resultLine}
           </Text>
-          {tier === 'strong' ? (
+          {PINNED_TIERS.includes(tier) ? (
             <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
-              {copy.coldSpot(reading.coldSpotC.toFixed(1))}
+              {copy.coldSpot(deltaC.toFixed(1), reading.driftKhz.toFixed(1))}
             </Text>
           ) : null}
         </View>
@@ -287,7 +406,7 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
           ) : (
             <>
               <ProfileRow label={copy.classLabel} value={profile.class} />
-              <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '')} />
+              <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '').toUpperCase()} valueTestID="profile-era" />
               {copy.hidden.map((l, i) => (
                 <ProfileRow key={l} label={l} maskW={Math.min(maskMax, Math.round(hiddenLen[i]! * CHAR_XS))} />
               ))}
@@ -319,17 +438,20 @@ function ResultGlass({ size, record, isStatic, speed, notice }: { size: GlassSiz
           </View>
         ) : null}
       </View>
+      {scareView.flash > 0 ? <View pointerEvents="none" style={[s.flash, { opacity: scareView.flash }]} testID="scare-flash" /> : null}
     </View>
   );
 }
 
 const LABEL_W = 88;
+const SPI_PAD = 12; // canvas margin around the digit so the bloom is not clipped
+const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
-function ProfileRow({ label, value, maskW }: { label: string; value?: string; maskW?: number }) {
+function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value?: string; maskW?: number; valueTestID?: string }) {
   return (
     <View style={s.profRow}>
       <Text style={s.profLabel}>{label}</Text>
-      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={s.profileValue}>{value}</Text>}
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={s.profileValue} testID={valueTestID}>{value}</Text>}
     </View>
   );
 }
@@ -346,18 +468,72 @@ function DecodeBar({ pct }: { pct: number }) {
   );
 }
 
-type Composite = { placement: Placement; meanLuma: number; p90: number | undefined; top: number } | null;
+type Layout = { placement: Placement; region: ReturnType<typeof panelRegion>; meanLuma: number; top: number } | null;
 
-// The captured photo with the v0 apparition over it. The image is laid out at its
-// natural 3:4 shape and cropped by the panel, centred on the dark region. The ghost
-// is placed against the visible panel (frame = panel size), so the 15% cap applies to
-// what is seen. The panel mounts once the region read is done (and the image has
-// loaded), so a screenshot never catches a half-built picture.
-function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSize; height: number; record: ScanRecord; settled: boolean; isStatic: boolean }) {
-  const { outcome, photoUri, seed } = record;
+// A flat mid-grey grid for a photo that cannot be read (the thermal view still has a room to draw).
+const FLAT_GRID: LumaGrid = { luma: new Uint8Array(72 * 96).fill(128), width: 72, height: 96 };
+
+// Catches a compositor that cannot start (shader compile) and hands the panel to the v0 path.
+class V1Boundary extends Component<{ onFail: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onFail();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+// The captured photo with the apparition over it. The photo is laid out at its natural 3:4 shape
+// and cropped by the panel, centred on the figure. The ghost is placed against the visible panel
+// (frame = panel size), so the 15% cap applies to what is seen. The panel mounts once the region
+// read is done (and the photo has decoded), so a screenshot never catches a half-built picture.
+// Compositor v1 (Skia) draws photo, figure and grain on one canvas; the RN image with GhostV0
+// stays as the fallback when Skia is not ready or the shader cannot compile. The THERM key swaps
+// the contents for the thermal view of the same frame.
+function PhotoPanel({
+  size,
+  height,
+  record,
+  settled,
+  isStatic,
+  pop,
+  therm,
+  thermalC,
+  stamp,
+  onPhotoLoaded,
+}: {
+  size: GlassSize;
+  height: number;
+  record: ScanRecord;
+  settled: boolean;
+  isStatic: boolean;
+  pop: number | null;
+  therm: boolean;
+  thermalC: number;
+  stamp: string;
+  onPhotoLoaded: (loaded: boolean) => void;
+}) {
+  const { outcome, photoUri, seed, id } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
-  const [read, setRead] = useState<{ done: boolean; result: RegionResult | null }>({ done: !wantsFigure, result: null });
+  const reduceMotion = useReduceMotion();
+  const skia = useSkiaReady();
+  const [v1Failed, setV1Failed] = useState(false);
+  const v1 = skia && !v1Failed && wantsFigure;
+  const [read, setRead] = useState<{ done: boolean; result: RegionStats | null }>({ done: !wantsFigure, result: null });
   const [loaded, setLoaded] = useState(false);
+  const image = useImage(v1 ? photoUri : null);
+  const photoReady = v1 ? image !== null : loaded;
+
+  // The data strip's font: the warped glass retakes its snapshot once the photo and the strip are both drawn.
+  const stampFont = useVT323(16);
+  const stampReady = stampFont !== null;
+  useEffect(() => {
+    onPhotoLoaded(photoReady && stampReady);
+  }, [photoReady, stampReady, onPhotoLoaded]);
 
   useEffect(() => {
     if (!wantsFigure) return;
@@ -372,14 +548,23 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
 
   const W = size.w;
   const imgH = Math.round(W * PHOTO_ASPECT);
-  const composite = useMemo<Composite>(() => {
+  const placementSeed = caseSeed(seed, id);
+  const layout = useMemo<Layout>(() => {
     if (!wantsFigure || !read.done) return null;
     const region = read.result?.region ?? null;
     const meanLuma = read.result?.meanLuma ?? DEFAULT_MEAN_LUMA;
     const top0 = panelTop(height, imgH, region ? region.cy : null);
     const belief = getBelief();
-    const opacityRange = outcome.smudge ? SMUDGE_OPACITY : belief ? BELIEF_PROFILE[belief].opacityRange : undefined;
-    let placement = placeGhost(panelRegion(region, imgH, height, top0), { w: W, h: height }, seed, { tier: outcome.tier, ...(opacityRange ? { opacityRange } : {}) });
+    const band = belief ? BELIEF_PROFILE[belief].opacityRange : undefined;
+    // Opacity rises with tier inside the belief band; the smudge tiers keep their own faint band.
+    const ladder = outcome.smudge ? {} : tierOpacity(outcome.tier, band);
+    const opacityRange = outcome.smudge ? SMUDGE_OPACITY : (ladder.opacityRange ?? band);
+    const panel = panelRegion(region, imgH, height, top0);
+    let placement = placeGhost(panel, { w: W, h: height }, placementSeed, {
+      tier: outcome.tier,
+      ...(opacityRange ? { opacityRange } : {}),
+      ...(ladder.tierCap ? { tierCap: ladder.tierCap } : {}),
+    });
     if (outcome.smudge) {
       const w = placement.w * SMUDGE_SCALE;
       const h = placement.h * SMUDGE_SCALE;
@@ -395,37 +580,112 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
     // Second pass: slide the photo so the figure, not the dark region, is what the crop centres on.
     const crop = cropOnFigure(height, imgH, top0, placement);
     placement = { ...placement, y: placement.y + crop.dy };
-    return { placement, meanLuma, p90: read.result?.p90Luma, top: crop.top };
-  }, [wantsFigure, read, W, imgH, height, seed, outcome.smudge, outcome.tier]);
+    return { placement, region: panel, meanLuma, top: crop.top };
+  }, [wantsFigure, read, W, imgH, height, placementSeed, outcome.smudge, outcome.tier]);
 
-  const ready = read.done && loaded;
-  const top = composite ? composite.top : panelTop(height, imgH, null);
+  // The thermal field: built once per record from the photo's luma, pinned to the THERM reading.
+  const [field, setField] = useState<ThermalField | null>(null);
+  useEffect(() => {
+    let alive = true;
+    lumaFromImage(photoUri)
+      .catch(() => null)
+      .then((src) => {
+        if (!alive) return;
+        setField(buildThermalField(src?.grid ?? FLAT_GRID, src?.region ?? null, { seed, tier: outcome.tier, deltaC: thermalC }));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [photoUri, seed, outcome.tier, thermalC]);
+
+  const ready = read.done && photoReady;
+  const top = layout ? layout.top : panelTop(height, imgH, null);
+  const showGhost = layout !== null && ready && settled;
+  const legacyFigure = layout !== null && ready && !v1;
 
   return (
     <View style={[s.photo, { height }]} testID={read.done ? 'result-photo' : undefined}>
-      <Image
-        source={{ uri: photoUri }}
-        resizeMode="cover"
-        style={{ position: 'absolute', left: 0, top, width: W, height: imgH, opacity: ready ? 1 : 0 }}
-        accessibilityLabel={copy.photoLabel}
-        onLoad={() => setLoaded(true)}
-        onError={() => setLoaded(true)}
-      />
-      {composite && ready && settled ? (
-        // Mounted at needle settle; GhostV0 fades its layers linearly (its own blend
-        // mode needs the layers to stay in the photo's stacking context, so no wrapper).
+      {v1 ? (
+        layout && image && ready ? (
+          <V1Boundary onFail={() => setV1Failed(true)}>
+            {/* Before the needle settles the photo shows alone (disabled draws photo and grain); the
+                figure's fade starts when the composite is mounted again at settle. */}
+            <Composite
+              key={showGhost ? 'figure' : 'photo'}
+              photo={image}
+              width={W}
+              height={height}
+              photoRect={{ x: 0, y: top, width: W, height: imgH }}
+              region={layout.region}
+              meanLuma={layout.meanLuma}
+              p80Luma={read.result?.p80Luma}
+              p90Luma={read.result?.p90Luma}
+              grid={read.result?.grid}
+              placement={layout.placement}
+              tier={outcome.tier}
+              seed={placementSeed}
+              static={isStatic}
+              fadeInMs={FADE_MS}
+              pop={pop}
+              disabled={!showGhost}
+            />
+          </V1Boundary>
+        ) : null
+      ) : (
+        <Image
+          source={{ uri: photoUri }}
+          resizeMode="cover"
+          style={{ position: 'absolute', left: 0, top, width: W, height: imgH, opacity: ready ? 1 : 0 }}
+          accessibilityLabel={copy.photoLabel}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(true)}
+        />
+      )}
+      {legacyFigure && settled && layout ? (
+        // Fallback: GhostV0 fades its layers linearly (its own blend mode needs the layers to
+        // stay in the photo's stacking context, so no wrapper).
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <GhostV0
-            placement={composite.placement}
-            regionMeanLuma={composite.meanLuma}
-            regionP90Luma={composite.p90}
-            fadeInMs={isStatic ? 0 : FADE_MS}
-          />
+          <GhostV0 placement={layout.placement} regionMeanLuma={layout.meanLuma} regionP90Luma={read.result?.p90Luma} fadeInMs={isStatic ? 0 : FADE_MS} />
         </View>
       ) : null}
-      <View style={s.caseBand} pointerEvents="none">
-        <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
-      </View>
+      {therm && field ? (
+        <View style={StyleSheet.absoluteFill}>
+          <ThermalView field={field} width={W} height={height} top={top} static={isStatic || reduceMotion} />
+        </View>
+      ) : null}
+      {therm || !ready ? null : <DataStrip text={stamp} width={W} height={height} font={stampFont} />}
+      {therm ? null : (
+        // The thermal view has its own readout box in the same corner.
+        <View style={s.caseBand} pointerEvents="none">
+          <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// The data strip: case, SPI, ΔT and time in VT323 p3, bottom-left of the photo. Compositor v1 has no
+// `stamp` prop, so it is a Skia text canvas over the panel. The photo's own 4% grain sits under it
+// and the glass grain and scanlines (the overlay over the whole window) sit over it, so it reads as
+// burned into the picture. A 40% n0 scrim band behind the line and a 1 px n0 copy under the text
+// keep it legible on a bright frame (D-022).
+const STRIP_H = 24;
+const STRIP_X = 8;
+const STRIP_SCRIM = 0.4;
+function DataStrip({ text, width, height, font }: { text: string; width: number; height: number; font: SkFont | null }) {
+  const base = STRIP_H - 8;
+  const scrimW = font ? Math.min(width, font.measureText(text).width + 2 * STRIP_X) : 0;
+  return (
+    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null}>
+      <SnapshotCanvas style={{ width, height: STRIP_H }} pointerEvents="none">
+        {font ? (
+          <>
+            <SkRect x={0} y={4} width={scrimW} height={STRIP_H - 6} color={color.n0} opacity={STRIP_SCRIM} />
+            <SkText font={font} text={text} x={STRIP_X + 1} y={base + 1} color={color.n0} />
+            <SkText font={font} text={text} x={STRIP_X} y={base} color={color.p3} />
+          </>
+        ) : null}
+      </SnapshotCanvas>
     </View>
   );
 }
@@ -433,16 +693,20 @@ function PhotoPanel({ size, height, record, settled, isStatic }: { size: GlassSi
 const s = StyleSheet.create({
   empty: { flex: 1, backgroundColor: color.n3 },
   glass: { flex: 1 },
+  flash: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: color.p5 },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
   photo: { width: '100%', overflow: 'hidden', backgroundColor: color.n0, borderBottomWidth: 1, borderBottomColor: color.p1 },
   // Hard-edged n0 band over the top of the photo carries the case number.
   caseBand: { position: 'absolute', left: 0, right: 0, top: 0, height: 20, backgroundColor: 'rgba(10, 15, 11, 0.64)', justifyContent: 'center', paddingHorizontal: 12 },
   caseText: { ...type.rdXS, color: color.p3 },
+  strip: { position: 'absolute', left: 0, height: STRIP_H },
   body: { flex: 1, paddingHorizontal: 12, paddingTop: BODY.pad, paddingBottom: BODY.bottom },
   revealRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: BODY.reveal },
   revealLeft: { flexShrink: 1 },
   tier: { letterSpacing: 1 },
   spi: { height: 64, minWidth: 88 },
+  spiBox: { height: 64, minWidth: 88 },
+  spiCanvas: { position: 'absolute', left: -SPI_PAD, top: -SPI_PAD, width: 124, height: 64 + 2 * SPI_PAD },
   lines: { marginTop: BODY.gap },
   resultLine: { ...type.rdXS, height: BODY.line, color: color.p4 },
   readings: { marginTop: BODY.gap, width: 17 * CHAR_XS + 2 },
@@ -458,6 +722,7 @@ const s = StyleSheet.create({
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },
-  best: { flex: 1, borderWidth: 1, borderColor: color.p1, alignItems: 'center', justifyContent: 'center', marginTop: BODY.gap, paddingHorizontal: 4 },
-  bestText: { ...type.rdXS, color: color.p4, textAlign: 'center' },
+  // Glass text under a p1 rule, left aligned: no box, no card.
+  best: { flex: 1, borderTopWidth: 1, borderTopColor: color.p1, marginTop: BODY.gap, paddingTop: 6 },
+  bestText: { ...type.rdXS, color: color.p4 },
 });

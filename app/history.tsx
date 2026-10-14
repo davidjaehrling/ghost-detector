@@ -1,4 +1,6 @@
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { sound } from '../src/ui/audio';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 
 const copy = {
@@ -10,6 +12,8 @@ const copy = {
 
 export default function History() {
   const router = useRouter();
+  // Nothing plays here; a scene left running from the result ends.
+  useEffect(() => sound.stop(), []);
   return (
     <Placeholder
       testID="screen-history"

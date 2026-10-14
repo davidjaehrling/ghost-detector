@@ -522,6 +522,296 @@
       "evidence": [],
       "passes": false,
       "blocked_by": "Gate 1 (owner picks name and icon)"
+    },
+    {
+      "id": "P3-01",
+      "phase": "P3",
+      "description": "Skia installed and rendering in L2",
+      "acceptance": "@shopify/react-native-skia 2.14 with react-native-reanimated 4 and worklets per the Expo SDK 57 bundled versions; web CanvasKit loads in the static export; a Skia canvas renders in a committed golden; CI green; bundle size delta reported",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (skia.spec.ts); pnpm web:export size",
+          "output": "skia 2.14.0, reanimated 4.5.1, worklets 0.10.1; CanvasKit 0.41 loaded on web via lazy import and copied wasm; probe golden shows graticule, trace and grain; 75 e2e passed; dist +9.5 MB (wasm 8.08 MB, entry 2.62 MB vs 1.30 MB)",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P3-02",
+      "phase": "P3",
+      "description": "Glass FX stack",
+      "acceptance": "src/fx/glass: SkSL shaders for scanlines (2 px, 6%), grain (4%), vignette (18%), barrel (1.5%), phosphor bloom and persistence (tau 180/450 ms), warm-up roll (900 ms), dust and scratch layer; applied to the four screens behind one <Glass> component; deterministic under ?static=1; goldens regenerated",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (glass.spec.ts); probe goldens; rAF timing script",
+          "output": "scanlines (225.7 vs 214.2 on alternating rows), grain, vignette (56 vs 71 corner/centre), barrel bend (top edge y 11 vs 13) all measured on the goldens; three loads byte-identical under static; half-res grain keeps p95 at 16.7 ms on SwiftShader; applied to all four screens via Housing (d948f73: 122 e2e passing)",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P3-03",
+      "phase": "P3",
+      "description": "Procedural apparition library",
+      "acceptance": "src/fx/apparition: at least 6 seeded figure variants from Skia paths plus FractalNoise displacement (no bitmap mattes required; PNG mattes kept as fallback), asymmetric, no features, partial occlusion; unit tests on silhouette metrics (asymmetry, no enclosed holes, area)",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/fx/apparition metrics, 6 variants x 20 seeds)",
+          "output": "mirror correlation ≤0.50, no enclosed holes, area 36 to 56%; 3000-figure check: correlation ≤0.71, no hole >1%",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P3-04",
+      "phase": "P3",
+      "description": "Compositor v1",
+      "acceptance": "src/fx/compositor: Screen or Plus blend, ghost blurred more than the scene, directional motion blur, noise-mask feathering, partial occlusion by a scene edge, per-pixel brightness clamp just above the region mean (shader), grain applied after compositing; native pixel access via makeRasterImage with the jpeg-js path as fallback; measured lift 8 to 20 luma and ≤15% of the visible panel on all five fixtures",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "node scripts/measure-ghost.mjs (probe route, 390)",
+          "output": "cellar 9.9 / attic 12.1 / bright 12.7 / black 9.8 / outdoors 11.0 mean lift; 0 darkened; union box 5.8 to 14.1%; centres in margins; Plus blend, per-pixel clamp, occlusion, grain after compositing",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "node scripts/measure-ghost.mjs --route result (after 92281a7, flat glass, 2 runs, spread 0)",
+          "output": "cellar 9.0 / attic 9.4 / bright 11.1 / black 6.2 (smudge) / outdoors 14.4 mean lift; 0 darkened; 0 over-clamp; union ≤11%; cut 22/14/11/11/11%",
+          "by": "fx-engineer",
+          "date": "2026-10-14"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P3-05",
+      "phase": "P3",
+      "description": "Thermal view",
+      "acceptance": "phosphor white-hot look-up table per the Bible (one hue), rendered at 160x120 and upscaled, cold spot at the dark region with ΔT readout, FLIR-style scale bar; a toggle on the result screen; goldens for cellar and bright",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm vitest run src/fx/thermal (14 tests); thermal.spec.ts goldens",
+          "output": "cold spot inside the region in 300 rooms; ΔT within 0.3 °C of tier depth; QUIET has no spot; one hue (130 to 141°); scale bar legible; field build 5 to 6 ms, redraw 7 to 10 ms at 9 Hz",
+          "by": "fx-engineer",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P3-06",
+      "phase": "P3",
+      "description": "Jump-scare",
+      "acceptance": "visual only (audio in P4): within psych-brief limits (CRITICAL only, 400 to 600 ms, ≤2 flashes per second, never in the first 3 scans, caps per day and session), Settings toggle, reduced-motion respected; unit tests on the caps; a golden of the peak frame under ?static=1&scare=1",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/ui/result/scare.ts); e2e result-scare golden",
+          "output": "500 ms, flashes at 0 and 260 ms for 70 ms, ≤2 per second; plays only with outcome flag + Settings on + no reduced motion + direct from scan; Calm locks it off; engine caps via drawOutcome history",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P3-07",
+      "phase": "P3",
+      "description": "Believability on the fixture set",
+      "acceptance": "judges score the apparition on result goldens for cellar, attic, bright, black and outdoors at ≥8 mean (hint not show, adds light, off-centre, ≤15%, no symmetry, no features, grain unifies); Refuter holds on the measured lifts",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-017",
+          "output": "round 1 believability: cellar 4.33, attic 6.67, bright 5.0, black 4.0, outdoors 4.67 (mean 4.9); round 2 fixes in progress",
+          "by": "director",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-022, D-023",
+          "output": "believability rounds: 4.9 → 5.5 → 4.8 (round 3 regressions were defects, fixed before merge); loop stops at 3 of 5 rounds on synthetic fixtures; resumes in P8 on real photographs",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "id": "P3-08",
+      "phase": "P3",
+      "description": "Four screens re-enter the design loop",
+      "acceptance": "boot, viewfinder, scan, result with the glass stack and the D-011 leftovers applied; exit ≥8 mean with no dimension <7, or leftovers logged after 5 rounds",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-017",
+          "output": "round 1 with glass: boot 7.38, viewfinder 7.24, scan 7.38, result 7.1",
+          "by": "director",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "artifact",
+          "ref": "docs/decisions.md D-022",
+          "output": "round 2 with glass: boot 7.43, viewfinder 7.29, scan 7.38, result 7.0; leftovers carried to P8",
+          "by": "director",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": false
+    },
+    {
+      "id": "P3-09",
+      "phase": "P3",
+      "description": "Performance budget",
+      "acceptance": "scan theatre and result render under 16.7 ms median frame time on the web harness at 390 as a proxy (measured via requestAnimationFrame timings in a Playwright run), bundle size delta from Skia reported, device numbers deferred to Phone check 2",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "Playwright rAF deltas, 390, 3 s x 3 runs (Refuter)",
+          "output": "scan: 89 to 114 frames per 3 s (mean 26 to 34 ms), p95 50 to 67; result: median 16.7, p95 16.7 to 33.4; viewfinder live: median 100 ms; dist 19.7 MB, entry JS 2.73 MB (650 KB gzip), wasm 8.08 MB",
+          "by": "refuter",
+          "date": "2026-10-13"
+        },
+        {
+          "kind": "command",
+          "ref": "Playwright rAF deltas, 390, live, 3 s x 3 runs (Refuter light pass at fc9053e)",
+          "output": "viewfinder median 16.7/16.7/16.7, p95 33.4/33.4/50; scan 16.7 x3, p95 16.8 to 33.4; result 16.7 x3; dist 19.7 MB, entry JS 2.77 MB",
+          "by": "refuter",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS after the perf round: viewfinder, scan and result medians 16.7 ms on SwiftShader at 390 (p95 16.7 to 50 ms), bundle 20 MB with the 8 MB wasm; D-019, Refuter light pass"
+    },
+    {
+      "id": "P4-01",
+      "phase": "P4",
+      "description": "Audio config and scheduler",
+      "acceptance": "src/audio/config.ts typed config from docs/sound-palette.md §9 with clamps; src/audio/scheduler.ts pure Poisson click scheduling, rate ramps and phase cues; tests: click counts over 10 s per tier and intensity within ±15%, refractory 12 ms, CRITICAL caps 6/14/22 c/s, determinism",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/audio scheduler, 300 seeds x 10 s)",
+          "output": "click counts within 1% of the palette table for all tiers and intensities; 12 ms refractory holds at 60 c/s; deterministic per seed; clamps tested",
+          "by": "sound-haptics",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS after the palette table was hard-coded (two mutations fail: 6→9 and 22→20); D-018"
+    },
+    {
+      "id": "P4-02",
+      "phase": "P4",
+      "description": "Audio engine",
+      "acceptance": "src/audio/engine.ts on react-native-audio-api: limiter at -6 dBFS, Geiger, hum 50/60 Hz with harmonics, filtered static, scene and scare buses, duck gain for the hold; engine.web.ts no-op with a call log for L2; native unverified until Phone check 2",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/audio engine on a recording fake context)",
+          "output": "react-native-audio-api 0.13.6; limiter is a WaveShaper soft clip (no DynamicsCompressorNode in 0.13.6); scene/scare buses, duck gain, reveal and fault cues; engine.web.ts logs calls; native unverified",
+          "by": "sound-haptics",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P4-03",
+      "phase": "P4",
+      "description": "Haptic grammar",
+      "acceptance": "src/audio/haptics.ts on expo-haptics: event → pattern per palette §7, every pattern ≤120 ms (tested), off switch, web no-op",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/audio haptics)",
+          "output": "expo-haptics ~57.0.3; every pattern ≤120 ms asserted; needle ticks capped 8/s (4 reduced); off switch; web no-op with log",
+          "by": "sound-haptics",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P4-04",
+      "phase": "P4",
+      "description": "Scan theatre and result wired to audio and haptics",
+      "acceptance": "scan phases, hold, reveal and CRITICAL cues call the engine; L2 asserts the cue order from __audioLog; Settings has sound and haptics toggles",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm e2e:web (audio.spec.ts, 6 tests)",
+          "output": "real scan at speed=8 logs start, scanStart, scanPhase 0..4, hold, reveal in order; SOUND off leaves __audioLog empty; HAPTICS off sends no tap; fault and Calm lock covered",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P4-05",
+      "phase": "P4",
+      "description": "EMF needle on the real magnetometer",
+      "acceptance": "expo-sensors Magnetometer with HIGH_SAMPLING_RATE_SENSORS if under 200 ms; needle with mass, overshoot and damping per Bible §6 springs; jitter 0.6%; web uses the seeded walk; unit tests on the spring and the mG mapping",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (src/ui/viewfinder/flux.ts)",
+          "output": "expo-sensors ~57.0.3 Magnetometer at 100 ms, HIGH_SAMPLING_RATE_SENSORS declared; µT→mG, log angle, 0.6% jitter, LED thresholds 15/40/75% tested; Skia needle with persistence and bloom; web keeps the seeded walk; device unverified",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P4-06",
+      "phase": "P4",
+      "description": "Live radar sweep",
+      "acceptance": "viewfinder sweep with persistence tail driven by flux and tier; deterministic under ?static=1; golden",
+      "evidence": [
+        {
+          "kind": "command",
+          "ref": "pnpm test (sweep.test.ts); viewfinder goldens",
+          "output": "sweep period 5.2 s at GEO centre to 1.8 s off it, persistence tail, frozen at 52° under static",
+          "by": "builder-a",
+          "date": "2026-10-13"
+        }
+      ],
+      "passes": true,
+      "refuter": "HOLDS; Refuter P3/P4 sweep at 1d3f40f (D-018)"
+    },
+    {
+      "id": "P4-07",
+      "phase": "P4",
+      "description": "Phone check 2",
+      "acceptance": "L3 Maestro video of a full scan with audio cues logged; David's phone check; blocked by expo.dev, EXPO_TOKEN and the Play internal track (owner)",
+      "evidence": [],
+      "passes": false,
+      "blocked_by": "owner: expo.dev allowlist, EXPO_TOKEN, Play Console"
     }
   ]
 }

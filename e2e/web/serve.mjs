@@ -18,6 +18,7 @@ const types = {
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
   '.map': 'application/json',
+  '.wasm': 'application/wasm',
 };
 
 async function resolveFile(urlPath) {

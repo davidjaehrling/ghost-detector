@@ -8,7 +8,7 @@ describe('tag row', () => {
   });
   it('uses short legends under 380 px only', () => {
     expect(tagLegend('hallway', 379)).toBe('HALL');
-    expect(tagLegend('outdoors', 360)).toBe('OUTDR');
+    expect(tagLegend('outdoors', 360)).toBe('OUTSIDE');
     expect(tagLegend('hallway', 380)).toBe('HALLWAY');
     expect(tagLegend('cellar', 360)).toBe('CELLAR');
   });

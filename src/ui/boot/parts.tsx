@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
 import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout } from '../keyLayout';
+import { stickerShowsSerial } from '../serial';
+import { GRID_TOP } from './layout';
 import { mulberry32 } from './seed';
 
 // ---------- typed self-test ----------
@@ -88,28 +90,32 @@ export function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${nu
 // more than 600 views). Centre axes are solid with 4 px minor ticks.
 export const GRID_COLS = 10;
 export const GRID_ROWS = 8;
-export const GRID_TOP = 24;
+export { GRID_TOP };
+
+// The grid keeps 4 px of tube on each side, so the corner text never meets the glass edge.
+export const GRID_SIDE = 4;
 
 export function gridDiv(glassW: number): number {
   if (glassW <= 0) return space.div;
-  return Math.min(space.div, Math.floor(glassW / GRID_COLS));
+  return Math.min(space.div, Math.floor((glassW - 2 * GRID_SIDE) / GRID_COLS));
 }
 
-export function Graticule({ w, h }: { w: number; h: number }) {
+// `rows` is the Bible's 8 unless a screen with spare height asks for more (the scan theatre).
+export function Graticule({ w, h, rows: rowCount = GRID_ROWS }: { w: number; h: number; rows?: number }) {
   if (w <= 0 || h <= 0) return null;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
-  const gh = div * GRID_ROWS;
+  const gh = div * rowCount;
   const left = Math.round((w - gw) / 2);
   const cx = gw / 2;
   const cy = gh / 2;
   const cols = Array.from({ length: GRID_COLS + 1 }, (_, k) => k * div);
-  const rows = Array.from({ length: GRID_ROWS + 1 }, (_, k) => k * div);
+  const rows = Array.from({ length: rowCount + 1 }, (_, k) => k * div);
   const step = div / 5;
   const hTicks: number[] = [];
   const vTicks: number[] = [];
   for (let k = 0; k < GRID_COLS * 5; k++) if (k % 5 !== 0) hTicks.push(k * step);
-  for (let k = 0; k < GRID_ROWS * 5; k++) if (k % 5 !== 0) vTicks.push(k * step);
+  for (let k = 0; k < rowCount * 5; k++) if (k % 5 !== 0) vTicks.push(k * step);
   return (
     <View pointerEvents="none" style={[st.grid, { left, top: GRID_TOP, width: gw, height: gh }]}>
       {cols.map((x) => (
@@ -129,12 +135,12 @@ export function Graticule({ w, h }: { w: number; h: number }) {
 }
 
 // Flat idle trace on the horizontal centre axis, p4, with seeded 1 to 2 px jitter.
-export function IdleTrace({ w, seed }: { w: number; seed: number }) {
+export function IdleTrace({ w, seed, rows = GRID_ROWS }: { w: number; seed: number; rows?: number }) {
   if (w <= 0) return null;
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
   const left = Math.round((w - gw) / 2);
-  const cy = GRID_TOP + (div * GRID_ROWS) / 2;
+  const cy = GRID_TOP + (div * rows) / 2;
   const r = mulberry32(seed);
   const seg = 6;
   const n = Math.ceil(gw / seg);
@@ -152,7 +158,7 @@ export function IdleTrace({ w, seed }: { w: number; seed: number }) {
 }
 
 // Text outside the grid: firmware line and trigger label above it, timebase below.
-export function GridLabels({ w, fw, trig, tb, sens }: { w: number; fw: string; trig: string; tb: string; sens?: string }) {
+export function GridLabels({ w, fw, trig, tb, sens, rows = GRID_ROWS }: { w: number; fw: string; trig: string; tb: string; sens?: string; rows?: number }) {
   const div = gridDiv(w);
   const gw = div * GRID_COLS;
   const left = Math.round((w - gw) / 2);
@@ -160,61 +166,9 @@ export function GridLabels({ w, fw, trig, tb, sens }: { w: number; fw: string; t
     <>
       <Text style={[st.cornerText, { left, top: 3 }]}>{fw}</Text>
       <Text style={[st.cornerText, { right: left, top: 3 }]}>{trig}</Text>
-      <Text style={[st.cornerText, { left, top: GRID_TOP + div * GRID_ROWS + 3 }]}>{tb}</Text>
-      {sens ? <Text style={[st.cornerText, { right: left, top: GRID_TOP + div * GRID_ROWS + 3 }]}>{sens}</Text> : null}
+      <Text style={[st.cornerText, { left, top: GRID_TOP + div * rows + 3 }]}>{tb}</Text>
+      {sens ? <Text style={[st.cornerText, { right: left, top: GRID_TOP + div * rows + 3 }]}>{sens}</Text> : null}
     </>
-  );
-}
-
-// ---------- burn-in ----------
-
-// Off-centre burn-in of the flux gauge: a log arc of 100 degrees from 10 to
-// 1000 mG, drawn with thin rotated views at p0 (70%), clipped by the glass edge.
-const BURN_R = 150;
-const BURN_A0 = -140;
-
-function logAngle(mg: number): number {
-  return BURN_A0 + (Math.log10(mg / 10) / 2) * 100;
-}
-
-export function BurnIn({ cx, cy, labels }: { cx: number; cy: number; labels: { l10: string; l100: string; l1000: string; unit: string } }) {
-  const arc = Array.from({ length: 13 }, (_, i) => BURN_A0 + 100 * (i / 12) - 100 / 24);
-  const minors: number[] = [];
-  for (const dec of [10, 100]) for (let k = 2; k <= 9; k++) minors.push(logAngle(dec * k));
-  const majors = [10, 100, 1000].map(logAngle);
-  const at = (deg: number, r: number) => ({
-    x: cx + r * Math.cos((deg * Math.PI) / 180),
-    y: cy + r * Math.sin((deg * Math.PI) / 180),
-  });
-  const lab = [
-    { t: labels.l10, p: at(majors[0], BURN_R - 22) },
-    { t: labels.l100, p: at(majors[1], BURN_R - 22) },
-    { t: labels.l1000, p: at(majors[2], BURN_R - 22) },
-  ];
-  return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, st.burn]}>
-      {arc.map((a) => (
-        <View key={`a${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
-          <View style={st.arcSeg} />
-        </View>
-      ))}
-      {minors.map((a) => (
-        <View key={`m${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
-          <View style={st.minor} />
-        </View>
-      ))}
-      {majors.map((a) => (
-        <View key={`M${a}`} style={[st.pivot, { left: cx, top: cy, transform: [{ rotate: `${a}deg` }] }]}>
-          <View style={st.major} />
-        </View>
-      ))}
-      {lab.map(({ t, p }) => (
-        <Text key={t} style={[st.burnText, { left: p.x - 20, top: p.y - 9 }]}>
-          {t}
-        </Text>
-      ))}
-      <Text style={[st.burnText, { left: cx - 20, top: cy - 46 }]}>{labels.unit}</Text>
-    </View>
   );
 }
 
@@ -258,7 +212,6 @@ const copy = {
 };
 
 const FOLD = 16;
-const SERIAL_MIN_W = 380;
 
 // Bible section 11. `meta` data comes from the install identity. The lower
 // right corner is lifted: the corner is cut away over `bg`, the folded flap
@@ -278,10 +231,10 @@ export function Sticker({
   style?: object;
   onLayout?: (e: LayoutChangeEvent) => void;
 }) {
-  // One line; the segments wrap whole when the glass is too narrow for it. The
-  // serial is on the nameplate too, so it drops off the sticker under 380 px.
+  // One line; the segments wrap whole when the glass is too narrow for it. The serial rule
+  // (src/ui/serial.ts) prints the full serial here only when the nameplate carries the short form.
   const { width } = useWindowDimensions();
-  const parts = [copy.model, ...(width < SERIAL_MIN_W ? [] : [serial]), `CAL ${cal}`, `PRÜF ${pruef}`];
+  const parts = [copy.model, ...(stickerShowsSerial(width) ? [serial] : []), `CAL ${cal}`, `PRÜF ${pruef}`];
   const line = parts.join(' · ');
   const segments = parts.map((t, i) => (i < parts.length - 1 ? `${t} · ` : t));
   return (
@@ -299,6 +252,31 @@ export function Sticker({
       <View style={[st.cut, { borderBottomColor: bg }]} />
       <View style={st.flap} />
       <View style={st.crease} />
+    </View>
+  );
+}
+
+// The same sticker, smaller, stuck on the housing for the life of the install (Bible sections 2
+// and 11): bottom-left under the window, tilted -1.5 degrees, lower right corner lifted. It prints
+// the two disclosure heading lines and the calibration line, each on its own row and never cut:
+// the paper is as wide as its longest line.
+export const MINI_STICKER_H = 41;
+
+export function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string; pruef: string; bg?: string; style?: object }) {
+  const meta = `CAL ${cal} · PRÜF ${pruef}`;
+  return (
+    <View style={[st.mini, style]} pointerEvents="none" testID="sticker-mini" accessibilityLabel={`${copy.head1} ${copy.head2} ${meta}`}>
+      <Text style={st.miniHead} numberOfLines={1}>
+        {copy.head1}
+      </Text>
+      <Text style={st.miniHead} numberOfLines={1}>
+        {copy.head2}
+      </Text>
+      <Text style={st.miniMeta} numberOfLines={1}>
+        {meta}
+      </Text>
+      <View style={[st.miniCut, { borderBottomColor: bg }]} />
+      <View style={st.miniFlap} />
     </View>
   );
 }
@@ -337,15 +315,14 @@ export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
   );
 }
 
-// Engraved dummy cap: same footprint as a live key, three engraved dots, no legend.
+// Engraved dummy cap: same footprint as a live key and a blank seat, no legend. The engraving is
+// one shallow ring (a dark groove with a light lower edge), which reads as a pressed-in mark and
+// never as a dash or a dotted label.
 export function DummyCap() {
   return (
-    <View style={st.dummy} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={st.dots}>
-        <View style={st.dot} />
-        <View style={st.dot} />
-        <View style={st.dot} />
-      </View>
+    <View testID="key-dummy" style={st.dummy} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={st.ringLip} />
+      <View style={st.ring} />
     </View>
   );
 }
@@ -410,12 +387,6 @@ const st = StyleSheet.create({
   trace: { position: 'absolute', height: 1.5, backgroundColor: color.p4 },
   cornerText: { ...type.rdXS, position: 'absolute', color: color.p3 },
 
-  burn: { opacity: 0.7 },
-  pivot: { position: 'absolute', width: 0, height: 0 },
-  arcSeg: { position: 'absolute', left: BURN_R - 0.75, top: -9, width: 1.5, height: 18, backgroundColor: color.p0 },
-  minor: { position: 'absolute', left: BURN_R - 5, top: -0.5, width: 5, height: 1, backgroundColor: color.p0 },
-  major: { position: 'absolute', left: BURN_R - 9, top: -0.75, width: 9, height: 1.5, backgroundColor: color.p0 },
-  burnText: { ...type.rdXS, position: 'absolute', width: 40, textAlign: 'center', color: color.p0 },
 
   plate: {
     width: 28,
@@ -483,6 +454,19 @@ const st = StyleSheet.create({
     transform: [{ rotate: '-45deg' }],
   },
 
+  mini: {
+    alignSelf: 'flex-start',
+    backgroundColor: color.paper,
+    paddingHorizontal: 7,
+    paddingTop: 4,
+    paddingBottom: 4,
+    transform: [{ rotate: '-1.5deg' }],
+  },
+  miniHead: { ...type.lbXS, fontFamily: font.labelBold, lineHeight: 11, letterSpacing: 0.3, color: color.ink },
+  miniMeta: { ...type.lbXS, lineHeight: 11, letterSpacing: 0.3, color: color.ink },
+  miniCut: { position: 'absolute', right: 0, bottom: 0, width: 0, height: 0, borderLeftWidth: 7, borderBottomWidth: 7, borderLeftColor: 'transparent' },
+  miniFlap: { position: 'absolute', right: 0, bottom: 0, width: 0, height: 0, borderTopWidth: 7, borderRightWidth: 7, borderRightColor: 'transparent', borderTopColor: color.n6 },
+
   keyPlate: {
     height: size.keyH + 12,
     justifyContent: 'center',
@@ -524,6 +508,6 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dots: { flexDirection: 'row', gap: 4 },
-  dot: { width: 2, height: 2, borderRadius: 1, backgroundColor: color.n1 },
+  ring: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n1 },
+  ringLip: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n4, opacity: 0.55, transform: [{ translateY: 1 }] },
 });

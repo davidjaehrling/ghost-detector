@@ -3,11 +3,15 @@
 Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what is next, what blocks.
 
 ## Current phase
-**P2 Vertical slice** on branch `claude/p2-vertical-slice` (from `main` at e6757ff, the P1 squash merge). **Gate 1 is open**: David picks the name, icon direction and package ID. Work that does not depend on them proceeds (navigation, engine v0, viewfinder, scan theatre, result, boot round 3). P2-11 (identity applied) and P2-10 (first AAB) wait on the owner.
+**P3 Ghost engine & FX** on branch `claude/p3-ghost-fx` (from `main` at fc2a14a, the P2 squash merge). Runs in parallel with P4 (sensors, sound, haptics) once P3-01 lands. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB) and P2-11 (identity) wait on the owner.
 
-P0 merged as PR #1, P1 as PR #2 (2026-10-13). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P1-08 boot screen loop at 6.05 (continues as P2-08).
+P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P1-08 boot screen loop at 6.05 (continues as P2-08).
 
 ## Last thing done
+- P3 round 2 built: FX (density, smear, occlusion, tier extent, thermal blocks, wedge sweep, fault tear, feed tint, warp capture, 60 fps on the harness), Builder A (per-case seeds, locked photo window, one thermal number, data strip, housing sticker, priming transient, countdown, session index), goldens regenerated at 81c1c7c (173 e2e x2, 338 unit tests). Clamp measured before the warp (D-021). Re-score running. PR #4 open.
+- P3/P4 build complete except the result screen: compositor v1 (3a29431), glass on all screens, D-011 leftovers, magnetometer needle, sweep, audio and haptics wiring, jump-scare, Settings (dbe3248..d948f73; 302 unit tests, 122 e2e). Result-screen integration (compositor, thermal toggle, warp) running.
+- P3: Skia 2.14 installed (P3-01), glass stack (P3-02), thermal view (P3-05) committed; P4 audio engine (P4-01..03) committed. Compositor v1 (P3-03/04) and Builder A's three-screen integration running. Decisions D-013, D-014.
+- P2 merged as PR #3: 7 of 11 claims pass; 08/09 re-enter the loop in P3; 10/11 wait on the owner. Decisions D-007 to D-012.
 - P2 rounds: engine v0 verified (P2-01..03 pass), viewfinder and scan theatre verified (P2-05, 06 pass), v0 ghost adds light and native region detection exists (P2-07 pending round-3 check). Design loop round 2 means: boot 7.24, viewfinder 7.0, scan 7.43, result 6.9; ghost believability 5. Round 3 running (last plain-view round; Skia in P3). Decisions D-007 to D-010.
 - P2 wave 1 merged into the branch: engine v0 (dark-region finder, seeded outcome matching the psych-brief tables within 0.7 points, profile generator; 55 engine tests), navigation skeleton with flow spec, boot screen round 3 (seeded install identity with Luhn serial, contrast test, key row, graticule per §3). 71 unit tests, 15 goldens.
 - Wave 2 running: viewfinder + scan theatre + state store (Builder A), v0 ghost compositor (FX Engineer).
@@ -20,9 +24,9 @@ P0 merged as PR #1, P1 as PR #2 (2026-10-13). Carried forward: P0-06, P0-09 (exp
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Round 3 (running): Builder A on the D-009 screen list and Refuter defects; FX Engineer on placement margins, matte edges and tier opacity caps. Then re-score and a light Refuter pass.
-2. Flip P2-04, 07, 08, 09 as verified; open the P2 PR; squash merge when CI is green.
-3. When Gate 1 closes: apply identity (P2-11). When expo.dev and the Play items are cleared: first AAB and Maestro video (P2-10), then Phone check 1. P3 starts with the Skia FX stack, which the loop needs to pass 8.
+1. Round-2 re-score (running) on the fresh goldens; log D-022; merge PR #4 when CI is green (leftovers carry to P8 if believability stays under 8 after round 2, by the five-round rule the loop may continue in P8 polish).
+2. P5 Monetization & consent (blocked on AdMob and Firebase IDs for anything live; UMP flow, cadence state machine and test IDs can be built) and P6 share card and notifications; P7 localisation.
+3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase.
 
 ## Blockers (owner)
 - **Gate 1**: name (panel recommends option 1 "Velden FS-4 Field Probe", alternative option 5), icon (panel recommends concept 3 nameplate), Android package ID (permanent; must not contain "detector" if option 2 is chosen).
@@ -36,3 +40,5 @@ P0 merged as PR #1, P1 as PR #2 (2026-10-13). Carried forward: P0-06, P0-09 (exp
 | P0 | ~0.75M | Subagents ~0.45M (scaffold 59k, EAS 55k, psych brief 72k, harness 58k, Refuter 101k, fixes and two CI font-drift fixes ~220k); Director context ~0.2M at merge |
 | P1 | ~1.6M | Subagents ~1.45M (wave 1 ~290k, wave 2 ~260k, panel 509k, round 2 105k + re-score 125k, Refuter ~100k, fixes ~90k); Director context ~0.1M |
 | P2 | ~3.6M | Subagents: engine 89k+74k, nav/boot 144k, viewfinder/scan 192k, result 128k, FX 108k+152k+136k, rounds 2 and 3 of screens 297k+266k, loop scoring 203k+170k+160k, Refuter 141k+115k+99k, misc; Director context ~0.25M |
+| P3 | ~4.3M | Subagents: Skia 106k, glass 208k, apparition/compositor 343k, thermal 167k, Builder A integration 376k + 274k, round 2 FX 531k + 94k + Builder A 385k, round 3 FX 361k + defects, scoring 167k + 182k (void) + 168k + 135k, Refuter 167k + 141k; Director context ~0.3M |
+| P4 | ~0.25M (engine 133k, test fix 61k; the screen wiring is counted under P3) | P4-07 phone check waits on the owner |

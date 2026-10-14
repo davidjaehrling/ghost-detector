@@ -11,6 +11,7 @@ import {
   faultFor,
   faultOn,
   frameAt,
+  heldThermal,
   liveAt,
   logBefore,
   rateAt,
@@ -79,10 +80,12 @@ describe('scan timeline', () => {
       expect(words).toBeGreaterThanOrEqual(3);
       expect(words).toBeLessThanOrEqual(6);
       // Upper case, apart from the SI units.
-      expect(l.replace(/mG|dBFS|dT|°C/g, '')).toBe(l.replace(/mG|dBFS|dT|°C/g, '').toUpperCase());
+      expect(l.replace(/mG|dBFS|ΔT|°C/g, '')).toBe(l.replace(/mG|dBFS|ΔT|°C/g, '').toUpperCase());
     }
     expect(phaseLine(417, 0)).toBe('SWEEP BAND 2');
     expect(phaseLine(417, 1)).toMatch(/^FLUX SAMPLE \d{3} mG$/);
+    // The pinned live row owns the thermal value; the log line carries none.
+    expect(phaseLine(417, 2)).not.toMatch(/\d/);
     expect(logBefore(417, 4)).toEqual([phaseLine(417, 1), phaseLine(417, 2), phaseLine(417, 3)]);
     expect(logBefore(417, 0)).toEqual([]);
   });
@@ -155,7 +158,7 @@ describe('scan round 2', () => {
 
   it('live readings carry label, value and unit', () => {
     expect(liveAt(417, 1, 10)).toMatchObject({ label: 'FLUX', unit: 'mG' });
-    expect(liveAt(417, 2, 10)).toMatchObject({ label: 'dT', unit: '°C' });
+    expect(liveAt(417, 2, 10)).toMatchObject({ label: 'ΔT', unit: '°C' });
     expect(readingAt(417, 3, 5)).toMatch(/^LVL -\d+ dBFS$/);
   });
 });
@@ -184,6 +187,25 @@ describe('LED 4 in the hold (D-007 regression, D-009)', () => {
   it('lights it in the hold on the quieter tiers', () => {
     for (const tier of ['quiet', 'trace', 'active', undefined]) {
       expect(scanLeds(frameAt(T - HOLD_MS / 2, T), tier)).toBe(4);
+    }
+  });
+});
+
+describe('held thermal reading', () => {
+  it('is the last reading logged live in phase 2', () => {
+    for (const d of [6000, 7300, 8000, 10000]) {
+      const active = d - HOLD_MS;
+      let last = '';
+      for (let e = 0; e < active; e += 10) {
+        const f = frameAt(e, d);
+        if (f.kind === 'phase' && f.phase === 2) {
+          const l = liveAt(417, 2, f.tick);
+          last = `${l.label} ${l.value} ${l.unit}`;
+        }
+      }
+      const h = heldThermal(417, active);
+      expect(`${h.label} ${h.value} ${h.unit}`).toBe(last);
+      expect(h.label).toBe('ΔT');
     }
   });
 });
