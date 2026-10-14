@@ -817,7 +817,7 @@
       "id": "P5-01",
       "phase": "P5",
       "description": "Mobile Ads SDK installed behind a facade",
-      "acceptance": "react-native-google-mobile-ads 17.2.0 installed with Google's published sample Android app ID in the app.json plugin config (no live ID until launch); `src/ads/` exposes one facade (consent, rewarded, interstitial, banner) with a native backend and a web no-op backend (`*.web.ts`) that records calls in `window.__adsLog`; `pnpm smoke` and `pnpm e2e:web` pass; `pnpm web:export` still produces dist/",
+      "acceptance": "react-native-google-mobile-ads 17.2.0 installed with Google's published sample Android app ID in the app.json plugin config (no live ID until launch); `src/ads/` exposes one facade (consent, rewarded, interstitial, banner) with a native backend and a web no-op backend (`*.web.ts`) that records calls in `window.__adsLog`; `pnpm smoke` and `pnpm e2e:web` pass; `pnpm web:export` still produces dist/; the facade calls `MobileAds().initialize()` only after consent resolves with `canRequestAds` true, app.json sets `delay_app_measurement_init: true`, and request configuration sets `tagForChildDirectedTreatment: false`, `tagForUnderAgeOfConsent: false`, `maxAdContentRating: 'T'`; a device check (logcat or proxy log) that no ad network traffic leaves before consent is recorded under P5-10; a release gate (a check in CI and in the production build path) fails if `3940256099942544` appears in a production build",
       "evidence": [],
       "passes": false
     },
@@ -825,7 +825,7 @@
       "id": "P5-02",
       "phase": "P5",
       "description": "UMP consent before any ad or analytics call",
-      "acceptance": "On first launch the Google UMP form (AdsConsent) is requested and shown where required before any ad request and before analytics starts; consent state is persisted and re-read on launch; Settings has a PRIVACY entry that reopens the privacy options form whenever `privacyOptionsRequirementStatus` is REQUIRED; the UMP form is Google's own and is not restyled or covered; unit tests cover the gate (no ad or analytics call reaches the backend before consent resolves, in every consent status); web stub takes `?consent=required|obtained|notRequired` for L2",
+      "acceptance": "On first launch the Google UMP form (AdsConsent) is requested and shown where required before any ad request and before analytics starts; consent state is persisted and re-read on launch; Settings has a PRIVACY entry that reopens the privacy options form whenever `privacyOptionsRequirementStatus` is REQUIRED; the UMP form is Google's own and is not restyled or covered; unit tests cover the gate (no ad or analytics call reaches the backend before consent resolves, in every consent status); web stub takes `?consent=required|obtained|notRequired` for L2; `requestInfoUpdate` runs on every launch and the ad gate uses `canRequestAds`, not the status alone; analytics is allowed only when status is NOT_REQUIRED, or OBTAINED with TCF Purpose 1 granted (read from `AdsConsent.getUserChoices()`); when `canRequestAds` is false there are no ad requests, the banner slot stays empty, no interstitial loads and the DEEP SCAN key shows its disabled state; a form load error counts as no consent",
       "evidence": [],
       "passes": false
     },
@@ -833,7 +833,7 @@
       "id": "P5-03",
       "phase": "P5",
       "description": "Interstitial cadence state machine",
-      "acceptance": "`src/engine/adCadence.ts`: pure, seed-free state machine over events (appLaunch, sessionStart, scanComplete, resultShown, returnToViewfinder, rewardedShown, interstitialShown, tick(ms)) that answers `shouldPreload` and `shouldShow`; invariants: never in the first session of an install, never at launch or exit, never on the reveal, show only on returnToViewfinder, at most one per 2 completed scans, at most one per 180 s, never within 60 s after a rewarded ad, preload at least one event ahead of a permitted show; property tests over 10,000 random event sequences assert every invariant; README in src/engine documents the machine",
+      "acceptance": "`src/engine/adCadence.ts`: pure, seed-free state machine over events (appLaunch, sessionStart, scanComplete, resultShown, returnToViewfinder, rewardedShown, interstitialShown, tick(ms)) that answers `shouldPreload` and `shouldShow`; invariants: never in the first session of an install, never at launch or exit, never on the reveal, show only on returnToViewfinder, at most one per 2 completed scans, at most one per 180 s, never within 60 s after a rewarded ad, preload at least one event ahead of a permitted show; property tests over 10,000 random event sequences assert every invariant; README in src/engine documents the machine; a session is a cold start or a return after more than 30 minutes in the background (the app feeds `sessionStart` on both); the install session index and the last-shown timestamp are persisted by the app; `returnToViewfinder` fires only on an explicit tap from the result screen, never on background or resume; the app shows the ad only after the viewfinder has rendered and at least 500 ms after the tap",
       "evidence": [],
       "passes": false
     },
@@ -841,7 +841,7 @@
       "id": "P5-04",
       "phase": "P5",
       "description": "Rewarded Deep Scan",
-      "acceptance": "The result screen's partially decoded signature leads into one DEEP SCAN key that states a sponsored segment plays (in the instrument voice, no banned words, no trick wording); the rewarded ad (test unit ID) runs only on that tap; on reward the full entity profile, the high-resolution apparition and the EVP line unlock for that scan and persist in the scan record; on dismiss without reward nothing changes and no second prompt appears in that session; load and failure states are in character and never pose as system alerts; web stub takes `?reward=1|0` for L2; goldens for locked and unlocked result at 390; unit tests cover unlock persistence",
+      "acceptance": "The result screen's partially decoded signature (`SIGNATURE PARTIALLY DECODED`) leads into one DEEP SCAN key whose always-visible sublabel reads `SPONSORED VIDEO PLAYS FIRST`; the key is enabled only when a rewarded ad is loaded and `canRequestAds` is true, otherwise it shows the disabled state `DEEP SCAN OFFLINE. NO SIGNAL.`; the rewarded ad (test unit ID) runs only on that tap; on reward the full entity profile, the high-resolution apparition and the EVP line unlock for that scan and persist in the scan record; on dismiss without reward nothing changes and no second prompt appears in that session; load and failure copy is in the instrument voice, uses no `Alert.alert` or system-style dialog, and locked and unlocked copy never claims real detection or a truer reading (no `free`, `unlock now`, `tap to continue`, `continue scan`); web stub takes `?reward=1|0` and `?adReady=0` for L2; goldens for locked, offline and unlocked result at 390; unit tests cover unlock persistence",
       "evidence": [],
       "passes": false
     },
@@ -849,7 +849,7 @@
       "id": "P5-05",
       "phase": "P5",
       "description": "Interstitial wired to the cadence machine",
-      "acceptance": "The interstitial (test unit ID) is requested and shown only where `adCadence` permits, on the return from result to viewfinder; it is preloaded when the machine says so; no interstitial on launch, exit, reveal or in the first session; an L2 spec walks two scans in a first session and two in a second session and asserts the `__adsLog` sequence (no show in session 1, at most one show in session 2); the scan count and session index come from the existing session store",
+      "acceptance": "The interstitial (test unit ID) is requested and shown only where `adCadence` permits, on the return from result to viewfinder; it is preloaded when the machine says so; no interstitial on launch, exit, reveal or in the first session; an L2 spec walks two scans in a first session and two in a second session and asserts the `__adsLog` sequence (no show in session 1, at most one show in session 2); the scan count and session index come from the existing session store; the interstitial never shows while the camera permission prompt or any permission prompt is on screen, and never earlier than 500 ms after the tap, after the viewfinder has rendered",
       "evidence": [],
       "passes": false
     },
@@ -857,7 +857,7 @@
       "id": "P5-06",
       "phase": "P5",
       "description": "Banner on the history screen only",
-      "acceptance": "One anchored adaptive banner (test unit ID) at the bottom of the history screen, at least 24 dp from any tappable control and never overlapping the list; no banner component on any other route (an L2 spec asserts the banner testID is absent on boot, viewfinder, scan, result and settings); the banner slot has a fixed height so the layout does not shift on load",
+      "acceptance": "One anchored adaptive banner (test unit ID) at the bottom of the history screen, at least 24 dp from any tappable control and never overlapping the list; no banner component on any other route (an L2 spec asserts the banner testID is absent on boot, viewfinder, scan, result and settings); the banner slot has a fixed height so the layout does not shift on load; the slot height equals the anchored adaptive banner height for the device width plus the bottom safe-area inset; the slot stays empty and requests nothing until `canRequestAds` is true; the 24 dp gap is measured to the nearest row, button or clear-history control",
       "evidence": [],
       "passes": false
     },
@@ -865,7 +865,7 @@
       "id": "P5-07",
       "phase": "P5",
       "description": "Analytics facade that starts only after consent",
-      "acceptance": "`src/analytics/` exposes `track(event, params)` with a short allowlist of events (consent_status, scan_complete{tier,intensity}, deep_scan_offered, deep_scan_rewarded, interstitial_shown, share_card); nothing is sent before consent resolves to obtained or notRequired; the Firebase backend (@react-native-firebase/app and analytics 26.x) is wired behind the presence of `google-services.json` and `analytics_auto_collection_enabled:false` in firebase.json, enabled only by the facade after consent; without the file the build uses the no-op backend; unit tests cover the gate",
+      "acceptance": "`src/analytics/` exposes `track(event, params)` with an allowlist enforced in code (consent_status, scan_complete{tier,intensity}, deep_scan_offered, deep_scan_rewarded, interstitial_shown, share_card); unknown events and unknown param keys are dropped and no free-text param exists; nothing is sent unless consent status is NOT_REQUIRED, or OBTAINED with TCF Purpose 1 granted (consent_status itself fires only when analytics is allowed); the Firebase backend (@react-native-firebase/app and analytics 26.x) is wired behind the presence of `google-services.json`, with firebase.json setting analytics_auto_collection_enabled, google_analytics_default_allow_analytics_storage, _ad_storage, _ad_user_data, _ad_personalization, google_analytics_adid_collection_enabled, google_analytics_ssaid_collection_enabled and google_analytics_automatic_screen_reporting_enabled all to false, enabled only by the facade after consent; without the file the build uses the no-op backend; unit tests cover the gate and the allowlist",
       "evidence": [],
       "passes": false,
       "blocked_by": "owner: Firebase project and google-services.json for the native backend; the facade and gate are built now"
@@ -882,7 +882,7 @@
       "id": "P5-09",
       "phase": "P5",
       "description": "Privacy policy, Data safety map and Impressum draft",
-      "acceptance": "`docs/privacy-policy.md` (EN; DE in P7) covering the Mobile Ads SDK, UMP, Firebase Analytics, on-device photo processing (not collected), local scan history; `docs/data-safety.md` mapping each shipped SDK to Play Data safety answers; `docs/impressum.md` with placeholders for the owner's trader address (DSA) and §5 DDG fields; a Settings entry LEGAL opens the policy in the system browser (URL placeholder until hosted); Compliance PASS",
+      "acceptance": "`docs/privacy-policy.md` (EN; DE in P7) covering the Mobile Ads SDK, UMP, Firebase Analytics, on-device photo processing (not collected), local scan history; `docs/data-safety.md` mapping each shipped SDK to Play Data safety answers; `docs/impressum.md` with placeholders for the owner's trader address (DSA) and §5 DDG fields; a Settings entry LEGAL opens a list with the Impressum and the privacy policy, each reachable within two taps and each opening in the system browser (URL placeholders until hosted); Settings also carries an ABOUT line stating that readings are simulated; launch blockers recorded: the policy URL and the Impressum must be live public pages before the Play submission; Compliance PASS",
       "evidence": [],
       "passes": false
     },
