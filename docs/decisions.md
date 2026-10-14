@@ -209,3 +209,8 @@ Weighted means (Hollow x2, Art): boot 7.43 (min 5.67), viewfinder 7.29 (min 6.0)
 - Accepted as is: scans from session 0 count toward the first 2-scan gate (the contract says counted from install); a `show` decision consumes the slot even when the tap expires (fails safe); stores load expo-sqlite at module import (the kv-store is synchronous).
 - Leftovers: the history key legend wraps as "SETTING S" at 360 (pre-existing, P8 polish list); the banner list clauses are untestable until the P6 investigation log lands (re-run the 24 dp spec then); copy lives in code until P7 builds `locales/`.
 - Cost: Refuter 142k + resume.
+
+## 2026-10-14 · D-030 · P5-01 release gate re-check
+- The Refuter re-checked bb50f18: the gate fails in release mode on the sample app ID and the placeholders and passes with fake live IDs; a `--no-bytecode --clear` release export compiles `releaseMode()` to true and `unitId()` returns the live constants; a dev export keeps the `TestIds`; the tests are not circular. The nine sample unit IDs still appear in every bundle because they are the SDK's own `TestIds` table, library code that no release path reads. Ruling: the claim is "no test ID can be requested by a production build", not "no sample bytes in the bundle"; acceptance text amended; P5-01 HOLDS. Stripping the table with a Metro alias is not worth its code.
+- The "run in CI" clause lands with QA's commit adding `pnpm check:ad-ids` to the `checks` job (in flight).
+- Evidence note for anyone repeating this: Metro's cache ignores the env flag across project copies; release-versus-dev bundle evidence needs `--clear`.
