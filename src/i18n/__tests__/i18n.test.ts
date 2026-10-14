@@ -90,10 +90,17 @@ describe('language setting', () => {
     expect(seen).toEqual(['system', 'en', 'de', 'es', 'pt', 'system']);
     expect(calls).toBe(5);
   });
-  it('an explicit choice sets the locale; a language with no file still renders en text', () => {
+  it('an explicit choice sets the locale and renders its own text', () => {
     setLanguage('de');
     expect(getLocale()).toBe('de');
-    expect(t('settings.sound')).toBe('SOUND');
+    expect(t('settings.sound')).toBe('TON');
+  });
+  it('a locale table with a missing key falls back to en for that key', () => {
+    registerResources('en', { 'synthetic.only_en': 'ENGLISH ONLY', 'synthetic.both': 'EN BOTH' });
+    registerResources('es', { 'synthetic.both': 'ES BOTH' });
+    setLanguage('es');
+    expect(t('synthetic.both')).toBe('ES BOTH');
+    expect(t('synthetic.only_en')).toBe('ENGLISH ONLY');
   });
   it('SYSTEM with no device locale is en', () => {
     setLanguage('system');

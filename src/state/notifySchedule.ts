@@ -8,8 +8,12 @@ import {
   WINDOW_END_MIN,
   WINDOW_START_MIN,
   applyIntensityChange,
+  type EngineStrings,
+  type NumFmt,
+  cleanTag,
   localMinuteOfDay,
   nextNotification,
+  nextNotificationWith,
 } from '../engine';
 import { catalogue } from './log';
 import { type RelayStore, type ScheduleBackend, type TapData, relayOn } from './relay';
@@ -184,9 +188,41 @@ export type Deps = {
   offsetAt: (ms: number) => number;
   /** A fresh seed for call number `n` at `nowMs`. */
   seed: (nowMs: number, n: number) => number;
+  /** The active locale's copy for lines: the `notify.*` table, a number formatter and the label of a tag id. English when absent. */
+  copy?: () => LineCopy;
   /** Re-reads the stored system permission (it may have been revoked in system settings). Run on app open. */
   refreshPermission?: () => Promise<void>;
 };
+
+export type LineCopy = { strings: EngineStrings; fmt?: NumFmt; tagLabel?: (id: string) => string | undefined };
+
+const foldTag = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '');
+
+/**
+ * Lines print the tag as the engine received it. To print the locale's label (KELLER, not CELLAR)
+ * the state carries the label, and the `notify.lore.<id>` entries are also offered under the label,
+ * so the lookup that keys on the English id still finds its text. Tags with no label pass through.
+ */
+export function localiseTags(state: NotifyState, copy: LineCopy | undefined): { state: NotifyState; strings: EngineStrings | undefined } {
+  if (!copy?.tagLabel) return { state, strings: copy?.strings };
+  const label = (raw: string): string => {
+    const id = cleanTag(raw);
+    const l = id ? copy.tagLabel!(id) : undefined;
+    return l ? l.toLocaleLowerCase() : raw;
+  };
+  const strings: Record<string, string> = { ...copy.strings };
+  for (const [k, v] of Object.entries(copy.strings)) {
+    if (!k.startsWith('notify.lore.')) continue;
+    const l = copy.tagLabel(k.slice('notify.lore.'.length));
+    const own = l ? cleanTag(l) : null;
+    if (own && !(`notify.lore.${own}` in strings)) strings[`notify.lore.${own}`] = v;
+    if (own && !(`notify.lore.${foldTag(own)}` in strings)) strings[`notify.lore.${foldTag(own)}`] = v;
+  }
+  return {
+    state: { ...state, loggedTags: state.loggedTags.map(label), scans: state.scans.map((r) => ({ ...r, tags: r.tags.map(label) })) },
+    strings,
+  };
+}
 
 const idFor = (fireAtMs: number) => `fl-${fireAtMs}`;
 
@@ -259,7 +295,9 @@ export async function reconcileNow(d: Deps, reason: Reason): Promise<void> {
   // Schedule what the engine allows next, one call at a time with the item appended to `sent`.
   state = build();
   for (let n = 0; n < MAX_CHAIN; n++) {
-    let next = nextNotification(state, d.seed(nowMs, n));
+    const copy = d.copy?.();
+    const loc = localiseTags(state, copy);
+    let next = copy ? nextNotificationWith(loc.state, d.seed(nowMs, n), loc.strings!, copy.fmt) : nextNotification(state, d.seed(nowMs, n));
     // The engine reads one offset for the whole search. Put the fire instant at the same local
     // minute on its own night, using the offset in force that night (DST), and keep it only if it holds.
     if (next) {

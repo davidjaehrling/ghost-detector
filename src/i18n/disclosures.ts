@@ -11,10 +11,13 @@ export const DISCLOSURE_KEYS = [
   'deep.sub',
   'relay.body',
   'relay.channelName',
+  'share.card.mark',
+  'share.card.footer',
 ] as const;
 export type DisclosureKey = (typeof DISCLOSURE_KEYS)[number];
 
 const SIM = { en: /SIMULAT/iu, de: /SIMULIER|SIMULATION/iu, es: /SIMULA/iu, pt: /SIMULA/iu } satisfies Record<Lang, RegExp>;
+const SIM_STEM = { en: /SIMULAT/iu, de: /SIMULIER/iu, es: /SIMULAD/iu, pt: /SIMULAD/iu } satisfies Record<Lang, RegExp>;
 const NOTHING = {
   en: /detects nothing/iu,
   de: /erkennt nichts/iu,
@@ -33,5 +36,7 @@ export function markersFor(lang: Lang): Partial<Record<DisclosureKey, RegExp[]>>
     'result.strip.mark': [SIM[lang]],
     'deep.sub': [VIDEO, AD[lang]],
     'relay.body': [SIM[lang]],
+    'share.card.mark': [SIM_STEM[lang]],
+    'share.card.footer': [SIM_STEM[lang]],
   };
 }
