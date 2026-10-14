@@ -1,5 +1,31 @@
 # src/engine
 
+## Locale resources (key scheme)
+All engine copy lives in `locales/engine/<lang>.json`: one flat object, dotted keys, no `engine.` prefix inside
+the file (the i18n loader adds it when it merges the file). Functions take the table as a parameter; the engine
+never detects a locale and never reads files. The legacy signatures load the `en` JSON and stay byte-identical.
+
+| Keys | Meaning |
+| --- | --- |
+| `profile.class.NN`, `profile.prefix.NN` | 24 class names and their 3-letter catalogue prefixes, index-matched (`NN` = 00..23) |
+| `profile.temperament.NN`, `.attachment.NN`, `.behaviour.NN`, `.timing.NN` | 24 trait lines each |
+| `profile.detail.NN` | 6 detail templates with `{n}`, `{n4}`, `{dt}` |
+| `profile.era` | `{start}`, `{end}` |
+| `notify.prefix` | the `FIELD LOG` title prefix, used as `{prefix}` in every title |
+| `notify.tN.title`, `notify.tN.body` | templates 1 to 5. Names: `{prefix}` `{idx22}` `{idx03}` `{moonPct}` `{tag}` `{Tag}` `{TAG}` `{count}` `{lore}` `{caseId}` `{pct}` `{logged}` `{total}` `{unlogged}` `{last}` |
+| `notify.t5.body.one` / `.other` | plural forms (exactly 1 unlogged class, else) |
+| `notify.t5.last` | `{class}` clause for the last logged class; empty when unknown |
+| `notify.lore.<tag>` | one lore line per known tag (shown for belief `yes`) |
+
+Banks are contiguous (`00`, `01`, ... no gaps; the count is the number of keys). Placeholders are named; a
+translation must keep every name. Numbers go through an injected formatter `NumFmt = (n, fractionDigits?) => string`
+(default `plainFmt`: plain integers, `toFixed` for the ΔT decimal). `caseId` is passed zero-padded.
+
+API: `generateProfileWith(seed, tier, recent, strings, fmt?)`, `nextNotificationWith(state, seed, strings, fmt?)`.
+Checks for a locale file: `checkStrings(table, lists)` (banned, claim, framing, em-dash; Unicode-aware; `stem*`
+syntax; `exempt` literals), `missingKeys(en, other)`, `extraKeys(en, other)`, `placeholderMismatches(en, other)`.
+`cleanTag` still lowercases to `[a-z0-9 -]`, so tags (and `notify.lore.<tag>` keys) are ASCII for now.
+
 Pure TypeScript. No React, no native imports. Import from `src/engine` (index).
 
 ## API
