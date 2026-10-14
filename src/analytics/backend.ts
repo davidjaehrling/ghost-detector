@@ -11,7 +11,7 @@
 //   4. firebase.json at the repo root already sets every automatic collection flag to false
 //      (analytics_auto_collection_enabled, analytics_default_allow_analytics_storage,
 //      analytics_default_allow_ad_storage, analytics_default_allow_ad_user_data,
-//      analytics_default_allow_ad_personalization_signals, google_analytics_adid_collection_enabled,
+//      google_analytics_default_allow_ad_personalization_signals, google_analytics_adid_collection_enabled,
 //      google_analytics_ssaid_collection_enabled, google_analytics_automatic_screen_reporting_enabled).
 //      Do not change them; collection is switched on only by setEnabled(true) below.
 //      These are the key names the React Native Firebase Gradle plugin reads. After prebuild,

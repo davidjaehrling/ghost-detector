@@ -1,3 +1,4 @@
+import { LIVE_UNITS, releaseMode } from './adUnits';
 import type { AdKind, AdsBackend, ConsentInfo, FullscreenAd, FullscreenKind } from './core';
 
 // Native backend: the only file that touches react-native-google-mobile-ads. The module is required
@@ -47,6 +48,8 @@ export const backend: AdsBackend = {
     await MobileAds().initialize();
   },
   unitId(kind: AdKind) {
+    // Release mode never touches TestIds; outside it the SDK test units are used.
+    if (releaseMode()) return LIVE_UNITS[kind];
     const { TestIds } = sdk();
     return kind === 'rewarded' ? TestIds.REWARDED : kind === 'interstitial' ? TestIds.INTERSTITIAL : TestIds.ADAPTIVE_BANNER;
   },

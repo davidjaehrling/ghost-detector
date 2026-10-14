@@ -37,14 +37,14 @@ Play submission later: put the service account key at `./play-service-account.js
 
 ## Production gate against test ad IDs (P5-01)
 
-`scripts/check-ad-ids.mjs` fails when Google's sample publisher ID `3940256099942544` appears in `app.json`, `eas.json` or `src/` and release mode is on (`EXPO_PUBLIC_RELEASE=1` or `--release`). Outside release mode it only reports, so `pnpm smoke` stays green on test IDs.
+`scripts/check-ad-ids.mjs` fails in release mode (`EXPO_PUBLIC_RELEASE=1` or `--release`) for two reasons: Google's sample publisher ID `3940256099942544` appears in `app.json`, `eas.json` or `src/`, or a `REPLACE_WITH_LIVE_*` placeholder from `src/ads/adUnits.ts` remains in any of them. In release mode `unitId()` returns the constants in `src/ads/adUnits.ts` and never the SDK `TestIds`; outside it, `TestIds` are used. Outside release mode the script only reports, so `pnpm smoke` stays green on test IDs.
 
 Wiring:
 - `eas.json` `build.production.env` sets `EXPO_PUBLIC_RELEASE=1`. The `development`, `preview` and `e2e-test` profiles do not set it and keep test IDs.
 - `package.json` has an `eas-build-pre-install` script (`node scripts/check-ad-ids.mjs`). EAS Build runs it on the build worker before dependencies install, with the profile env, so a production build with the sample ID fails before compiling.
 - Local check: `EXPO_PUBLIC_RELEASE=1 node scripts/check-ad-ids.mjs` (exit 1 while the sample ID is in `app.json`).
 
-Limit: the gate matches the literal ID only. The three unit IDs in `src/ads/backend.ts` come from `TestIds` and contain no literal, so replacing them is a manual launch step (below).
+Replacing the three placeholders in `src/ads/adUnits.ts` and the app ID in `app.json` is a manual launch step (below); the gate refuses a production build until both are done.
 
 ### Owner launch steps (before the first production build)
 1. `app.json`: replace `androidAppId` (`ca-app-pub-3940256099942544~3347511713`) with the real AdMob app ID.
