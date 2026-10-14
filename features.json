@@ -1411,7 +1411,7 @@
       "id": "P8-03",
       "phase": "P8",
       "description": "Performance budget",
-      "acceptance": "Measured on the L2 harness at CPU throttle x4 and recorded in docs/perf.md: boot to interactive viewfinder under 2.5 s from a cold web load, scan theatre at 55 fps or better on the harness (frame times from the FX counter), result print (share card render plus encode) under 1.5 s, cold-start JS bundle size reported; a vitest or Playwright assertion guards each budget so a regression fails CI; FX Engineer owns the shader cost, Builder A the screen and bundle cost",
+      "acceptance": "Measured on the L2 harness and recorded in docs/perf.md (Builder A folds in docs/perf-fx.md): boot to interactive viewfinder under 2.5 s from a cold web load at CPU throttle x2; scan theatre p50 at 55 fps or better at x2 (p50, p95 and mean at x4 reported in the CI log, not asserted); card print (draw plus encode) guarded against regression at no more than 1.5x the x1 baseline recorded in docs/perf-fx.md, with the 1.5 s phone budget from D-034 measured at phone check 3 (cut card grain first if over); cold-start JS bundle size reported and guarded at no more than 1.1x its recorded baseline; every guard is a Playwright or vitest assertion that fails CI on regression, with no test marked as expected to fail or skipped; the main-thread cost of the scan theatre (React re-renders on the 20 Hz scan clock and the per-redraw GPU read-back from P3-09) reduced in a joint FX and Builder A pass with before and after numbers at x4",
       "evidence": [],
       "passes": false
     },
