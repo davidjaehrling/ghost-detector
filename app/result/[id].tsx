@@ -7,7 +7,7 @@ import { track } from '../../src/analytics';
 import { onBackToViewfinder, onFreshResult } from '../../src/ui/interstitial';
 import type { CardFormat } from '../../src/fx/share/constants';
 import type { Tier } from '../../src/engine';
-import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
+import { Composite, autoGain, regionFromImage, type RegionStats } from '../../src/fx/compositor';
 import { PhosphorText, SnapshotCanvas, useVT323 } from '../../src/fx/glass';
 import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
 import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
@@ -25,7 +25,7 @@ import { DEMO_CASES, SCARE_CASE, demoRecord, isDemoName } from '../../src/ui/res
 import { bestSoFar, noPrior } from '../../src/ui/result/best';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
-import { PINNED_TIERS, screenStampLines, thermalDelta } from '../../src/ui/result/stamp';
+import { PINNED_TIERS, gainLabel, screenStampLines, thermalDelta } from '../../src/ui/result/stamp';
 import { stripScrimAlpha } from '../../src/ui/result/stripScrim';
 import { deepPress, deepTier } from '../../src/ui/result/deepKey';
 import { Readout } from '../../src/ui/Readout';
@@ -654,6 +654,9 @@ function DecodeBar({ pct }: { pct: number }) {
   );
 }
 
+// QUIET draws no figure; the composite still wants a placement, so it gets an empty one (disabled hides it).
+const QUIET_PLACEMENT: Placement = { x: 0, y: 0, w: 1, h: 1, matte: 1, opacity: 0.08, flipX: false, offsetCopies: [] };
+
 type Layout = { placement: Placement; region: ReturnType<typeof panelRegion>; meanLuma: number; top: number } | null;
 
 // DEEP SCAN unlock: the compositor is asked for a larger output through its width and height (it
@@ -721,8 +724,8 @@ function PhotoPanel({
   const reduceMotion = useReduceMotion();
   const skia = useSkiaReady();
   const [v1Failed, setV1Failed] = useState(false);
-  const v1 = skia && !v1Failed && wantsFigure;
-  const [read, setRead] = useState<{ done: boolean; result: RegionStats | null }>({ done: !wantsFigure, result: null });
+  const v1 = skia && !v1Failed;
+  const [read, setRead] = useState<{ done: boolean; result: RegionStats | null }>({ done: false, result: null });
   const [loaded, setLoaded] = useState(false);
   const image = useImage(v1 ? photoUri : null);
   const photoReady = v1 ? image !== null : loaded;
@@ -735,7 +738,7 @@ function PhotoPanel({
   }, [photoReady, stampReady, onPhotoLoaded]);
 
   useEffect(() => {
-    if (!wantsFigure) return;
+    // Read for every tier: the QUIET photo has no figure but its luma grid drives the auto-gain (A-45).
     let alive = true;
     regionFromImage(photoUri)
       .catch(() => null)
@@ -743,7 +746,7 @@ function PhotoPanel({
     return () => {
       alive = false;
     };
-  }, [photoUri, wantsFigure]);
+  }, [photoUri]);
 
   const W = size.w;
   const imgH = Math.round(W * PHOTO_ASPECT);
@@ -801,11 +804,16 @@ function PhotoPanel({
   const top = layout ? layout.top : panelTop(height, imgH, null);
   const showGhost = layout !== null && ready && settled;
   const legacyFigure = layout !== null && ready && !v1;
+  // QUIET has no figure: the composite runs disabled so the auto-gain and tint still show (A-45), and the
+  // strip names the gain the probe front end applied.
+  const quietPanel = !wantsFigure && read.done;
+  const gainDb = v1 && quietPanel ? autoGain(read.result?.grid).db : 0;
+  const lines = useMemo<[string, string]>(() => (gainDb > 0 ? [`${stamp[0]}  ${gainLabel(gainDb)}`, stamp[1]] : stamp), [stamp, gainDb]);
 
   return (
     <View style={[s.photo, { height }]} testID={read.done ? 'result-photo' : undefined}>
       {v1 ? (
-        layout && image && ready ? (
+        (layout || quietPanel) && image && ready ? (
           <V1Boundary onFail={() => setV1Failed(true)}>
             {/* Before the needle settles the photo shows alone (disabled draws photo and grain); the
                 figure's fade starts when the composite is mounted again at settle. */}
@@ -817,12 +825,12 @@ function PhotoPanel({
                   width={W * k}
                   height={height * k}
                   photoRect={{ x: 0, y: top * k, width: W * k, height: imgH * k }}
-                  region={layout.region}
-                  meanLuma={layout.meanLuma}
+                  region={layout?.region}
+                  meanLuma={layout ? layout.meanLuma : (read.result?.meanLuma ?? DEFAULT_MEAN_LUMA)}
                   p80Luma={read.result?.p80Luma}
                   p90Luma={read.result?.p90Luma}
                   grid={read.result?.grid}
-                  placement={k === 1 ? layout.placement : scalePlacement(layout.placement, k)}
+                  placement={!layout ? QUIET_PLACEMENT : k === 1 ? layout.placement : scalePlacement(layout.placement, k)}
                   tier={outcome.tier}
                   seed={placementSeed}
                   static={isStatic}
@@ -856,7 +864,7 @@ function PhotoPanel({
           <ThermalView field={field} width={W} height={height} top={top} static={isStatic || reduceMotion} />
         </View>
       ) : null}
-      {therm || !ready ? null : <DataStrip lines={stamp} width={W} height={height} font={stampFont} />}
+      {therm || !ready ? null : <DataStrip lines={lines} width={W} height={height} font={stampFont} />}
     </View>
   );
 }

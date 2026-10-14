@@ -33,3 +33,8 @@ export function screenStampLines(d: Parameters<typeof stampText>[0], tier: Tier)
   const key = PINNED_TIERS.includes(tier) ? 'result.strip.min' : 'result.strip.avg';
   return [t('result.strip.a', { id: d.id, spi: d.spi, time: clock(d.createdAt) }), `${t(key, { dt })}  ${t('result.strip.mark')}`];
 }
+
+/** The auto-gain reading on the data strip (A-45): an instrument unit, the same in every locale. */
+export function gainLabel(db: number): string {
+  return `GAIN +${db} dB`;
+}
