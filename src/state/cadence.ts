@@ -84,6 +84,11 @@ export function createCadenceStore(opts: { storage?: KeyValueStore | null; now?:
     snapshot: (): CadenceSnapshot => ({ ...load() }),
     /** 0-based index of the session in progress, -1 before the first `beginSession`. */
     sessionIndex: () => current,
+    /** Test hook: forget everything held in memory (stored data is read again on the next call). */
+    reset() {
+      snap = null;
+      current = -1;
+    },
     /** Test and harness hook: the next session gets index `n`. */
     setSessions(n: number) {
       load().sessions = Math.max(0, Math.floor(n));

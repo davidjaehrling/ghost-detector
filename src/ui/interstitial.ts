@@ -1,6 +1,3 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
-import { AppState } from 'react-native';
 import { type Decision } from '../engine';
 import { ensureConsent, interstitial } from '../ads';
 import { track } from '../analytics';
@@ -32,14 +29,15 @@ function act(decision: Decision): void {
 }
 
 /** Cold start, once per process: appLaunch, the first session, and the foreground clock. */
-export function startCadence(): void {
+export type AppStateLike = { addEventListener(type: 'change', listener: (state: string) => void): unknown };
+
+export function startCadence(appState: AppStateLike, search = typeof window !== 'undefined' ? (window.location?.search ?? '') : ''): void {
   if (started) return;
   started = true;
-  const search = typeof window !== 'undefined' ? (window.location?.search ?? '') : '';
   const forced = sessionParam(search);
   if (forced !== null) cadenceStore.setSessions(forced);
   act(cadenceStore.coldStart());
-  AppState.addEventListener('change', (state) => {
+  appState.addEventListener('change', (state) => {
     if (state === 'background') {
       leftAt ??= cadenceStore.now();
     } else if (state === 'active') {
@@ -88,28 +86,16 @@ async function fire(): Promise<void> {
 }
 
 /**
- * The viewfinder calls this with `clear` true when its camera permission is settled (not being
- * asked). The gate is open only while the screen is focused, mounted and clear.
+ * The viewfinder opens the gate once it has rendered, is focused and its camera permission is
+ * settled, and closes it on a blur or while a permission prompt is up (`useInterstitialGate`).
  */
-export function useInterstitialGate(clear: boolean): void {
-  useFocusEffect(
-    useCallback(() => {
-      if (!clear) return;
-      // Two frames after the commit, so the viewfinder has been drawn at least once.
-      const raf = requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          gateOpen = true;
-          arm();
-        }),
-      );
-      return () => {
-        cancelAnimationFrame(raf);
-        gateOpen = false;
-        if (timer) clearTimeout(timer);
-        timer = null;
-      };
-    }, [clear]),
-  );
+export function setGate(open: boolean): void {
+  gateOpen = open;
+  if (open) arm();
+  else {
+    if (timer) clearTimeout(timer);
+    timer = null;
+  }
 }
 
 /** Test hook. */

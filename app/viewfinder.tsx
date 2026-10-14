@@ -18,7 +18,7 @@ import { useReduceMotion } from '../src/ui/useReduceMotion';
 import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
-import { useInterstitialGate } from '../src/ui/interstitial';
+import { useInterstitialGate } from '../src/ui/useInterstitialGate';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
 import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier } from '../src/ui/viewfinder/flux';
 import { useFlux } from '../src/ui/viewfinder/useFlux';

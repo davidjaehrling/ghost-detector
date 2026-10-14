@@ -12,7 +12,7 @@ import type { AdKind, AdsBackend, ConsentInfo, FullscreenAd, FullscreenKind } fr
 //   ?adReady=0             the rewarded ad never loads (DEEP SCAN OFFLINE)
 //   ?reward=1|0            whether the fake rewarded show earns the reward (default 1)
 
-export type AdsLogEntry = { t: number; call: string; args: unknown[] };
+export type AdsLogEntry = { t: number; /** epoch ms */ at: number; call: string; args: unknown[] };
 
 declare global {
   interface Window {
@@ -24,7 +24,7 @@ const t0 = Date.now();
 
 function record(call: string, args: unknown[] = []): void {
   if (typeof window === 'undefined') return;
-  (window.__adsLog ??= []).push({ t: Date.now() - t0, call, args });
+  (window.__adsLog ??= []).push({ t: Date.now() - t0, at: Date.now(), call, args });
 }
 
 // Read once, at the first call, from the URL the page was opened with: the router drops the query
