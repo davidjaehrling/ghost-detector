@@ -205,13 +205,31 @@ function text(canvas: SkCanvas, s: string, x: number, y: number, face: SkTypefac
 
 const width = (s: string, face: SkTypeface, size: number) => Skia.Font(face, size).getTextWidth(s);
 
+/** Boxes the card paints opaque over the housing (whole pixels): the photo surround and the reading box's straight-edged core. */
+export function housingCovered(L: CardLayout): Box[] {
+  const P = L.photo;
+  const b = L.reading;
+  const r = Math.ceil(6 * (L.width / 390)); // the reading box's corner radius (drawReading), rounded up
+  return [
+    { x: P.x - 4, y: P.y - 4, w: P.w + 8, h: P.h + 8 },
+    { x: b.x + r, y: b.y, w: b.w - 2 * r, h: b.h },
+    { x: b.x, y: b.y + r, w: b.w, h: b.h - 2 * r },
+  ];
+}
+
 function drawHousing(canvas: SkCanvas, L: CardLayout, seed: number) {
   const fx = effect('housing', HOUSING_SKSL);
   const base = rgb(color.n3).map((v) => v / 255);
   const noise = Skia.Shader.MakeFractalNoise(0.35, 0.35, 3, seed % 997, 0, 0);
   const p = Skia.Paint();
   p.setShader(fx.makeShaderWithChildren(processUniforms(fx, { size: [L.width, L.height], base, amp: HOUSING_NOISE, fall: HOUSING_FALL }), [noise]));
+  // P8-03: the texture is not shaded where opaque paint covers it later: the photo with its 4 px
+  // surround, and the reading box inside its corner radius. Same bytes, about 60% fewer pixels
+  // through the noise shader on the story card.
+  canvas.save();
+  for (const r of housingCovered(L)) canvas.clipRect(Skia.XYWHRect(r.x, r.y, r.w, r.h), ClipOp.Difference, false);
   canvas.drawRect(Skia.XYWHRect(0, 0, L.width, L.height), p);
+  canvas.restore();
   // Cast edge: 1 px n4 highlight on top, 2 px n1 shadow at the bottom (Bible section 2).
   canvas.drawRect(Skia.XYWHRect(0, 0, L.width, 2), paintOf(color.n4));
   canvas.drawRect(Skia.XYWHRect(0, L.height - 4, L.width, 4), paintOf(color.n1));

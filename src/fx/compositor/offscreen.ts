@@ -3,6 +3,7 @@ import { FilterMode, MipmapMode, processUniforms, Skia, TileMode, type SkCanvas,
 import type { Tier } from '../../engine';
 import { renderApparition, VARIANT_COUNT } from '../apparition';
 import type { Placement, RegionInput } from '../ghostV0/placement';
+import { activeRect, bandRect, ghostLayerRect } from './activeRect';
 import { COMPOSITE_SKSL } from './blend';
 import { buildGhostLayer } from './ghostLayer';
 import type { LumaGrid } from './regionStats';
@@ -36,11 +37,28 @@ export interface OffscreenCompositeInput {
   grainFreq?: number;
 }
 
+/**
+ * COMPOSITE_SKSL's return where the ghost and the band leave the photo alone and the grain is held
+ * back: the same photo sample through the same clamp and alpha, so the bytes match (P8-03).
+ */
+export const PHOTO_SKSL = `
+uniform shader photo;
+half4 main(float2 xy) {
+  half3 bg = photo.eval(xy).rgb;
+  return half4(clamp(bg, 0.0, 1.0), 1.0);
+}`;
+
 let effect: SkRuntimeEffect | null = null;
 function compositeEffect(): SkRuntimeEffect {
   effect ??= Skia.RuntimeEffect.Make(COMPOSITE_SKSL);
   if (!effect) throw new Error('compositor: shader failed to compile');
   return effect;
+}
+let photoFx: SkRuntimeEffect | null = null;
+function photoEffect(): SkRuntimeEffect {
+  photoFx ??= Skia.RuntimeEffect.Make(PHOTO_SKSL);
+  if (!photoFx) throw new Error('compositor: photo shader failed to compile');
+  return photoFx;
 }
 
 /** An image as a shader drawn into `rect` (fit fill), as the declarative ImageShader does it. */
@@ -58,6 +76,7 @@ export function drawComposite(canvas: SkCanvas, i: OffscreenCompositeInput): Com
   const setup = compositeSetup({ photoRect: rect, region: i.region, meanLuma: i.meanLuma, p80Luma: i.p80Luma, p90Luma: i.p90Luma, grid: i.grid, placement: i.placement, tier: i.tier, seed });
   const variant = i.variant ?? (seed >>> 0) % VARIANT_COUNT;
   const figure = i.disabled ? null : renderApparition({ variant, seed: seed >>> 0, ...figureSize(setup.placement, 1) });
+  const reach = figure ? ghostLayerRect(setup.placement, setup.tier, seed >>> 0, setup.blur) : null;
   const layer = figure
     ? buildGhostLayer({ figure, padded: true, placement: setup.placement, width, height, scale: 1, tier: setup.tier, seed: seed >>> 0, blur: setup.blur })
     : null;
@@ -75,6 +94,16 @@ export function drawComposite(canvas: SkCanvas, i: OffscreenCompositeInput): Com
   ];
   const paint = Skia.Paint();
   paint.setShader(fx.makeShaderWithChildren(processUniforms(fx, u.values), children));
-  canvas.drawRect(Skia.XYWHRect(0, 0, width, height), paint);
+  // With the grain held back, only the ghost's and the band's rectangle needs the full shader; the
+  // rest is the photo sample (see activeRect.ts). With grain every pixel takes the full shader.
+  if (u.values.grain > 0) {
+    canvas.drawRect(Skia.XYWHRect(0, 0, width, height), paint);
+    return setup;
+  }
+  const plain = Skia.Paint();
+  plain.setShader(photoEffect().makeShaderWithChildren([], [children[0]!]));
+  canvas.drawRect(Skia.XYWHRect(0, 0, width, height), plain);
+  const active = activeRect([layer ? reach : null, bandRect(setup.ref.band)], width, height);
+  if (active) canvas.drawRect(Skia.XYWHRect(active.x0, active.y0, active.x1 - active.x0, active.y1 - active.y0), paint);
   return setup;
 }
