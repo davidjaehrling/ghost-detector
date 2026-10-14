@@ -322,7 +322,7 @@ function Viewfinder({
                           the text box, so the row layout is the same either way. */}
                       {tg === tag ? <View style={s.tagBlock} testID="tag-block" /> : null}
                       <Text style={[s.tag, { letterSpacing: tagTracking(windowW) }, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
-                        {tagLegend(tg, windowW)}
+                        {tagLegend(tg)}
                       </Text>
                     </View>
                   </Pressable>
