@@ -129,7 +129,7 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 | `viewfinder.hud.log` | LOG (3) | REG (3) |
 | `viewfinder.hud.capture` | CAPTURE (7) | CAPTURAR (8) |
 | `result.photoKey` | PHOTO (5) | FOTO (4) |
-| `result.back` | NEW SCAN (8) | NUEVO SCAN (10, two lines) |
+| `result.back` | NEW SCAN (8) | ESCANEAR (8) |
 | `share.key` | SHARE (5) | ENVIAR (6) |
 | `onboarding.unsure` | NOT SURE (8) | NO SÉ (5) |
 | `onboarding.skip` | SKIP (4) | OMITIR (6) |
@@ -218,3 +218,7 @@ P7-04: three native reviewers (DE technical-manual editor, ES editor from Spain,
 ### Layout watch
 
 Over the +25% allowance for status lines after review: ES `scan.phase.4` and PT `scan.phase.4` (26 characters against 18). Both were already over (24); the gerund and `A` plus infinitive carry the register the reviewers asked for. DE `legal.privacy` is `DATENSCHUTZERKLÄRUNG` (21 against 14) on a Legal row, not a key cap. Check all three in the L2 screenshots.
+
+## Review round 2
+
+Errors only. DE `engine.profile.behaviour.14`, `deep.evp.10` (`mach es aus`) and `engine.profile.attachment.00` corrected; ES `lore.outdoors.1` now reads `por encima de`; PT `history.relayLabelOn` and `history.relayLabelOff` end `Abrir Definições`. The ES table row for `result.back` now lists `ESCANEAR` (8), as in the file.

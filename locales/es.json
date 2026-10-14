@@ -172,7 +172,7 @@
   "lore.hallway.0": "Los pasillos canalizan el aire frío.",
   "lore.hallway.1": "Los marcos de puerta marcan un 8% sobre la línea base.",
   "lore.outdoors.0": "En terreno abierto las lecturas son bajas.",
-  "lore.outdoors.1": "Registrar todo campo sobre 650 mG.",
+  "lore.outdoors.1": "Registrar todo campo por encima de 650 mG.",
   "result.best.prefix": "MEJOR HASTA HOY:",
   "result.best.none": "SIN CASOS PREVIOS",
   "boot.window.open": "VENTANA 03:00 ABIERTA",
