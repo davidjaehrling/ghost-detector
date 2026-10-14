@@ -7,6 +7,24 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const wordRe = /\b(delv\w*|tapestr\w*|pivotal\w*|crucial\w*|intricat\w*|testament\w*|foster\w*|landscape\w*|underscor\w*)\b/i;
+// Claim words (D-028, D-032): user-facing strings must not say a reading is verified, confirmed,
+// accurate, real or detected. Checked only inside quoted strings of source files; comments, docs and
+// test files are not user-facing. A single lowercase word (an identifier-like literal) is skipped.
+const claimRe = /\b(verified|confirmed|accurate|real|detected)\b/i;
+const CODE_FILE = /\.(tsx?|jsx?|mjs|json)$/;
+const TEST_FILE = /(__tests__|\.test\.|\.spec\.)/;
+const literalRe = /'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g;
+function claimInStrings(line) {
+  const t = line.trim();
+  if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')) return null;
+  for (const m of line.matchAll(literalRe)) {
+    const text = m[1] ?? m[2] ?? m[3] ?? '';
+    const hit = text.match(claimRe);
+    if (!hit) continue;
+    if (/\s/.test(text) || text === text.toUpperCase()) return hit[1];
+  }
+  return null;
+}
 const framingRe = /\bnot\s+(?:just|only|merely)?\s*\w+(?:\s+\w+){0,3},?\s+but\s+(?:rather\s+)?\w+/i;
 const SKIP_DOT = new Set(['.git', '.expo', '.github', '.claude']);
 const EM_DASH = '—';
@@ -36,6 +54,13 @@ for (const target of targets) {
       if (m) {
         console.error(`${file}:${i + 1}: banned word "${m[1]}"`);
         hits++;
+      }
+      if (CODE_FILE.test(file) && !TEST_FILE.test(file)) {
+        const claim = claimInStrings(line);
+        if (claim) {
+          console.error(`${file}:${i + 1}: claim word "${claim}"`);
+          hits++;
+        }
       }
       if (framingRe.test(line)) {
         console.error(`${file}:${i + 1}: framing "not X, but Y"`);
