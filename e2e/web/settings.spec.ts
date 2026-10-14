@@ -43,22 +43,29 @@ test('LEGAL opens the list in one tap, both pages open in the system browser', a
   }
 });
 
-for (const [consent, extra, expected, ads, analytics] of [
-  ['required', '', ['requestInfoUpdate', 'loadAndShowConsentFormIfRequired', 'getUserChoices', 'setRequestConfiguration', 'initialize'], true, true],
-  ['required', '&purpose1=0', ['requestInfoUpdate', 'loadAndShowConsentFormIfRequired', 'getUserChoices', 'setRequestConfiguration', 'initialize'], true, false],
-  ['notRequired', '', ['requestInfoUpdate', 'loadAndShowConsentFormIfRequired', 'setRequestConfiguration', 'initialize'], true, true],
-  ['denied', '', ['requestInfoUpdate', 'loadAndShowConsentFormIfRequired'], false, false],
-  ['error', '', ['requestInfoUpdate', 'loadAndShowConsentFormIfRequired'], false, false],
+const FORM = ['requestInfoUpdate', 'loadAndShowConsentFormIfRequired'];
+const CHOICES = [...FORM, 'getUserChoices', 'setRequestConfiguration', 'initialize'];
+// Each row pins the exact ads facade call list and the exact stored consent summary. Analytics runs
+// only for notRequired, or obtained with Purpose 1 granted (src/ads/core.ts), so that column is the
+// stored status plus purpose1 and canRequestAds, not a derived flag.
+for (const [consent, extra, calls_, saved_] of [
+  ['required', '', CHOICES, { status: 'obtained', canRequestAds: true, purpose1: true, privacyOptionsRequired: true }],
+  ['required', '&purpose1=0', CHOICES, { status: 'obtained', canRequestAds: true, purpose1: false, privacyOptionsRequired: true }],
+  ['obtained', '', CHOICES, { status: 'obtained', canRequestAds: true, purpose1: true, privacyOptionsRequired: true }],
+  ['obtained', '&purpose1=1', CHOICES, { status: 'obtained', canRequestAds: true, purpose1: true, privacyOptionsRequired: true }],
+  ['obtained', '&purpose1=0', CHOICES, { status: 'obtained', canRequestAds: true, purpose1: false, privacyOptionsRequired: true }],
+  ['notRequired', '', [...FORM, 'setRequestConfiguration', 'initialize'], { status: 'notRequired', canRequestAds: true, purpose1: false, privacyOptionsRequired: false }],
+  ['denied', '', FORM, { status: 'required', canRequestAds: false, purpose1: false, privacyOptionsRequired: true }],
+  ['error', '', FORM, { status: 'error', canRequestAds: false, purpose1: false, privacyOptionsRequired: false }],
 ] as const) {
   test(`consent=${consent}${extra}: the ads facade call order`, async ({ page }) => {
     await page.goto(`/settings?static=1&consent=${consent}${extra}`);
     await expect(page.getByTestId('screen-settings')).toBeVisible();
     await expect.poll(async () => (await calls(page)).length).toBeGreaterThan(0);
     await page.waitForTimeout(200);
-    expect(await calls(page)).toEqual(expected);
-    const saved = JSON.parse((await page.evaluate(() => localStorage.getItem('fs4.consent.v1'))) ?? '{}') as { canRequestAds: boolean; purpose1: boolean };
-    expect(saved.canRequestAds).toBe(ads);
-    expect(saved.purpose1 && ads).toBe(analytics && consent === 'required');
+    expect(await calls(page)).toEqual(calls_);
+    const saved = JSON.parse((await page.evaluate(() => localStorage.getItem('fs4.consent.v1'))) ?? '{}');
+    expect(saved).toEqual(saved_);
   });
 }
 
