@@ -9,7 +9,7 @@
 import { BlendMode, FilterMode, MipmapMode, Skia, TileMode, type SkCanvas, type SkImage, type SkRuntimeEffect } from '@shopify/react-native-skia';
 
 import type { Tier } from '../../engine';
-import { makeSurface, snapshot } from '../apparition/render';
+import { makeSurface, snapshotFree } from '../apparition/render';
 import { imageRectFor } from '../apparition/shape';
 import { RAG_CORE, RAG_CYCLES, RAG_DISPLACE, RAG_EDGES, RAG_ERODE, RAG_STRETCH } from '../apparition/metrics';
 import { stackedAlpha, type Placement } from '../ghostV0/placement';
@@ -129,7 +129,8 @@ export function buildGhostLayer({ figure, padded = true, placement, width, heigh
   else drawCopies(canvas);
   canvas.restore(); // blur layer
   canvas.restore(); // scale
-  return snapshot(surface);
+  ragged?.dispose();
+  return snapshotFree(surface);
 }
 
 /** The pop's smeared copies through POP_RAG_SKSL, device pixels. `imgW` is the figure image width (px). */
@@ -144,7 +145,7 @@ function popDissolve(drawCopies: (cv: SkCanvas) => void, W: number, H: number, s
   ca.scale(scale, scale);
   drawCopies(ca);
   ca.restore();
-  const smeared = snapshot(a);
+  const smeared = snapshotFree(a);
   const s = (seed % 9973) * 23 + 5;
   const nDisp = Skia.Shader.MakeFractalNoise(RAG_CYCLES / imgW, RAG_CYCLES / imgW, 2, s, 0, 0);
   const nRag = Skia.Shader.MakeFractalNoise(RAG_CYCLES / imgW, (RAG_CYCLES * RAG_STRETCH) / imgW, 2, s + 1, 0, 0);
@@ -157,5 +158,7 @@ function popDissolve(drawCopies: (cv: SkCanvas) => void, W: number, H: number, s
   const fill = Skia.Paint();
   fill.setShader(shader);
   cb.drawRect(Skia.XYWHRect(0, 0, W, H), fill);
-  return snapshot(b);
+  const out = snapshotFree(b);
+  smeared.dispose();
+  return out;
 }

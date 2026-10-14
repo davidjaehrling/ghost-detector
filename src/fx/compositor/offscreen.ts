@@ -5,6 +5,7 @@ import { renderApparition, VARIANT_COUNT } from '../apparition';
 import type { Placement, RegionInput } from '../ghostV0/placement';
 import { activeRect, bandRect, ghostLayerRect } from './activeRect';
 import { COMPOSITE_SKSL } from './blend';
+import { TINT_SKSL_FN } from '../glass/feed';
 import { buildGhostLayer } from './ghostLayer';
 import type { LumaGrid } from './regionStats';
 import { compositeSetup, compositeUniforms, coverRect, figureSize, GRAIN_FREQ, gridImage, type CompositeSetup, type PhotoRect } from './setup';
@@ -12,7 +13,7 @@ import { compositeSetup, compositeUniforms, coverRect, figureSize, GRAIN_FREQ, g
 // The compositor drawn straight onto a canvas, with no React tree: the same set-up, ghost layer,
 // shader and uniforms as <Composite> in its final state (fade 1, no pop). The share card uses it;
 // it always works in layout pixels at scale 1 (the caller picks the resolution), so the output
-// does not depend on the device's pixel ratio.
+// does not depend on the device's pixel ratio. The canvas must be a CPU raster (Skia.Surface.Make).
 
 export interface OffscreenCompositeInput {
   photo: SkImage;
@@ -35,6 +36,8 @@ export interface OffscreenCompositeInput {
   grain?: number;
   /** Grain FractalNoise frequency per pixel. Default GRAIN_FREQ (0.9). */
   grainFreq?: number;
+  /** The phosphor tint (A-08), default true; false draws the photo's own colour (tests). */
+  tint?: boolean;
 }
 
 /**
@@ -43,9 +46,15 @@ export interface OffscreenCompositeInput {
  */
 export const PHOTO_SKSL = `
 uniform shader photo;
+uniform float gain;
+uniform float tintMix;
+uniform float tintLift;
+uniform float tintKnee;
+${TINT_SKSL_FN}
 half4 main(float2 xy) {
-  half3 bg = photo.eval(xy).rgb;
-  return half4(clamp(bg, 0.0, 1.0), 1.0);
+  half3 c = min(photo.eval(xy).rgb * half(gain), half3(1.0));
+  if (tintMix > 0.0) c = feedTint(c, tintMix, tintLift, tintKnee);
+  return half4(clamp(c, 0.0, 1.0), 1.0);
 }`;
 
 let effect: SkRuntimeEffect | null = null;
@@ -83,7 +92,7 @@ export function drawComposite(canvas: SkCanvas, i: OffscreenCompositeInput): Com
   if (!i.disabled && !layer) return null;
   const occl = gridImage(i.grid);
   const fx = compositeEffect();
-  const u = compositeUniforms(setup, { pop: 0, on: layer ? 1 : 0, useGrid: !!i.grid, grain: i.grain });
+  const u = compositeUniforms(setup, { pop: 0, on: layer ? 1 : 0, useGrid: !!i.grid, grain: i.grain, tint: i.tint });
   const freq = i.grainFreq ?? GRAIN_FREQ;
   const children = [
     imageShader(i.photo, rect, TileMode.Clamp),
@@ -96,14 +105,23 @@ export function drawComposite(canvas: SkCanvas, i: OffscreenCompositeInput): Com
   paint.setShader(fx.makeShaderWithChildren(processUniforms(fx, u.values), children));
   // With the grain held back, only the ghost's and the band's rectangle needs the full shader; the
   // rest is the photo sample (see activeRect.ts). With grain every pixel takes the full shader.
+  // The canvas is a CPU raster (the card's), so the draw is done when drawRect returns: the
+  // per-call images are freed here (CanvasKit's wasm heap has no GC).
+  const free = () => {
+    layer?.dispose();
+    occl?.dispose();
+  };
   if (u.values.grain > 0) {
     canvas.drawRect(Skia.XYWHRect(0, 0, width, height), paint);
+    free();
     return setup;
   }
   const plain = Skia.Paint();
-  plain.setShader(photoEffect().makeShaderWithChildren([], [children[0]!]));
+  const pv = u.values;
+  plain.setShader(photoEffect().makeShaderWithChildren(processUniforms(photoEffect(), { gain: pv.gain, tintMix: pv.tintMix, tintLift: pv.tintLift, tintKnee: pv.tintKnee }), [children[0]!]));
   canvas.drawRect(Skia.XYWHRect(0, 0, width, height), plain);
   const active = activeRect([layer ? reach : null, bandRect(setup.ref.band)], width, height);
   if (active) canvas.drawRect(Skia.XYWHRect(active.x0, active.y0, active.x1 - active.x0, active.y1 - active.y0), paint);
+  free();
   return setup;
 }

@@ -122,6 +122,13 @@ export function snapshot(surface: SkSurface): SkImage {
   return Platform.OS === 'web' ? img : (img.makeNonTextureImage() ?? img);
 }
 
+/** `snapshot` for a surface that is not drawn again: the surface is freed (CanvasKit's wasm heap has no GC). */
+export function snapshotFree(surface: SkSurface): SkImage {
+  const img = snapshot(surface);
+  surface.dispose();
+  return img;
+}
+
 /** Polygons (normalised) to one Skia path in pixels; nonzero fill draws their union. */
 export function polysToPath(polys: readonly (readonly Pt[])[], w: number, h: number): SkPath {
   const b = Skia.PathBuilder.Make();

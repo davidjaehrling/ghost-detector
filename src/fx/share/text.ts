@@ -7,13 +7,12 @@ import { clock, thermalDelta } from '../../ui/result/stamp';
 import { NAMEPLATE, STORE_NAME } from './constants';
 
 // Every string the share card draws, built from the scan record and the locale table (pure). The
-// renderer draws these and nothing else (it may break the strip and the footer into lines at ` · `);
-// `cardTexts` lists them so a test can assert the set.
+// renderer draws these and nothing else (it may break the footer into lines at ` · ` or, where a
+// part is still too wide, at its spaces); `cardTexts` lists them so a test can assert the set.
 //
 // Strings come from `share.card.*` in locales/<lang>.json, read in the active locale (or the
-// `locale` override the probe and the tests pass). The case data run is `result.strip.data`, the
-// same key the result screen burns into its photo, so the two strips cannot drift. Tier words,
-// the nameplate, codes and units stay English in every locale (docs/localisation-rules.md 2e).
+// `locale` override the probe and the tests pass). Tier words, the nameplate, codes and units stay
+// English in every locale (docs/localisation-rules.md 2e).
 
 export const TIER_WORD: Record<Tier, string> = { quiet: 'QUIET', trace: 'TRACE', active: 'ACTIVE', strong: 'STRONG', critical: 'CRITICAL' };
 
@@ -36,8 +35,12 @@ export interface CardText {
   /** The locale the strings were read in. */
   locale: Lang;
   nameplate: string;
-  /** Data strip: the case data (`CASE 0041 · SPI 84 · ΔT -6.3 °C · 23:41`) and the mark, one record. */
-  strip: { data: string; mark: string };
+  /**
+   * Data strip, printed like a camera data back (A-90): `lines` are `23:41  2026-10-13` and
+   * `CASE 0041  ΔT -6.3 °C`, the mark is the last line. SPI is in the reading row only. `data` is
+   * the two lines joined (two spaces), for the tests and the accessible label.
+   */
+  strip: { lines: [string, string]; data: string; mark: string };
   /**
    * Reading row: SPI digits and tier word; `line` is the EVP quote after a Deep Scan, else
    * `SIGNATURE [n]% DECODED` (`NO SIGNATURE` on QUIET); `detail` is class and era after a Deep Scan.
@@ -47,6 +50,12 @@ export interface CardText {
   footer: string;
   /** The word in the footer the cap-height and contrast test measures (the footer's own mark word). */
   footerMark: string;
+}
+
+/** Local calendar date of a timestamp, ISO (the data back prints `2026-10-13` in every locale). */
+export function isoDate(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function isDeepScanned(record: Pick<ScanRecord, 'deepScanAt'>): boolean {
@@ -74,7 +83,10 @@ export function cardText(record: ScanRecord, store: string = STORE_NAME, locale?
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const r = readingsFor(record.seed, tier);
-  const data = tr('result.strip.data', { id: record.id, spi: outcome.spi, dt: fmtFixed(thermalDelta(tier, r), 1, lang), time: clock(record.createdAt) });
+  // Codes and units stay English in every locale (docs/localisation-rules.md 2e: `CASE`, `ΔT`, `°C`,
+  // as `result.strip.data` writes them in all four tables); only the decimal mark is localised.
+  const lines: [string, string] = [`${clock(record.createdAt)}  ${isoDate(record.createdAt)}`, `CASE ${record.id}  ΔT ${fmtFixed(thermalDelta(tier, r), 1, lang)} °C`];
+  const data = lines.join('  ');
   const deep = isDeepScanned(record) && tier !== 'quiet';
   // The record's era carries its own label (`Era est. 1880 to 1934`), in the language of the scan;
   // the detail template prints the label itself, so the record's is dropped (this locale's or en's).
@@ -91,7 +103,7 @@ export function cardText(record: ScanRecord, store: string = STORE_NAME, locale?
   return {
     locale: lang,
     nameplate: NAMEPLATE,
-    strip: { data, mark },
+    strip: { lines, data, mark },
     reading: { spi: String(outcome.spi), tier: TIER_WORD[tier], line, detail: deep ? tr(CARD_KEYS.detail, { cls: profile.class, era }) : null },
     footer,
     footerMark: footerMarkOf(footer, mark),
@@ -100,5 +112,5 @@ export function cardText(record: ScanRecord, store: string = STORE_NAME, locale?
 
 /** Every string on the card, in draw order, before line breaks. */
 export function cardTexts(t: CardText): string[] {
-  return [t.nameplate, t.strip.data, t.strip.mark, t.reading.spi, t.reading.tier, t.reading.line, ...(t.reading.detail ? [t.reading.detail] : []), t.footer];
+  return [t.nameplate, ...t.strip.lines, t.strip.mark, t.reading.spi, t.reading.tier, t.reading.line, ...(t.reading.detail ? [t.reading.detail] : []), t.footer];
 }

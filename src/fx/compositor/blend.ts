@@ -1,3 +1,5 @@
+import { feedColor, TINT_SKSL_FN } from '../glass/feed';
+
 /**
  * The compositor's per-pixel rule, in TS (for tests) and SkSL (for the device). Both must match.
  *
@@ -23,6 +25,11 @@
  *    colour (premultiplied grey under the alpha). The clamped lift is scaled by it, so the patches
  *    show however hard the core sits on the limit. Scaling down never breaks steps 2 and 3. The
  *    near-black smudge (D-023) drops it (`densAmt` 0): a smudge has no interior to show.
+ * 3c. Tint (A-08, D-045 ruling 2): the viewfinder's phosphor tint (`feedTint`, glass/feed.ts:
+ *    35% ramp mix, lifted blacks, highlight knee) over the composited pixel, so the result and
+ *    card photos keep the viewfinder's one hue. After the clamp, before the grain.
+ * 0. Auto-gain (A-45): on a near-black scene the photo is multiplied by `gain` (autoGain.ts) before
+ *    everything else; the clamp limit and the occlusion threshold are scaled with it.
  * 4. Grain after compositing: one signed, seeded FractalNoise value added to every channel over
  *    the whole panel. Adding the same value with and without the ghost keeps the order of pixel
  *    values, so the difference image still never goes negative.
@@ -169,6 +176,8 @@ export function compositePixel(
     /** Mass coverage at this pixel (`bandMass`) and its colour. */
     mass?: number;
     massColor?: readonly number[];
+    /** The phosphor tint after the clamp (glass/feed.ts), or none. */
+    tint?: { mix: number; lift: number; knee: number };
   },
 ): RGB {
   const m = o.mass ?? 0;
@@ -176,7 +185,8 @@ export function compositePixel(
   const a = ghostAlpha * (o.strength ?? 1) * occlusion(o.sceneLuma, o.occLo) * (1 - m);
   const k = plusClamped(bg, a, o.limit, (o.peak ?? 1) * (o.strength ?? 1), { gamma: o.gamma, liftCap: o.liftCap });
   const d = Math.min(1, Math.max(0, o.density ?? 1));
-  const c = [bg[0]! + (k[0] - bg[0]!) * d, bg[1]! + (k[1] - bg[1]!) * d, bg[2]! + (k[2] - bg[2]!) * d];
+  const c0: RGB = [bg[0]! + (k[0] - bg[0]!) * d, bg[1]! + (k[1] - bg[1]!) * d, bg[2]! + (k[2] - bg[2]!) * d];
+  const c = o.tint && o.tint.mix > 0 ? feedColor(c0, o.tint.mix, o.tint.lift, o.tint.knee) : c0;
   const g = grainOffset(o.noise, o.grain);
   return [Math.min(1, Math.max(0, c[0] + g)), Math.min(1, Math.max(0, c[1] + g)), Math.min(1, Math.max(0, c[2] + g))];
 }
@@ -216,10 +226,17 @@ uniform float bandTapX;
 uniform float bandTapY;
 uniform float3 bandK;
 uniform float3 bandPh;
+uniform float gain;
+uniform float tintMix;
+uniform float tintLift;
+uniform float tintKnee;
 
 const half3 W = half3(${LUMA.join(', ')});
+${TINT_SKSL_FN}
 
-float L(float2 p) { return dot(photo.eval(p).rgb, W); }
+// The photo through the auto-gain (1 on every scene that is not near-black).
+half3 P(float2 p) { return min(photo.eval(p).rgb * half(gain), half3(1.0)); }
+float L(float2 p) { return dot(P(p), W); }
 
 float softEdge(float x) {
   return (0.6 * sin(x * bandK.x + bandPh.x) + 0.3 * sin(x * bandK.y + bandPh.y) + 0.2 * sin(x * bandK.z + bandPh.z)) / 1.1;
@@ -241,19 +258,19 @@ half3 bandColor(float x) {
   half3 c = half3(0.0);
   for (int k = -3; k <= 3; k++) {
     float fx = x + float(k) * bandTapX;
-    c += photo.eval(float2(fx, bandSampleY)).rgb + photo.eval(float2(fx, bandSampleY + bandTapY)).rgb;
+    c += P(float2(fx, bandSampleY)) + P(float2(fx, bandSampleY + bandTapY));
   }
   return c / 14.0;
 }
 
 half4 main(float2 xy) {
-  half3 bg = photo.eval(xy).rgb;
+  half3 bg = P(xy);
   float m = bandMass(xy);
   if (m > 0.001) bg = mix(bg, bandColor(xy.x), half(bandMix * m));
   float r = occRadius;
   // With the photo's luma grid (blurred, bilinear) the cut follows the scene's shapes in coherent
   // patches; without it, 9 taps of the photo.
-  float scene = useGrid > 0.5 ? float(occl.eval(xy).r) : L(xy) * 0.2
+  float scene = useGrid > 0.5 ? min(1.0, float(occl.eval(xy).r) * gain) : L(xy) * 0.2
     + (L(xy + float2(r, 0)) + L(xy - float2(r, 0)) + L(xy + float2(0, r)) + L(xy - float2(0, r))) * 0.12
     + (L(xy + float2(r, r) * 1.5) + L(xy - float2(r, r) * 1.5) + L(xy + float2(r, -r) * 1.5) + L(xy - float2(r, -r) * 1.5)) * 0.08;
   float vis = (1.0 - smoothstep(occLo, occLo + occRamp, scene)) * (1.0 - m);
@@ -268,6 +285,7 @@ half4 main(float2 xy) {
   float target = min(allowed, max(pk, a)) * pow(t, gammaK);
   float k = (l > 1e-6 && allowed > 0.0) ? min(1.0, target / l) : 0.0;
   half3 c = bg + lift * k * dens;
+  if (tintMix > 0.0) c = feedTint(c, tintMix, tintLift, tintKnee);
   half4 n = grainNoise.eval(xy);
   float v = n.a > 0.0 ? n.r / n.a : 0.5;
   float g = clamp((v - 0.5) * 4.0, -1.0, 1.0) * grain;

@@ -10,8 +10,9 @@ import { COMPOSITE_SKSL, POP_ALPHA, POP_LIFT, type Band } from './blend';
 import { SnapshotCanvas } from '../glass/snapshotRegistry';
 import { buildGhostLayer } from './ghostLayer';
 import { reference } from './reference';
+import { autoGain } from './autoGain';
 import type { LumaGrid } from './regionStats';
-import { compositeUniforms, coverRect, figureSize, GRAIN_FREQ, gridImage, setupFromReference, type PhotoRect } from './setup';
+import { compositeUniforms, tintFor, coverRect, figureSize, GRAIN_FREQ, gridImage, setupFromReference, type PhotoRect } from './setup';
 
 const MATTES = {
   1: require('../../../assets/ghost/matte-1.png'),
@@ -66,6 +67,11 @@ export interface CompositeProps {
    * smear along the figure's motion. While armed (0) that layer is built, so the pop frame is ready.
    */
   pop?: number | null;
+  /**
+   * The viewfinder's phosphor tint over the composited photo, before the grain (A-08, D-045 ruling
+   * 2). Default true. On web `?tint=0` turns it off (measurement harness).
+   */
+  tint?: boolean;
   testID?: string;
 }
 
@@ -89,8 +95,11 @@ export interface CompositeInfo {
   median: number | null;
   sceneMedian: number | null;
   nearBlack: boolean;
-  /** Grain amplitude after compositing (GRAIN, x NEAR_BLACK_GRAIN on a near-black scene). */
+  /** Grain amplitude after compositing (GRAIN, x NEAR_BLACK_GRAIN on a near-black scene, more on a gained one). */
   grain: number;
+  /** Auto-gain on a near-black scene, dB (A-45; 0 elsewhere), and whether the phosphor tint is on. */
+  gainDb: number;
+  tint: boolean;
   /** Highest effective ghost alpha the layer can reach on this frame (POP_ALPHA on the pop). */
   peakAlpha: number;
   occ: number;
@@ -110,13 +119,13 @@ declare global {
   var __composite: CompositeInfo | undefined;
 }
 
-type WebQuery = { off: boolean; isStatic: boolean; v1: boolean };
+type WebQuery = { off: boolean; isStatic: boolean; v1: boolean; noTint: boolean };
 
 function webQuery(): WebQuery {
-  const none: WebQuery = { off: false, isStatic: false, v1: false };
+  const none: WebQuery = { off: false, isStatic: false, v1: false, noTint: false };
   if (Platform.OS !== 'web' || typeof window === 'undefined') return none;
   const q = new URLSearchParams(window.location?.search ?? '');
-  return { off: q.get('ghost') === '0', isStatic: q.get('static') === '1', v1: q.get('v') === '1' };
+  return { off: q.get('ghost') === '0', isStatic: q.get('static') === '1', v1: q.get('v') === '1', noTint: q.get('tint') === '0' };
 }
 
 /**
@@ -158,7 +167,10 @@ export function Composite(props: CompositeProps) {
     [meanLuma, p80Luma, p90Luma, region, grid, given, rx, ry, rw, rh, seed],
   );
   // Near-black scene (D-023): the TRACE-style smudge, 0.7 scale at the lowest opacity band.
-  const setup = useMemo(() => setupFromReference(ref, given, tierIn), [ref, given, tierIn]);
+  // Auto-gain on a near-black scene (A-45): from the photo's grid, with or without a figure.
+  const gain = useMemo(() => autoGain(grid), [grid]);
+  const setup = useMemo(() => setupFromReference(ref, given, tierIn, gain, tintFor(grid)), [ref, given, tierIn, gain, grid]);
+  const tint = props.tint !== false && !query.noTint;
   const { nearBlack, placement, tier } = setup;
 
   const scale = Platform.OS === 'web' ? 1 : PixelRatio.get();
@@ -194,8 +206,8 @@ export function Composite(props: CompositeProps) {
   const { grain, peak } = setup;
   const on = off ? 0 : 1;
   const layer = pop > 0 && popGhost ? popGhost : ghost;
-  const base = useMemo(() => compositeUniforms(setup, { pop, on, useGrid: !!props.grid }), [setup, pop, on, props.grid]);
-  const { clampLift, gain } = base;
+  const base = useMemo(() => compositeUniforms(setup, { pop, on, useGrid: !!props.grid, tint }), [setup, pop, on, props.grid, tint]);
+  const { clampLift, gain: popGain } = base;
   const uniforms = useDerivedValue(() => ({ ...base.values, strength: base.values.strength * fade.get() }), [base]);
 
   // Harness: publish what was drawn so scripts/measure-ghost.mjs can check the clamp and the box.
@@ -214,7 +226,9 @@ export function Composite(props: CompositeProps) {
       sceneMedian: ref.sceneMedian ?? null,
       nearBlack,
       grain,
-      peakAlpha: peak * gain,
+      gainDb: setup.gain.db,
+      tint,
+      peakAlpha: peak * popGain,
       occ: ref.occ,
       occRamp: ref.ramp,
       gradient: ref.gradient ?? null,
@@ -225,7 +239,7 @@ export function Composite(props: CompositeProps) {
       tier,
       pop,
     };
-  }, [publish, placement, width, height, meanLuma, props.p80Luma, ref.mean, clampLift, ref.median, ref.sceneMedian, nearBlack, grain, peak, gain, ref.occ, ref.ramp, ref.gradient, band, ref.cut, variantShown, seed, tier, pop]);
+  }, [publish, placement, width, height, meanLuma, props.p80Luma, ref.mean, clampLift, ref.median, ref.sceneMedian, nearBlack, grain, setup.gain.db, tint, peak, popGain, ref.occ, ref.ramp, ref.gradient, band, ref.cut, variantShown, seed, tier, pop]);
 
   if (!effect) throw new Error('Composite: shader failed to compile');
   const ready = !!photo && !!layer && !!occl;
