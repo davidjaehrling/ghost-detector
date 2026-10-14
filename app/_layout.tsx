@@ -5,6 +5,8 @@ import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { ensureConsent } from '../src/ads';
 import { track } from '../src/analytics';
+// Loaded at start so the web stub latches ?notify= before the router drops the query.
+import '../src/state/notifyBackend';
 import { useSkiaReady } from '../src/fx/useSkiaReady';
 import { AppState } from 'react-native';
 import { startCadence } from '../src/ui/interstitial';

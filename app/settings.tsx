@@ -2,6 +2,9 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { showPrivacyOptions } from '../src/ads';
+import { notifyBackend } from '../src/state/notifyBackend';
+import { refreshRelay, relayCopy, relayOn, relayStore, toggleRelay } from '../src/state/relay';
+import { useRelay } from '../src/state/useRelay';
 import { CALM_LINE, setHaptics, setJumpScares, setSound } from '../src/state/settings';
 import { useConsent } from '../src/state/useConsent';
 import { useSettings } from '../src/state/useSettings';
@@ -28,9 +31,14 @@ export default function Settings() {
   const router = useRouter();
   const settings = useSettings();
   const consent = useConsent();
+  const relay = useRelay();
   const [calmNote, setCalmNote] = useState(false);
   // Nothing plays on this screen; a scene left running from the result ends here.
   useEffect(() => sound.stop(), []);
+  // The system permission may have changed in system settings since the last visit.
+  useEffect(() => {
+    void refreshRelay(relayStore, notifyBackend).catch(() => {});
+  }, []);
 
   const rows = [
     { id: 'sound', label: copy.sound, on: settings.sound, toggle: () => setSound(!settings.sound) },
@@ -42,6 +50,9 @@ export default function Settings() {
       // On Calm the switch springs back to OFF and the instrument says why (sound palette section 6).
       toggle: () => setCalmNote(!setJumpScares(!settings.jumpScares) && !settings.jumpScares),
     },
+    // Off by default; on only with the notification permission granted. After a system denial the
+    // row opens the system notification settings instead of asking again.
+    { id: 'relay', label: relayCopy.settingsLabel, on: relayOn(relay), toggle: () => void toggleRelay(relayStore, notifyBackend).catch(() => {}) },
   ];
 
   return (
@@ -92,6 +103,11 @@ export default function Settings() {
         <Text style={s.about} testID="settings-about">
           {copy.about}
         </Text>
+        {relay.system === 'denied' ? (
+          <Text style={s.note} testID="settings-relay-note">
+            {relayCopy.blocked}
+          </Text>
+        ) : null}
         {calmNote ? (
           <Text style={s.note} testID="settings-calm-note">
             {CALM_LINE}

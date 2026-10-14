@@ -3,6 +3,7 @@ import { ensureConsent, interstitial } from '../ads';
 import { track } from '../analytics';
 import { sessionParam } from './interstitialParams';
 import { SESSION_GAP_MS, cadenceStore } from '../state/cadence';
+import type { ReturnNote } from '../state/relay';
 
 // Interstitial runtime (P5-05). The cadence machine (src/engine/adCadence.ts) decides; this file
 // feeds it events and acts on `preload` and `show`. One clock source: cadenceStore.now (wall ms).
@@ -24,6 +25,14 @@ let gateOpen = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
 let leftAt: number | null = null;
+let lastReturn: ReturnNote | null = null;
+
+/** The latest explicit return from a result, once; null when the viewfinder was not reached that way. */
+export function takeReturnNote(): ReturnNote | null {
+  const r = lastReturn;
+  lastReturn = null;
+  return r;
+}
 
 function act(decision: Decision): void {
   if (!decision.preload) return;
@@ -66,6 +75,8 @@ export function onRewardedShown(): void {
 export function onBackToViewfinder(): void {
   const d = cadenceStore.returnToViewfinder();
   act(d);
+  // The relay opt-in reads this decision first: a return that shows an ad is never its moment.
+  lastReturn = { interstitial: d.show };
   if (!d.show) return;
   tapAt = cadenceStore.now();
   arm();
@@ -111,4 +122,5 @@ export function resetInterstitialRuntime(): void {
   timer = null;
   started = false;
   leftAt = null;
+  lastReturn = null;
 }

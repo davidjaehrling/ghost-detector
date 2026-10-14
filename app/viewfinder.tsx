@@ -1,7 +1,10 @@
 import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
-import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { type RefObject, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { cadenceStore } from '../src/state/cadence';
+import { relayDue, relayStore } from '../src/state/relay';
+import { listScans } from '../src/state/scans';
 import { sessionActivity } from '../src/state/session';
 import { hasSeenTag, markTagSeen, LOCATION_TAGS, type LocationTag } from '../src/state/locations';
 import type { KeySlot } from '../src/ui/boot/parts';
@@ -18,7 +21,9 @@ import { useReduceMotion } from '../src/ui/useReduceMotion';
 import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
+import { takeReturnNote } from '../src/ui/interstitial';
 import { gateOpenFor } from '../src/ui/interstitialParams';
+import { RelayModule } from '../src/ui/relay/RelayModule';
 import { useInterstitialGate } from '../src/ui/useInterstitialGate';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
 import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier } from '../src/ui/viewfinder/flux';
@@ -103,6 +108,30 @@ function Viewfinder({
   const source = sourceFor(permission, Platform.OS === 'web');
   // An interstitial may show only once the camera permission is granted (or on web, where there is none).
   useInterstitialGate(gateOpenFor(source));
+
+  // The FIELD LOG RELAY opt-in: on the first eligible return from a result (after the 3rd scan or the
+  // first STRONG), never when that return shows an interstitial (the next eligible return gets it).
+  const [relayOpen, setRelayOpen] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      const note = takeReturnNote();
+      if (!note) return;
+      const scans = listScans();
+      const due = relayDue({
+        state: relayStore.get(),
+        scanCount: scans.length,
+        hasStrong: scans.some((r) => r.outcome.tier === 'strong' || r.outcome.tier === 'critical'),
+        sessionIndex: cadenceStore.sessionIndex(),
+        fromResult: true,
+        interstitial: note.interstitial,
+      });
+      if (due) {
+        relayStore.markOffered();
+        setRelayOpen(true);
+      }
+    }, []),
+  );
+  const closeRelay = useCallback(() => setRelayOpen(false), []);
 
   const reduceMotion = useReduceMotion();
   const active = useActive();
@@ -226,6 +255,8 @@ function Viewfinder({
                 <Text style={s.noticeText}>{copy['permission.denied.next']}</Text>
               </View>
             ) : null}
+
+            {relayOpen ? <RelayModule bottom={bandH + 12} still={isStatic} onDone={closeRelay} /> : null}
 
             <View style={[s.band, { height: bandH }]} testID="hud-band">
               <View style={s.tagRow} accessibilityRole="tablist">
