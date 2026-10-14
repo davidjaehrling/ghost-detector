@@ -165,15 +165,30 @@ test('after a Deep Scan the card line comes back once as updated', async ({ page
   test.setTimeout(60_000);
   const check = watch(page);
   await logLines(page);
+  // The offer line comes 3.0 s after the settle and takes key 4 dark, so under load a press from Playwright
+  // can land after it (a share moment hides the arm line). The page presses the key itself the moment it is
+  // live: one press to arm it (after the 500 ms guard), a second to run the ad, and it notes whether the
+  // armed sentence was on the glass at the second press.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __armSeen?: boolean };
+    const press = new MutationObserver(() => {
+      const key = document.querySelector('[data-testid="deepscan-key"]') as HTMLElement | null;
+      // Live once the legend leaves the engraved n4 (rgb 74, 77, 66).
+      if (key && getComputedStyle(key.querySelector('div') as HTMLElement).color !== 'rgb(74, 77, 66)') {
+        press.disconnect();
+        setTimeout(() => key.click(), 600);
+        setTimeout(() => {
+          w.__armSeen = document.querySelector('[data-testid="deepscan-line"]') !== null;
+          key.click();
+        }, 800);
+      }
+    });
+    press.observe(document, { childList: true, subtree: true, attributes: true });
+  });
   await page.goto(`${STRONG}&share=timer`);
   await expect(page.getByTestId('deepscan-key')).toBeVisible();
-  // The key is live once the rewarded ad has loaded (a warming key ignores a press), and past the 500 ms guard.
-  await expect.poll(() => page.getByTestId('deepscan-key').evaluate((e) => getComputedStyle(e.querySelector('div') as HTMLElement).color)).not.toBe('rgb(74, 77, 66)');
-  await page.waitForTimeout(700);
   // Two presses: arm, then run.
-  await page.getByTestId('deepscan-key').click();
-  await expect(page.getByTestId('deepscan-line')).toBeVisible();
-  await page.getByTestId('deepscan-key').click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __armSeen?: boolean }).__armSeen)).toBe(true);
   await expect(page.getByTestId('deepscan-done')).toBeVisible();
   await expect(page.getByTestId('result-line')).toHaveText('Field card updated. Class and EVP added.', { timeout: 15_000 });
   const log = await readLog(page);
