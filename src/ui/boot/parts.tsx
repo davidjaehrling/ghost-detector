@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
-import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout, legendFit } from '../keyLayout';
+import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyIsLit, keyLayout, legendFit } from '../keyLayout';
 import { stickerShowsSerial } from '../serial';
 import { GRID_TOP } from './layout';
 import { mulberry32 } from './seed';
@@ -268,18 +268,15 @@ export const MINI_STICKER_H = 41;
 
 export const MiniSticker = memo(function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string; pruef: string; bg?: string; style?: object }) {
   useLocale(); // memoised: re-render on a language change only
+  // The paper is as wide as its longest line and never wider than the strip under the window (clear of the
+  // window's corner screw); a line longer than that wraps whole instead of running to the edge (A-53).
+  const { width } = useWindowDimensions();
   const meta = `CAL ${cal} · PRÜF ${pruef}`;
   return (
-    <View style={[st.mini, style]} pointerEvents="none" testID="sticker-mini" accessibilityLabel={`${copy.head1} ${copy.head2} ${meta}`}>
-      <Text style={st.miniHead} numberOfLines={1}>
-        {copy.head1}
-      </Text>
-      <Text style={st.miniHead} numberOfLines={1}>
-        {copy.head2}
-      </Text>
-      <Text style={st.miniMeta} numberOfLines={1}>
-        {meta}
-      </Text>
+    <View style={[st.mini, { maxWidth: width - 100 }, style]} pointerEvents="none" testID="sticker-mini" accessibilityLabel={`${copy.head1} ${copy.head2} ${meta}`}>
+      <Text style={st.miniHead}>{copy.head1}</Text>
+      <Text style={st.miniHead}>{copy.head2}</Text>
+      <Text style={st.miniMeta}>{meta}</Text>
       <View style={[st.miniCut, { borderBottomColor: bg }]} />
       <View style={st.miniFlap} />
     </View>
@@ -299,9 +296,8 @@ export type KeySlot = {
   onPress: () => void;
   /** Engraved but not live: n4 legend, press does nothing. */
   inert?: boolean;
-  /** The one offered action: p5 backlit legend and a 1 px p3 keyline. */
+  /** Lit key (bible section 2): p5 legend with a 1 px p3 rim. `primary` and `backlit` are the same treatment. */
   primary?: boolean;
-  /** Backlit legend: p5 text, no keyline. */
   backlit?: boolean;
 };
 
@@ -350,9 +346,9 @@ export const Key = memo(function Key({ testID, label, legend, onPress, inert = f
       accessibilityLabel={label}
       accessibilityState={{ disabled: inert }}
       onPress={inert ? undefined : onPress}
-      style={({ pressed }) => [st.key, primary && st.keyPrimary, pressed && !inert && st.keyDown]}
+      style={({ pressed }) => [st.key, keyIsLit({ primary, backlit }) && st.keyPrimary, pressed && !inert && st.keyDown]}
     >
-      <Text style={[st.keyLegend, fit, inert && st.keyLegendInert, (primary || backlit) && st.keyLegendPrimary]} numberOfLines={2}>
+      <Text style={[st.keyLegend, fit, inert && st.keyLegendInert, keyIsLit({ primary, backlit }) && st.keyLegendPrimary]} numberOfLines={2}>
         {legend}
       </Text>
     </Pressable>
@@ -470,7 +466,8 @@ const st = StyleSheet.create({
   mini: {
     alignSelf: 'flex-start',
     backgroundColor: color.paper,
-    paddingHorizontal: 7,
+    paddingLeft: 9,
+    paddingRight: 11, // the lifted corner takes 7 px of the last line
     paddingTop: 4,
     paddingBottom: 4,
     transform: [{ rotate: '-1.5deg' }],

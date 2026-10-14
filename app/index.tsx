@@ -9,7 +9,7 @@ import { sessionActivity } from '../src/state/session';
 import { daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
 import { useMinuteClock } from '../src/ui/boot/clock';
 import { FIXED_SEED, getInstallIdentity } from '../src/ui/boot/install';
-import { CALIB_GAP, READOUT_GAP, READOUT_H_CALIB, STICKER_BOTTOM, bootRows } from '../src/ui/boot/layout';
+import { CARD_BOTTOM, READOUT_GAP, STICKER_BOTTOM, bootRows } from '../src/ui/boot/layout';
 import { type BootParams, readBootParams } from '../src/ui/boot/params';
 import {
   GRID_COLS,
@@ -258,7 +258,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
 
             {calibrating ? (
               <View
-                style={[s.calib, { top: snap4(gridBottom + READOUT_GAP + READOUT_H_CALIB + CALIB_GAP) }]}
+                style={s.calib}
                 testID="calibration"
                 onLayout={(e: LayoutChangeEvent) => setCardH(Math.round(e.nativeEvent.layout.height))}
               >
@@ -306,7 +306,7 @@ const s = StyleSheet.create({
   peak: { ...type.rdS, color: color.p3, height: 24 },
   stickerSlot: { position: 'absolute', left: 10, right: 10, bottom: STICKER_BOTTOM },
   countdown: { ...type.rdS, color: color.p3, height: 24 },
-  calib: { position: 'absolute', left: 12, right: 12 },
+  calib: { position: 'absolute', left: 12, right: 12, bottom: CARD_BOTTOM },
   cardHead: { ...type.lbS, color: color.p3, height: 14 },
   rule: { height: 1, backgroundColor: color.p1, marginTop: 4, marginBottom: 8 },
   question: { ...type.rdS, color: color.p4 },

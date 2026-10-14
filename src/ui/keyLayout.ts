@@ -35,3 +35,8 @@ export function legendFit(legend: string): { fontSize: number; letterSpacing: nu
 export const SLOT_GAP_BELOW = 24;
 /** Least distance from the banner slot to any key cap or list row, in dp. */
 export const SLOT_CLEAR_MIN = 32;
+
+/** One lit treatment for every key (bible section 2): p5 legend and a 1 px p3 rim. */
+export function keyIsLit(k: { primary?: boolean; backlit?: boolean }): boolean {
+  return k.primary === true || k.backlit === true;
+}

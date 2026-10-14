@@ -85,6 +85,14 @@ test('boot calibration card renders', async ({ page }, testInfo) => {
   const card = (await page.getByTestId('calibration').boundingBox())!;
   expect(card.y - (countdown.y + countdown.height)).toBeLessThan(60);
   await expect(page.getByTestId('countdown')).toHaveText('03:00 WINDOW IN 4 H 12 MIN');
+  // D-049: the question block is anchored just above the answer keys (its foot is within 16 px of the glass
+  // bottom, which is where the keys' band starts), and the graticule takes the room above the readout.
+  expect(glassBox.y + glassBox.height - (card.y + card.height)).toBeLessThanOrEqual(16);
+  expect(glassBox.y + glassBox.height - (card.y + card.height)).toBeGreaterThanOrEqual(0);
+  const q = (await page.getByTestId('calibration-question').boundingBox())!;
+  expect(yes.y - (q.y + q.height)).toBeLessThan(90);
+  const readoutBox = (await page.getByTestId('readout').boundingBox())!;
+  expect(readoutBox.y - glassBox.y).toBeGreaterThan(24 + 34 * 5);
   await page.evaluate(() => document.fonts.ready);
   await waitWarped(page);
   await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/boot-calib.png` });

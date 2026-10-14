@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { BOOT_ROWS_CALIB, BOOT_ROWS_MAX, BOOT_ROWS_MIN, bootRows } from '../layout';
+import { BOOT_ROWS_MAX, BOOT_ROWS_MIN, CARD_BOTTOM, GRID_TOP, READOUT_GAP, READOUT_H_CALIB, bootRows } from '../layout';
 
 describe('boot graticule rows', () => {
   it('takes whole divisions up to what the blocks below leave', () => {
     // 390 wide: div 34, glass about 675 high, sticker 120 high.
     expect(bootRows({ h: 675, div: 34, calibrating: false, pinnedH: 120 })).toBeGreaterThanOrEqual(8);
-    // The calibration stage shrinks the grid to 4 divisions and moves the question up under the readout.
-    expect(bootRows({ h: 675, div: 34, calibrating: true, pinnedH: 167 })).toBe(BOOT_ROWS_CALIB);
-    expect(BOOT_ROWS_CALIB).toBe(4);
+  });
+
+  it('calibration: the question block is pinned above the keys and the graticule takes the rest above it', () => {
+    const rows = bootRows({ h: 675, div: 34, calibrating: true, pinnedH: 167 });
+    expect(rows).toBeGreaterThan(4);
+    // The grid, the readout and the block fit the glass without overlap, and less than a division is left over.
+    const used = GRID_TOP + rows * 34 + READOUT_GAP + READOUT_H_CALIB + 167 + CARD_BOTTOM;
+    expect(used).toBeLessThanOrEqual(675);
+    expect(675 - used).toBeLessThan(34 + 8);
   });
 
   it('stays within 7 and 14 rows (the sticker stage)', () => {
