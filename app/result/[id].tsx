@@ -864,7 +864,7 @@ function PhotoPanel({
           <ThermalView field={field} width={W} height={height} top={top} static={isStatic || reduceMotion} />
         </View>
       ) : null}
-      {therm || !ready ? null : <DataStrip lines={lines} width={W} height={height} font={stampFont} />}
+      {!ready ? null : <DataStrip lines={lines} width={W} height={height} font={stampFont} />}
     </View>
   );
 }

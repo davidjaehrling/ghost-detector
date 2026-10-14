@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { waitWarped } from './warped';
 
 // ?static=1&demo=quiet|active|critical builds the record from a fixed seed
@@ -145,11 +145,33 @@ test('THERM swaps the photo for the thermal view of the same frame and PHOTO swa
   const dt = /ΔT MIN (-\d+\.\d) °C/.exec(cold)?.[1];
   expect(dt).toBeDefined();
   await expect(page.getByTestId('thermal-view')).toHaveAttribute('aria-label', new RegExp(`ΔT ${dt!} `));
+  await expectStripOnTherm(page);
   await page.getByTestId('key-therm').click();
   await expect(page.getByTestId('thermal-view')).toHaveCount(0);
   await expect(page.getByTestId('key-therm')).toHaveText('THERM');
   check();
 });
+
+// D-034, D-041: while the thermal view is shown the data strip is on screen, its text ends with the mark,
+// and nothing on the thermal view covers it (the SP1 caption sits at the top, the strip at the bottom).
+async function expectStripOnTherm(page: Page, mark = 'SIMULATED') {
+  await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-busy', 'false');
+  const strip = page.getByTestId('result-stamp');
+  expect(((await strip.getAttribute('aria-label')) ?? '').trim().endsWith(mark)).toBe(true);
+  const sb = (await strip.boundingBox())!;
+  const vb = (await page.getByTestId('thermal-view').boundingBox())!;
+  expect(sb.y).toBeGreaterThan(vb.y + vb.height / 2);
+  expect(sb.y + sb.height).toBeLessThanOrEqual(vb.y + vb.height + 1);
+  // The strip is the topmost element at its own centre (the thermal view is not drawn over it).
+  const top = await strip.evaluate((e) => {
+    const r = e.getBoundingClientRect();
+    const hit = document.elementsFromPoint(r.left + 20, r.top + r.height / 2);
+    return hit.findIndex((n) => n === e || e.contains(n)) <= hit.findIndex((n) => n.getAttribute('data-testid') === 'thermal-view');
+  });
+  expect(top).toBe(true);
+  const w = Number(await strip.getAttribute('data-text-w'));
+  expect(w + 8 + 4).toBeLessThanOrEqual(sb.width);
+}
 
 test('result-therm-critical: the thermal view', async ({ page }, testInfo) => {
   test.skip(page.viewportSize()?.width !== 390, 'one golden, at 390');
@@ -166,6 +188,7 @@ test('result-therm-critical: the thermal view', async ({ page }, testInfo) => {
   // probes, more here because the whole 318x303 panel is shader output). The label above
   // guards the content.
   await expect(page.getByTestId('thermal-view')).toHaveAttribute('aria-label', /ΔT -\d+\.\d °C/);
+  await expectStripOnTherm(page);
   await expect(page).toHaveScreenshot('result-therm-critical.png', { maxDiffPixels: 2500 });
   check();
 });
@@ -302,8 +325,11 @@ for (const { demo } of DEMOS) {
     expect(box.y).toBeGreaterThan(photo.y + photo.height / 2);
     // Drawn into a canvas on the photo, under the glass overlay (the overlay comes later in the tree).
     await expect(strip.locator('canvas')).toHaveCount(1);
+    // D-034, D-041: the strip is a disclosure and stays on the THERM view, the mark last.
     await page.getByTestId('key-therm').click();
-    await expect(page.getByTestId('result-stamp')).toHaveCount(0);
+    await expect(page.getByTestId('thermal-view')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('result-stamp')).toHaveCount(1);
+    expect(((await strip.getAttribute('aria-label')) ?? '').trim().endsWith('SIMULATED')).toBe(true);
   });
 }
 

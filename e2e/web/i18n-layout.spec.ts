@@ -278,9 +278,10 @@ for (const { lang, project, suffix } of CASES) {
       done();
     });
 
-    // The armed DEEP SCAN line reflows to two lines in German at 360 and is never clipped (D-045 1).
+    // The armed DEEP SCAN line reflows to two lines in German at 360 and is never clipped (D-045 1);
+    // Spanish and Portuguese have goldens at 390.
     test('result-deepscan-armed', async ({ page }, testInfo) => {
-      test.skip(!(lang === 'de' && suffix === '-360'), 'armed golden in de at 360 only');
+      test.skip(!((lang === 'de' && suffix === '-360') || ((lang === 'es' || lang === 'pt') && suffix === '')), 'armed goldens: de at 360, es and pt at 390');
       const done = watch(page);
       await page.goto(`/result/demo?static=1&fixture=cellar&demo=strong&lang=${lang}`);
       await expect(page.getByTestId('screen-result')).toBeVisible();
@@ -303,6 +304,14 @@ for (const { lang, project, suffix } of CASES) {
       await expect(page.getByTestId('history-tag-cellar')).toBeVisible();
       await check(page, `history-${lang}${suffix}`, testInfo);
       await shot(page, 'history-3tags');
+      // The list scrolls: the last row (0005, SCHLAFZIMMER group in de) is reachable and sits whole inside the list.
+      const list = page.getByTestId('history-list');
+      const row = page.getByTestId('history-row-0005');
+      await row.evaluate((e) => e.scrollIntoView({ block: 'end' }));
+      const lb = (await list.boundingBox())!;
+      const rb = (await row.boundingBox())!;
+      expect(rb.y, 'row 0005 top inside the list').toBeGreaterThanOrEqual(lb.y - 0.5);
+      expect(rb.y + rb.height, 'row 0005 bottom inside the list').toBeLessThanOrEqual(lb.y + lb.height + 0.5);
       done();
     });
 
@@ -364,5 +373,11 @@ for (const { lang, project, mark } of MARKS) {
     expect(m.sw, `scrollWidth ${m.sw} vs clientWidth ${m.cw}`).toBeLessThanOrEqual(m.cw + 1);
     const w = Number(await strip.getAttribute('data-text-w'));
     expect(w + 8 + 4).toBeLessThanOrEqual((await strip.boundingBox())!.width);
+    // The same on the thermal view (D-034, D-041): strip kept, mark last, nothing clipped.
+    await page.getByTestId('key-therm').click();
+    await expect(page.getByTestId('thermal-view')).toBeVisible({ timeout: 15_000 });
+    await expect(strip).toHaveAttribute('aria-busy', 'false');
+    expect(((await strip.getAttribute('aria-label')) ?? '').trim().endsWith(mark)).toBe(true);
+    expect(Number(await strip.getAttribute('data-text-w')) + 8 + 4).toBeLessThanOrEqual((await strip.boundingBox())!.width);
   });
 }
