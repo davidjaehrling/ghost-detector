@@ -52,3 +52,16 @@ Replacing the three placeholders in `src/ads/adUnits.ts` and the app ID in `app.
 3. Analytics: add `google-services.json` and install the Firebase packages, following the comment block at the top of `src/analytics/backend.ts` (steps 1 to 7).
 4. Register test devices in the AdMob console (Settings, Test devices) so internal testers never see live ads.
 5. Run `EXPO_PUBLIC_RELEASE=1 node scripts/check-ad-ids.mjs`; it must exit 0. Then `eas build -p android --profile production`.
+
+## Firebase and FCM
+
+`expo-notifications` links `com.google.firebase:firebase-messaging` and registers `ExpoFirebaseMessagingService`. The app uses local notifications only, and plan section 7 says Firebase starts only after UMP consent. Once `google-services.json` exists, FCM would otherwise auto-initialise at app start and create an installation ID and token before consent.
+
+- Plugin: `plugins/withFcmAutoInitOff.js`, registered last in `app.json` `plugins`. It adds `<meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false"/>` to the main `<application>` (idempotent; an existing `true` is forced to `false`). Unit test: `plugins/__tests__/withFcmAutoInitOff.test.ts`.
+- Not added: `firebase_data_collection_default_enabled=false` (not confirmed that it leaves the later consent-gated Analytics enable working) and removal of `ExpoFirebaseMessagingService` (it comes from the library manifest, so only the Gradle manifest merger can confirm `tools:node="remove"`; the service stays). Analytics flags stay in `firebase.json`.
+- Config check (offline): `npx expo config --type introspect` lists `firebase_messaging_auto_init_enabled` with value `false` under the Android manifest `application` meta-data.
+- Device check on the built APK:
+  ```
+  aapt dump xmltree app-release.apk AndroidManifest.xml | grep -A2 firebase_messaging_auto_init_enabled
+  ```
+  The value must read `0x0` (false). With `adb shell` network capture or a proxy, confirm no request to `fcm.googleapis.com` or `firebaseinstallations.googleapis.com` before the consent dialog is answered.
