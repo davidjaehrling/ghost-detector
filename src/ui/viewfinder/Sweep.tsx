@@ -3,9 +3,10 @@ import { Canvas, Group, Line, Path, Skia, SweepGradient, vec } from '@shopify/re
 import { memo, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
-import { Bloom, PHOSPHOR, withAlpha, type PhosphorStep } from '../../fx/glass';
+import { Bloom, PHOSPHOR, withAlpha } from '../../fx/glass';
+import { sweepBloomStops } from '../../fx/scope';
 import { color } from '../tokens';
-import { SWEEP_STATIC_DEG, sweepPeriodMs, sweepStep } from './sweep';
+import { SWEEP_STATIC_DEG, sweepPeriodMs } from './sweep';
 
 // The live radar sweep over the camera area (D-017): a wedge that turns about the reticle centre,
 // clipped to a scope ring with 12 ticks. The wedge is the leading edge (p4 over a
@@ -20,8 +21,6 @@ import { SWEEP_STATIC_DEG, sweepPeriodMs, sweepStep } from './sweep';
 /** Sector behind the leading edge, degrees (D-017: 25 to 30). */
 export const SWEEP_SECTOR_DEG = 28;
 const REDUCED_SECTOR_DEG = 8;
-/** Peak alpha of the sector, just behind the leading edge. */
-const SECTOR_ALPHA = 0.42;
 /** Gap between the scope ring and the edge of the camera area, px. */
 const RING_INSET = 6;
 const LABEL_HZ = 4;
@@ -74,13 +73,12 @@ export function Sweep({
 
   const r = Math.max(8, Math.floor(Math.min(cx, width - cx, cy, height - cy)) - RING_INSET);
   const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${rot.get()}deg` }] }));
-  const step = sweepStep(mg);
 
   return (
     <View style={[s.fill, { width, height }]} pointerEvents="none" testID="hud-sweep" aria-valuetext={t('a11y.deg', { n: shown })}>
       <Rings cx={cx} cy={cy} r={r} />
       <Animated.View style={[s.abs, { left: cx - r - 2, top: cy - r - 2, width: 2 * r + 4, height: 2 * r + 4 }, spin]}>
-        <Wedge r={r} step={step} sector={reduceMotion ? REDUCED_SECTOR_DEG : SWEEP_SECTOR_DEG} />
+        <Wedge r={r} sector={reduceMotion ? REDUCED_SECTOR_DEG : SWEEP_SECTOR_DEG} />
       </Animated.View>
     </View>
   );
@@ -102,7 +100,7 @@ const Rings = memo(function Rings({ cx, cy, r }: { cx: number; cy: number; r: nu
 });
 
 // The wedge pointing straight up from the centre of a (2r + 4) square canvas, drawn once.
-const Wedge = memo(function Wedge({ r, step, sector }: { r: number; step: PhosphorStep; sector: number }) {
+const Wedge = memo(function Wedge({ r, sector }: { r: number; sector: number }) {
   const c = r + 2;
   const sectorPath = useMemo(() => {
     // Skia angles run clockwise from 3 o'clock; straight up is 270.
@@ -112,15 +110,13 @@ const Wedge = memo(function Wedge({ r, step, sector }: { r: number; step: Phosph
     b.close();
     return b.detach();
   }, [c, r, sector]);
-  // Exponential decay across the sector, tail (0) to leading edge (1): exp(-3 (1 - t)).
-  const stops = [0, 0.25, 0.5, 0.75, 0.9, 1];
-  const tint = PHOSPHOR[step];
-  const colors = stops.map((t) => withAlpha(tint, SECTOR_ALPHA * Math.exp(-3 * (1 - t)) * (t === 0 ? 0 : 1)));
+  // Bloomed head with a fading tail (A-32): the stops come from the scope module.
+  const { positions, colors } = useMemo(() => sweepBloomStops(sector, r), [sector, r]);
   const tip = vec(c, c - r);
   return (
     <Canvas style={{ width: 2 * c, height: 2 * c }} pointerEvents="none">
       <Path path={sectorPath}>
-        <SweepGradient c={vec(c, c)} start={270 - sector} end={270} colors={colors} positions={stops} />
+        <SweepGradient c={vec(c, c)} start={270 - sector} end={270} colors={colors} positions={positions} />
       </Path>
       <Group>
         <Line p1={vec(c, c)} p2={tip} strokeWidth={3} color={withAlpha(color.n0, 0.55)} />
