@@ -1,7 +1,8 @@
 import type { EntityProfile, Intensity, Outcome, OutcomeHistory } from '../engine';
+import { platformStorage } from './storage';
 
-// In-memory scan store. Web mirrors it to localStorage (guarded); native has no
-// persistence yet, so records live for the process. The engine reads history
+// In-memory scan store. Persisted through ./storage (localStorage on web,
+// expo-sqlite kv-store on native); memory-only when neither is available. The engine reads history
 // (docs: src/engine/README.md), so getHistory() derives it from the records.
 
 export type ScanRecord = {
@@ -14,6 +15,8 @@ export type ScanRecord = {
   seed: number;
   outcome: Outcome;
   profile: EntityProfile;
+  /** Set when a rewarded DEEP SCAN finished for this scan (P5-04): full profile, high-resolution apparition, EVP line. */
+  deepScanAt?: number;
 };
 
 export type KeyValueStore = { getItem(k: string): string | null; setItem(k: string, v: string): void };
@@ -21,6 +24,8 @@ export type KeyValueStore = { getItem(k: string): string | null; setItem(k: stri
 export type ScanStore = {
   saveScan(record: Omit<ScanRecord, 'id'> | ScanRecord): string;
   getScan(id: string): ScanRecord | undefined;
+  /** Marks the scan as deep-scanned and persists it. False when the case does not exist. Idempotent. */
+  unlockDeepScan(id: string, atMs?: number): boolean;
   listScans(): ScanRecord[];
   getHistory(nowMs?: number): OutcomeHistory;
   getRecentNames(): string[];
@@ -37,13 +42,9 @@ const DEFAULT_INTENSITY: Intensity = 'standard';
 const INTENSITIES: readonly Intensity[] = ['calm', 'standard', 'brave'];
 const DRY_TIERS = new Set(['quiet', 'trace', 'active']);
 
+/** The storage every store defaults to: localStorage on web, expo-sqlite kv-store on native. */
 export function webStorage(): KeyValueStore | null {
-  try {
-    const ls = (globalThis as { localStorage?: KeyValueStore }).localStorage;
-    return ls ?? null;
-  } catch {
-    return null;
-  }
+  return platformStorage();
 }
 
 export function createScanStore(opts: { storage?: KeyValueStore | null; sessionStartMs?: number } = {}): ScanStore {
@@ -84,6 +85,15 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
       return id;
     },
     getScan: (id) => load().find((r) => r.id === id),
+    unlockDeepScan(id, atMs = Date.now()) {
+      const rec = load().find((r) => r.id === id);
+      if (!rec) return false;
+      if (rec.deepScanAt === undefined) {
+        rec.deepScanAt = atMs;
+        persist();
+      }
+      return true;
+    },
     listScans: () => [...load()],
     getRecentNames: () => load().map((r) => r.profile.name).slice(-20),
     getRecentLines: () => load().slice(-20).flatMap((r) => r.profile.traits ?? []),
@@ -147,6 +157,7 @@ function isRecord(v: unknown): v is ScanRecord {
 const store = createScanStore();
 export const saveScan = store.saveScan;
 export const getScan = store.getScan;
+export const unlockDeepScan = store.unlockDeepScan;
 export const listScans = store.listScans;
 export const getHistory = store.getHistory;
 export const getRecentNames = store.getRecentNames;

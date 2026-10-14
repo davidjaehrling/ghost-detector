@@ -27,6 +27,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm lint:copy
+      - run: pnpm check:ad-ids
       - run: pnpm test
 
   web-screenshots:

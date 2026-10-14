@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { showPrivacyOptions } from '../src/ads';
 import { CALM_LINE, setHaptics, setJumpScares, setSound } from '../src/state/settings';
+import { useConsent } from '../src/state/useConsent';
 import { useSettings } from '../src/state/useSettings';
 import { sound } from '../src/ui/audio';
 import { Placeholder } from '../src/ui/screens/Placeholder';
@@ -16,11 +18,16 @@ const copy = {
   scares: 'JUMP SCARES',
   on: 'ON',
   off: 'OFF',
+  privacy: 'PRIVACY',
+  legal: 'LEGAL',
+  open: 'OPEN',
+  about: 'READINGS ARE SIMULATED. FIELD INSTRUMENT FICTION.',
 };
 
 export default function Settings() {
   const router = useRouter();
   const settings = useSettings();
+  const consent = useConsent();
   const [calmNote, setCalmNote] = useState(false);
   // Nothing plays on this screen; a scene left running from the result ends here.
   useEffect(() => sound.stop(), []);
@@ -60,6 +67,31 @@ export default function Settings() {
             </Text>
           </Pressable>
         ))}
+        {consent.privacyOptionsRequired ? (
+          <Pressable
+            testID="setting-privacy"
+            accessibilityRole="button"
+            accessibilityLabel={copy.privacy}
+            onPress={() => void showPrivacyOptions()}
+            style={s.row}
+          >
+            <Text style={s.label}>{copy.privacy}</Text>
+            <Text style={s.state}>{copy.open}</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          testID="setting-legal"
+          accessibilityRole="button"
+          accessibilityLabel={copy.legal}
+          onPress={() => router.push('/legal')}
+          style={s.row}
+        >
+          <Text style={s.label}>{copy.legal}</Text>
+          <Text style={s.state}>{copy.open}</Text>
+        </Pressable>
+        <Text style={s.about} testID="settings-about">
+          {copy.about}
+        </Text>
         {calmNote ? (
           <Text style={s.note} testID="settings-calm-note">
             {CALM_LINE}
@@ -83,5 +115,6 @@ const s = StyleSheet.create({
   label: { ...type.rdM, color: color.p3 },
   state: { ...type.rdM, color: color.p2 },
   stateOn: { color: color.p5 },
+  about: { ...type.rdXS, color: color.p3, marginTop: 12 },
   note: { ...type.rdXS, color: color.p5, marginTop: 12 },
 });

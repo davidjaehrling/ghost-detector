@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
-import { PhosphorText, SnapshotCanvas, useVT323 } from '../src/fx/glass';
+import { PhosphorText, SnapshotCanvas } from '../src/fx/glass';
 import { BELIEF_PROFILE, type Belief, getBelief, setBelief } from '../src/state/belief';
 import { sessionActivity } from '../src/state/session';
 import { daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
@@ -116,8 +116,10 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
 
   // The priming transient: one spike on the trace 1.5 s after the warm-up has finished.
   const reduceMotion = useReduceMotion();
-  // The ACT IDX glyphs draw once VT323 has loaded; the warped snapshot waits for it.
-  const actFontReady = useVT323(28) !== null;
+  // The ACT IDX and MOON rows draw once VT323 has loaded; the warped snapshot waits until both have.
+  const [actRowsDrawn, setActRowsDrawn] = useState(0);
+  const onActRowReady = useCallback(() => setActRowsDrawn((n) => n + 1), []);
+  const actFontReady = actRowsDrawn >= 2;
   const [warmDone, setWarmDone] = useState(isStatic);
   const transient = usePrimingTransient({ armed: warmDone, still: isStatic, peak: spike });
 
@@ -203,7 +205,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                   {activity}
                 </Text>
                 <SnapshotCanvas style={s.activityCanvas} pointerEvents="none">
-                  <PhosphorText text={`${copy.actIdx} ${index}/5`} x={ACT_PAD} y={ACT_BASE} size={28} step={5} static={isStatic} reduceMotion={reduceMotion} />
+                  <PhosphorText text={`${copy.actIdx} ${index}/5`} x={ACT_PAD} y={ACT_BASE} size={28} step={5} static={isStatic} reduceMotion={reduceMotion} onReady={onActRowReady} />
                   <PhosphorText
                     text={`· ${copy.moon} ${moonPct}%`}
                     x={ACT_PAD + (idxLen + 1) * ACT_CH}
@@ -213,6 +215,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                     bloom={false}
                     static={isStatic}
                     reduceMotion={reduceMotion}
+                    onReady={onActRowReady}
                   />
                 </SnapshotCanvas>
               </View>

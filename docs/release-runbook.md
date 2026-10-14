@@ -34,3 +34,21 @@ The Android package ID `com.ghostdetector.app` is a placeholder until Gate 1 (na
 
 Play submission later: put the service account key at `./play-service-account.json` (git-ignored), then
 `eas build -p android --profile production` and `eas submit -p android --profile production`.
+
+## Production gate against test ad IDs (P5-01)
+
+`scripts/check-ad-ids.mjs` fails in release mode (`EXPO_PUBLIC_RELEASE=1` or `--release`) for two reasons: Google's sample publisher ID `3940256099942544` appears in `app.json`, `eas.json` or `src/`, or a `REPLACE_WITH_LIVE_*` placeholder from `src/ads/adUnits.ts` remains in any of them. In release mode `unitId()` returns the constants in `src/ads/adUnits.ts` and never the SDK `TestIds`; outside it, `TestIds` are used. Outside release mode the script only reports, so `pnpm smoke` stays green on test IDs.
+
+Wiring:
+- `eas.json` `build.production.env` sets `EXPO_PUBLIC_RELEASE=1`. The `development`, `preview` and `e2e-test` profiles do not set it and keep test IDs.
+- `package.json` has an `eas-build-pre-install` script (`node scripts/check-ad-ids.mjs`). EAS Build runs it on the build worker before dependencies install, with the profile env, so a production build with the sample ID fails before compiling.
+- Local check: `EXPO_PUBLIC_RELEASE=1 node scripts/check-ad-ids.mjs` (exit 1 while the sample ID is in `app.json`).
+
+Replacing the three placeholders in `src/ads/adUnits.ts` and the app ID in `app.json` is a manual launch step (below); the gate refuses a production build until both are done.
+
+### Owner launch steps (before the first production build)
+1. `app.json`: replace `androidAppId` (`ca-app-pub-3940256099942544~3347511713`) with the real AdMob app ID.
+2. `src/ads/backend.ts`: replace the three `TestIds` unit IDs (`BANNER`, `INTERSTITIAL`, `REWARDED`) with the real ad unit IDs.
+3. Analytics: add `google-services.json` and install the Firebase packages, following the comment block at the top of `src/analytics/backend.ts` (steps 1 to 7).
+4. Register test devices in the AdMob console (Settings, Test devices) so internal testers never see live ads.
+5. Run `EXPO_PUBLIC_RELEASE=1 node scripts/check-ad-ids.mjs`; it must exit 0. Then `eas build -p android --profile production`.

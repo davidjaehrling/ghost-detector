@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitWarped } from './warped';
 
 // ?static=1&demo=quiet|active|critical builds the record from a fixed seed
 // (src/ui/result/demo.ts) over the cellar fixture, so the picture is the same
@@ -39,7 +40,7 @@ async function settle(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-busy', 'false');
   // The photo and digit canvases have drawn and the warped snapshot has been retaken.
   await frames(page);
-  await page.waitForTimeout(400);
+  await waitWarped(page);
 }
 
 for (const { demo, tier } of DEMOS) {
@@ -51,14 +52,13 @@ for (const { demo, tier } of DEMOS) {
     await expect(page.getByTestId('result-tier')).toHaveText(tier);
     await expect(page.getByTestId('key-share')).toBeVisible();
     if (demo === 'quiet') {
-      // DEEP SCAN is a dummy cap on QUIET and TRACE: nothing to decode, no offer.
-      await expect(page.getByTestId('key-deepscan')).toHaveCount(0);
-      await expect(page.getByTestId('result-offer')).toHaveCount(0);
+      // DEEP SCAN is absent on QUIET and TRACE: nothing to decode, no offer.
+      await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
       await expect(page.getByTestId('result-profile').getByText('NO SIGNATURE')).toBeVisible();
       await expect(page.getByTestId('composite')).toHaveCount(0);
     } else {
-      await expect(page.getByTestId('key-deepscan')).toBeVisible();
-      await expect(page.getByTestId('result-offer')).toHaveText('Run DEEP SCAN to resolve designation, behaviour and EVP. Short video plays.');
+      await expect(page.getByTestId('deepscan-key')).toBeVisible();
+      await expect(page.getByTestId('deepscan-sub')).toHaveText('SPONSORED VIDEO PLAYS FIRST');
       await expect(page.getByTestId('result-decoded')).toContainText('SIGNATURE PARTIALLY DECODED:');
       await expect(page.getByTestId('profile-mask')).toHaveCount(3);
       await expect(page.getByTestId('composite')).toHaveCount(1);
@@ -93,9 +93,9 @@ for (const { demo, tier } of DEMOS) {
       const dec = await box('result-decoded');
       expect(dec.y - (prof.y + prof.height)).toBeLessThanOrEqual(8);
       expect(dec.y).toBeGreaterThanOrEqual(prof.y + prof.height);
-      const off = await box('result-offer');
-      const deep = await box('key-deepscan');
-      expect(deep.y - (off.y + off.height)).toBeLessThanOrEqual(80);
+      // The key leads on from the decoded line: it sits under the decode bar, above the hardware keys.
+      const deep = await box('deepscan-key');
+      expect(deep.y).toBeGreaterThan(dec.y + dec.height);
     }
     // The key row is one fixed grid: four 72 px slots at the same x on every screen.
     const xs = await page.locator('[data-testid^="key-"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
@@ -166,19 +166,20 @@ test('result-therm-critical: the thermal view', async ({ page }, testInfo) => {
   check();
 });
 
-test('inert keys show one line and no ad surface exists', async ({ page }) => {
+test('SHARE is not fitted, and the only ad surface on the result is the DEEP SCAN key', async ({ page }) => {
   const check = watch(page);
   await page.goto('/result/demo?static=1&fixture=cellar&demo=active');
   await settle(page);
   await expect(page.getByTestId('result-line')).toHaveText('Activity logged.');
-  await page.getByTestId('key-deepscan').click();
+  await page.getByTestId('key-share').click();
   await expect(page.getByTestId('result-line')).toHaveText('NOT FITTED IN THIS UNIT');
-  // No ad, banner or interstitial surface and no sponsor copy anywhere on the screen.
+  // No banner or interstitial surface; the one sponsor line is the DEEP SCAN sublabel.
   const ids = await page.locator('[data-testid]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
   expect(ids.length).toBeGreaterThan(10);
-  expect(ids.filter((id) => /ad|banner|interstitial/i.test(id))).toEqual([]);
+  expect(ids.filter((id) => /banner|interstitial/i.test(id))).toEqual([]);
   const body = await page.locator('body').innerText();
-  expect(body).not.toMatch(/sponsored|advertisement/i);
+  expect(body.match(/sponsored/gi)).toHaveLength(1);
+  expect(body).not.toMatch(/advertisement/i);
   check();
 });
 
