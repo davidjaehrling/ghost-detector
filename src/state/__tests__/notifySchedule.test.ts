@@ -8,6 +8,7 @@ import {
   inWindow,
   reconcileNow,
 } from '../notifySchedule';
+import { catalogue } from '../log';
 import { type ScheduledLine, createRelayStore } from '../relay';
 import type { KeyValueStore, ScanRecord } from '../scans';
 
@@ -62,6 +63,13 @@ describe('buildNotifyState: fields from the stores', () => {
   it('lists one logged tag per tagged case and counts decoded classes', () => {
     expect(state.loggedTags).toEqual(['cellar', 'cellar', 'attic', 'attic']);
     expect(state.catalogueCount).toBe(1);
+  });
+  it('feeds template 5 from the catalogue: the count and the class logged last', () => {
+    expect(state.catalogueCount).toBe(catalogue(records).count);
+    expect(state.lastLoggedClass).toBe('Shade');
+    const none = buildNotifyState({ nowMs: 1, utcOffsetMin: 0, records: [rec('0001', 'cellar', 'quiet', at(9, 20))], intensity: 'standard', belief: null, jumpScaresOff: false, sessionCount: 1, optedIn: true, plan: { installMs: 1, lastAppOpenMs: 1, sent: [] } });
+    expect(none.catalogueCount).toBe(0);
+    expect('lastLoggedClass' in none).toBe(false);
   });
   it('carries the sent history without ids and takes the earliest of install and first scan', () => {
     expect(state.sent).toEqual([{ templateId: 2, sentAtMs: at(13, 18), opened: false }]);

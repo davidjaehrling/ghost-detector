@@ -1,4 +1,5 @@
-import type { Tier } from '../engine';
+import { forecastIndex, isFullMoonWindow, NEW_MOON_REF_MS, SYNODIC_DAYS, type Tier } from '../engine';
+import { CLASSES, PREFIXES } from '../engine/profileBank';
 import type { KeyValueStore, ScanRecord } from './scans';
 import { platformStorage } from './storage';
 
@@ -124,4 +125,76 @@ export const casesLabel = (n: number) => `${n} ${n === 1 ? 'CASE' : 'CASES'}`;
 /** `CELLAR · 7 CASES · PEAK 84 STRONG · 2026-10-13 23:41` (brief section 3.1). */
 export function recordLine(tag: string, count: number, peak: ScanRecord): string {
   return `${tagLabel(tag)} · ${casesLabel(count)} · PEAK ${peak.outcome.spi} ${peak.outcome.tier.toUpperCase()} · ${stamp(peak.createdAt)}`;
+}
+
+/** `22:48`, local time, 24 h. */
+export function clock(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+export type CatalogueRow = {
+  cls: string;
+  prefix: string;
+  /** The newest Deep Scan case of this class, or null while it is unlogged. */
+  last: ScanRecord | null;
+};
+
+export type Catalogue = {
+  rows: CatalogueRow[];
+  /** Classes logged by a Deep Scan. Only rises. */
+  count: number;
+  /** Total classes in the profile bank (24). */
+  total: number;
+  /** Class of the newest Deep Scan, title case for the notification line; undefined while none is logged. */
+  lastLoggedClass: string | undefined;
+};
+
+const titleCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+
+/** One row per entity class in the profile bank. A class is logged once a Deep Scan has run on a case of it. */
+export function catalogue(records: readonly ScanRecord[]): Catalogue {
+  const lastBy = new Map<string, ScanRecord>();
+  let newest: ScanRecord | null = null;
+  for (const r of records) {
+    if (r.deepScanAt === undefined) continue;
+    const cur = lastBy.get(r.profile.class);
+    if (!cur || r.deepScanAt >= cur.deepScanAt!) lastBy.set(r.profile.class, r);
+    if (!newest || r.deepScanAt >= newest.deepScanAt!) newest = r;
+  }
+  const rows = CLASSES.map((cls, i) => ({ cls: cls as string, prefix: PREFIXES[i] as string, last: lastBy.get(cls) ?? null }));
+  return {
+    rows,
+    count: rows.filter((r) => r.last !== null).length,
+    total: CLASSES.length,
+    lastLoggedClass: newest ? titleCase(newest.profile.class) : undefined,
+  };
+}
+
+const offsetMin = (ms: number) => -new Date(ms).getTimezoneOffset();
+
+/** Full moons with at least one case in their window (within a day of full). Counts each moon once; only rises. */
+export function fullMoonsLogged(records: readonly ScanRecord[]): number {
+  const moons = new Set<number>();
+  for (const r of records) {
+    const off = offsetMin(r.createdAt);
+    if (!isFullMoonWindow(r.createdAt, off)) continue;
+    moons.add(Math.floor((r.createdAt + off * 60_000 - NEW_MOON_REF_MS) / 86_400_000 / SYNODIC_DAYS));
+  }
+  return moons.size;
+}
+
+export type MoonNight = { date: string; moonPct: number; index: 1 | 2 | 3 | 4 | 5 };
+
+/** The next seven local nights, tonight first: `MM-DD`, moon percentage and the forecast index at 22:00 local. */
+export function moonTable(nowMs: number): MoonNight[] {
+  const now = new Date(nowMs);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return Array.from({ length: 7 }, (_, k) => {
+    const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + k, 22, 0).getTime();
+    const d = new Date(at);
+    const f = forecastIndex(at, offsetMin(at));
+    return { date: `${p(d.getMonth() + 1)}-${p(d.getDate())}`, moonPct: f.moonPct, index: f.index };
+  });
 }

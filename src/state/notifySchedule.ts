@@ -11,6 +11,7 @@ import {
   localMinuteOfDay,
   nextNotification,
 } from '../engine';
+import { catalogue } from './log';
 import { type RelayStore, type ScheduleBackend, type TapData, relayOn } from './relay';
 import type { KeyValueStore, ScanRecord } from './scans';
 
@@ -129,6 +130,7 @@ export type BuildInput = {
 /** The engine's NotifyState from the stores. */
 export function buildNotifyState(i: BuildInput): NotifyState {
   const decodedClasses = new Set<string>();
+  const cat = catalogue(i.records);
   const newClassCase = new Set<string>();
   for (const r of [...i.records].filter((x) => x.deepScanAt !== undefined).sort((a, b) => a.deepScanAt! - b.deepScanAt!)) {
     if (!decodedClasses.has(r.profile.class)) newClassCase.add(r.id);
@@ -156,7 +158,8 @@ export function buildNotifyState(i: BuildInput): NotifyState {
     lastAppOpenMs: i.plan.lastAppOpenMs,
     scans,
     loggedTags: i.records.flatMap((r) => (r.tag ? [r.tag] : [])),
-    catalogueCount: decodedClasses.size,
+    catalogueCount: cat.count,
+    ...(cat.lastLoggedClass ? { lastLoggedClass: cat.lastLoggedClass } : {}),
     sent: i.plan.sent.map(({ templateId, caseId, sentAtMs, opened }) => ({ templateId, ...(caseId !== undefined ? { caseId } : {}), sentAtMs, opened })),
     nowMs: i.nowMs,
     utcOffsetMin: i.utcOffsetMin,

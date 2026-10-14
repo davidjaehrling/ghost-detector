@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Outcome, Tier } from '../../engine';
-import { bestOnFile, caseStatus, recordLine, createNightsStore, groupByTag, nightKey, stamp, unresolvedPct, UNTAGGED } from '../log';
+import { NEW_MOON_REF_MS, SYNODIC_DAYS, type Outcome, type Tier } from '../../engine';
+import { CLASSES } from '../../engine/profileBank';
+import { bestOnFile, catalogue, clock, fullMoonsLogged, moonTable, caseStatus, recordLine, createNightsStore, groupByTag, nightKey, stamp, unresolvedPct, UNTAGGED } from '../log';
 import { createScanStore, type KeyValueStore, type ScanRecord } from '../scans';
 
 const mem = (): KeyValueStore => {
@@ -113,5 +114,64 @@ describe('caseStatus', () => {
     expect(caseStatus(rec('1', 'cellar', 5, 'quiet', 1, { declined: true }))).toBeNull();
     expect(caseStatus(rec('1', 'cellar', 15, 'trace', 1))).toBeNull();
     expect(caseStatus(rec('1', 'cellar', 60, 'strong', 1, { declined: true, deepScanAt: 5 }))).toBeNull();
+  });
+});
+
+describe('clock', () => {
+  it('is local HH:MM, zero padded', () => {
+    expect(clock(at(13, 22, 48))).toBe('22:48');
+    expect(clock(at(13, 3, 5))).toBe('03:05');
+  });
+});
+
+describe('catalogue', () => {
+  it('has one row per class in the profile bank (24), all unlogged for an empty log', () => {
+    const c = catalogue([]);
+    expect(c.total).toBe(24);
+    expect(c.rows.map((r) => r.cls)).toEqual([...CLASSES]);
+    expect(c.count).toBe(0);
+    expect(c.rows.every((r) => r.last === null)).toBe(true);
+    expect(c.lastLoggedClass).toBeUndefined();
+  });
+  it('logs a class only once a Deep Scan has run, with its newest case', () => {
+    const shade = (id: string, deep: number | undefined) => rec(id, 'a', 50, 'strong', at(12, 21), { profile: { class: 'SHADE', era: 'e', name: id, traits: [], signatureDecodedPct: 60 }, ...(deep ? { deepScanAt: deep } : {}) });
+    const c = catalogue([rec('0001', 'a', 50, 'active', at(9, 20)), shade('0002', at(12, 22)), shade('0003', at(13, 1)), shade('0004', undefined)]);
+    expect(c.count).toBe(1);
+    expect(c.rows.find((r) => r.cls === 'SHADE')!.last!.id).toBe('0003');
+    expect(c.rows.find((r) => r.cls === 'RESIDUAL')!.last).toBeNull();
+    expect(c.lastLoggedClass).toBe('Shade');
+  });
+  it('names the class of the newest Deep Scan, title case, hyphen kept', () => {
+    const mk = (id: string, cls: string, deep: number) => rec(id, 'a', 50, 'strong', at(12, 21), { profile: { class: cls, era: 'e', name: id, traits: [], signatureDecodedPct: 60 }, deepScanAt: deep });
+    expect(catalogue([mk('1', 'SHADE', at(12, 22)), mk('2', 'TRACE-FORM', at(13, 1))]).lastLoggedClass).toBe('Trace-form');
+  });
+});
+
+describe('fullMoonsLogged', () => {
+  const fullMoon = (k: number) => NEW_MOON_REF_MS + (k + 0.5) * SYNODIC_DAYS * 86_400_000;
+  it('counts each full moon once, however many cases fall in its window', () => {
+    const k = 310;
+    expect(fullMoonsLogged([rec('1', 'a', 50, 'quiet', fullMoon(k)), rec('2', 'a', 50, 'quiet', fullMoon(k) + 3_600_000), rec('3', 'a', 50, 'quiet', fullMoon(k) - 20 * 3_600_000)])).toBe(1);
+    expect(fullMoonsLogged([rec('1', 'a', 50, 'quiet', fullMoon(k)), rec('2', 'a', 50, 'quiet', fullMoon(k + 1))])).toBe(2);
+  });
+  it('ignores cases outside the window', () => {
+    expect(fullMoonsLogged([rec('1', 'a', 50, 'quiet', NEW_MOON_REF_MS + 310 * SYNODIC_DAYS * 86_400_000), rec('2', 'a', 50, 'quiet', fullMoon(310) + 3 * 86_400_000)])).toBe(0);
+    expect(fullMoonsLogged([])).toBe(0);
+  });
+});
+
+describe('moonTable', () => {
+  it('lists seven consecutive local nights from tonight with moon percentage and an index of 1 to 5', () => {
+    const t = moonTable(at(13, 12));
+    expect(t.map((n) => n.date)).toEqual(['10-13', '10-14', '10-15', '10-16', '10-17', '10-18', '10-19']);
+    for (const n of t) {
+      expect(n.index).toBeGreaterThanOrEqual(1);
+      expect(n.index).toBeLessThanOrEqual(5);
+      expect(n.moonPct).toBeGreaterThanOrEqual(0);
+      expect(n.moonPct).toBeLessThanOrEqual(100);
+    }
+  });
+  it('crosses a month end', () => {
+    expect(moonTable(new Date(2026, 9, 29, 9).getTime()).map((n) => n.date).slice(2, 5)).toEqual(['10-31', '11-01', '11-02']);
   });
 });
