@@ -142,6 +142,45 @@ Open question for Builder A: engine notifications take `{tag}` from the stored t
 - Over budget on purpose, rewritten shorter instead of shrunk: `history.unlogged` is `SIN REG.`; `viewfinder.hud.stored` is `VS · GUARD.`; `tag.short.hallway` is `PASIL.` (6 against `HALL` 4, +2).
 - `legal.impressum` stays `IMPRESSUM`: it opens the German document.
 
+### PT
+
+- Variant: European Portuguese (pt-PT, store locale pt-PT): `utilizador`, `registo`, `deteta`, `ecrã`, `descodificar`, `partilhar`, `a` plus infinitive (`A IMPRIMIR`, `A RECALIBRAR`), `leem`, `casas de banho`. The agreed 1990 spelling is used (`atividade`, `noturnos`, `atualizada`), as in the Compliance tables. Instrument surfaces use impersonal forms and infinitives (`Varrer devagar.`, `Premir CAPTURAR`). The polite third person with `o utilizador` appears on the camera rationale and the relay opt-in. No `você`, no `tu` in labels. Brazilian users are served this text; a `pt-BR` pass is a P10 decision (D-038).
+- Rewritten, not translated: location tags and lore (`caves`, `sótão`, `cumeeira`, `ombreiras`, `águas-furtadas`, `lareira`), the 24 class names (`PÓS-IMAGEM`, `VESTÍGIO`, `MURMÚRIO`, `RETARDATÁRIO`, `GUARDIÃO` ...), attachments, the EVP fragments (`não estamos sós`, `ouvi-te`), `FICHA DE CAMPO`, `PONTO FRIO`, `CONDUTA`.
+- `PRESENCE` became `APARIÇÃO` because `presença*` is on the claim list.
+- The `ecrã` word appears in `scan.glass` (spoken label); no visible key needs it.
+- Abbreviation table (English length in brackets, budget = English + 2):
+
+| Key | EN | PT |
+| --- | --- | --- |
+| `boot.key` | ACK (3) | OK (2) |
+| `history.next` | SETUP (5) | SETUP (5) |
+| `settings.next`, `legal.next` | BACK (4) | VOLTAR (6) |
+| `scan.cancel`, `share.cancel` | CANCEL (6) | CANCELAR (8) |
+| `viewfinder.hud.allow` | ALLOW (5) | ACESSO (6) |
+| `viewfinder.hud.log` | LOG (3) | REG (3) |
+| `viewfinder.hud.capture` | CAPTURE (7) | CAPTURAR (8) |
+| `result.photoKey` | PHOTO (5) | FOTO (4) |
+| `result.back` | NEW SCAN (8) | NOVO SCAN (9, two lines) |
+| `share.key` | SHARE (5) | ENVIAR (6) |
+| `onboarding.unsure` | NOT SURE (8) | NÃO SEI (7) |
+| `onboarding.skip` | SKIP (4) | SALTAR (6) |
+| `relay.fit` | FIT RELAY (9) | INSTALAR (8) |
+| `relay.notNow` | NOT NOW (7) | AGORA NÃO (9) |
+| `history.emptyLegend` | VIEW FINDER (11) | VISOR (5) |
+| `settings.open`, `legal.open` | OPEN (4) | ABRIR (5) |
+| `tag.short.*` | CELLAR ATTIC BEDROOM HALL OUTSIDE | CAVE SÓTÃO QUARTO CORRED. FORA |
+
+- Over budget on purpose, rewritten shorter instead of shrunk: `history.unlogged` is `SEM REG.`; `viewfinder.hud.stored` is `VS · GUARD.`; `tag.short.hallway` is `CORRED.` (7 against `HALL` 4, +3).
+- `result.profile` is `FICHA DA ENTIDADE` (17 against 14, +21%).
+
+### Open questions (all languages)
+
+1. Notification `{tag}` is the stored tag id (see above); a localised word is needed in the code.
+2. `src/i18n/__tests__/i18n.test.ts` still asserts that `t('settings.sound')` is `SOUND` under `setLanguage('de')`. That held while no `de.json` existed; Builder A updates it.
+3. `onboarding.skip` is a key-row legend in all four languages; the DE `WEITER` reads as "next", which matches what the key does (skip to the next screen).
+4. The share-card keys `share.card.*` were added to `en.json` by the FX Engineer while this work ran; all three languages carry them with the disclosure wording from `docs/localisation-rules.md` section 1. `share.card.mark` and `share.card.footer` are not in `DISCLOSURE_KEYS` yet; Compliance should add them to the contract test.
+5. A second-model review (P7-04) should look at: `INSTALAR` for `FIT` (relay), `STORY`/`HISTORIA`, `IRRLICHT` as a class name, `QUIT`, `CONDUTA`.
+
 ## Checks
 
 `pnpm test` fails when code uses a key that `en.json` lacks, when an `en.json` key is not referenced,
