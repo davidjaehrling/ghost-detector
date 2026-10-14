@@ -167,7 +167,9 @@ test('after a Deep Scan the card line comes back once as updated', async ({ page
   await logLines(page);
   await page.goto(`${STRONG}&share=timer`);
   await expect(page.getByTestId('deepscan-key')).toBeVisible();
-  await page.waitForTimeout(1200);
+  // The key is live once the rewarded ad has loaded (a warming key ignores a press), and past the 500 ms guard.
+  await expect.poll(() => page.getByTestId('deepscan-key').evaluate((e) => getComputedStyle(e.querySelector('div') as HTMLElement).color)).not.toBe('rgb(74, 77, 66)');
+  await page.waitForTimeout(700);
   // Two presses: arm, then run.
   await page.getByTestId('deepscan-key').click();
   await expect(page.getByTestId('deepscan-line')).toBeVisible();

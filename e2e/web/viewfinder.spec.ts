@@ -65,8 +65,8 @@ test('the tag row is controlled by the glass row only, with 44 dp hits and 12 px
     expect(hits[i]!.x - (hits[i - 1]!.x + hits[i - 1]!.width)).toBeGreaterThanOrEqual(12 - 0.1);
   }
   const vw = page.viewportSize()!.width;
-  await expect(page.getByTestId('tag-text-hallway')).toHaveText(vw < 380 ? 'HALL' : 'HALLWAY');
-  await expect(page.getByTestId('tag-text-outdoors')).toHaveText(vw < 380 ? 'OUTSIDE' : 'OUTDOORS');
+  await expect(page.getByTestId('tag-text-hallway')).toHaveText('HALL');
+  await expect(page.getByTestId('tag-text-outdoors')).toHaveText('OUTSIDE');
   await page.getByTestId('tag-attic').click();
   await expect(page.getByTestId('hud-lore')).toContainText('Attic timber settles after dusk.');
   for (const t of ['bedroom', 'hallway', 'outdoors', 'cellar'] as const) await page.getByTestId(`tag-${t}`).click();
