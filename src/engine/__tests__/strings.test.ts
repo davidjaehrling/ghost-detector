@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import enJson from '../../../locales/engine/en.json';
 import { generateProfile, generateProfileWith } from '../profile';
-import { nextNotification, nextNotificationWith, type NotifyState } from '../notify';
+import { cleanTag, nextNotification, nextNotificationWith, type NotifyState } from '../notify';
 import { seedFrom } from '../outcome';
 import { TIERS } from '../tiers';
 import {
@@ -97,5 +97,43 @@ describe('per-locale helpers', () => {
     expect(hits.map((h) => `${h.key}:${h.kind}`).sort()).toEqual([
       'a.b:claim', 'f.g:emdash', 'h.i:banned', 'notify.c:claim', 'notify.t1.title:framing',
     ]);
+  });
+});
+
+describe('unicode tags', () => {
+  const base = (tags: string[], belief: 'yes' | 'no'): NotifyState => {
+    const nowMs = Date.UTC(2026, 9, 1);
+    return {
+      intensity: 'standard', belief, jumpScaresOff: false, sessionCount: 3, optedIn: true, installMs: nowMs - 30 * 86_400_000,
+      lastAppOpenMs: nowMs - 1000, scans: [], loggedTags: tags, catalogueCount: 1, sent: [], nowMs, utcOffsetMin: 0,
+    };
+  };
+  it('cleanTag keeps letters and still drops banned and claim words', () => {
+    expect(cleanTag('  Küche!! ')).toBe('küche');
+    expect(cleanTag('Sótão')).toBe('sótão');
+    expect(cleanTag('Verified')).toBeNull();
+    expect(cleanTag('real')).toBeNull();
+    expect(cleanTag('unreal')).toBe('unreal');
+  });
+  it('Küche and sótão reach template 3 with their letters; lore resolves via the folded key', () => {
+    const table: EngineStrings = { ...en, 'notify.lore.kuche': 'Küchen halten warme Rohre.', 'notify.lore.sotao': 'Sótãos guardam calor.' };
+    let seen = 0;
+    for (const [tag, lore] of [['Küche', 'Küchen halten warme Rohre.'], ['sótão', 'Sótãos guardam calor.']] as const) {
+      for (let day = 0; day < 400; day++) {
+        const s = base([tag, tag], 'yes');
+        s.nowMs += day * 86_400_000;
+        s.lastAppOpenMs = s.nowMs - 1000;
+        const n = nextNotificationWith(s, 1, table);
+        if (n?.templateId !== 3) continue;
+        seen++;
+        expect(n.title).toContain(tag.toLocaleUpperCase());
+        expect(n.body).toContain(tag.charAt(0).toLocaleUpperCase() + tag.slice(1).toLocaleLowerCase());
+        expect(n.body).toContain(lore);
+        const no = nextNotificationWith({ ...s, belief: 'no' }, 1, table);
+        if (no?.templateId === 3) expect(no.body).not.toContain(lore);
+        break;
+      }
+    }
+    expect(seen).toBe(2);
   });
 });

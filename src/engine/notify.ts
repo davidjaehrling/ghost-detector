@@ -173,14 +173,16 @@ export function withinWeeklyCap(times: number[], cap: number): boolean {
 export const CLAIM_WORDS = ['verified', 'confirmed', 'accurate', 'real', 'detected', 'active'] as const;
 // Stems are split so this file passes the copy linter that bans them.
 const BANNED_STEMS = ['del' + 'v', 'tapes' + 'tr', 'pivo' + 'tal', 'cru' + 'cial', 'intri' + 'cat', 'testa' + 'ment', 'fos' + 'ter', 'land' + 'scape', 'under' + 'scor'];
-const BAD_TAG_RE = new RegExp(`\\b(${BANNED_STEMS.join('|')}\\w*|${CLAIM_WORDS.join('|')}|evp)\\b`, 'i');
+const BAD_TAG_RE = new RegExp(`(?<![\\p{L}\\p{N}])(?:(?:${BANNED_STEMS.join('|')})\\p{L}*|${CLAIM_WORDS.join('|')}|evp)(?![\\p{L}\\p{N}])`, 'iu');
 
 export function cleanTag(raw: string): string | null {
-  const t = raw.toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20).trim();
+  const t = raw.toLocaleLowerCase().normalize('NFC').replace(/[^\p{L}\p{N} -]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 20).trim();
   if (!t || BAD_TAG_RE.test(t)) return null;
   return t;
 }
-const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const cap1 = (s: string) => s.charAt(0).toLocaleUpperCase() + s.slice(1);
+/** ASCII-folded form of a tag (Küche -> kuche), for lore keys. */
+const foldTag = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '');
 const pad4 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(4, '0');
 
 /* ---------- candidates ---------- */
@@ -231,8 +233,8 @@ function build(id: TemplateId, c: Ctx): Notification | null {
         .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
       if (!best) return null;
       const [tag, n] = best;
-      const lore = s.belief === 'yes' ? strings[`notify.lore.${tag}`] : undefined;
-      const v = { ...base, tag, Tag: cap1(tag), TAG: tag.toUpperCase(), count: fmt(n), lore: lore ?? '' };
+      const lore = s.belief === 'yes' ? (strings[`notify.lore.${tag}`] ?? strings[`notify.lore.${foldTag(tag)}`]) : undefined;
+      const v = { ...base, tag, Tag: cap1(tag), TAG: tag.toLocaleUpperCase(), count: fmt(n), lore: lore ?? '' };
       return {
         templateId: 3, fireAtMs: t,
         title: T('t3.title', v),

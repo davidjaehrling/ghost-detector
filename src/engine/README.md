@@ -24,7 +24,7 @@ translation must keep every name. Numbers go through an injected formatter `NumF
 API: `generateProfileWith(seed, tier, recent, strings, fmt?)`, `nextNotificationWith(state, seed, strings, fmt?)`.
 Checks for a locale file: `checkStrings(table, lists)` (banned, claim, framing, em-dash; Unicode-aware; `stem*`
 syntax; `exempt` literals), `missingKeys(en, other)`, `extraKeys(en, other)`, `placeholderMismatches(en, other)`.
-`cleanTag` still lowercases to `[a-z0-9 -]`, so tags (and `notify.lore.<tag>` keys) are ASCII for now.
+`cleanTag` keeps Unicode letters and digits (`\p{L}\p{N}`), lowercased with `toLocaleLowerCase`. Lore lookup tries `notify.lore.<tag>`, then the ASCII-folded `notify.lore.<kuche>`.
 
 Pure TypeScript. No React, no native imports. Import from `src/engine` (index).
 
