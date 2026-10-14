@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sessionParam } from '../interstitialParams';
+import { gateOpenFor, sessionParam } from '../interstitialParams';
 
 describe('?session=N harness param', () => {
   it('reads a small non-negative integer', () => {
@@ -11,5 +11,13 @@ describe('?session=N harness param', () => {
     expect(sessionParam('?session=-1')).toBeNull();
     expect(sessionParam('?session=x')).toBeNull();
     expect(sessionParam('?session=12345')).toBeNull();
+  });
+});
+
+describe('gateOpenFor', () => {
+  it('opens only for a granted camera or the web fixture', () => {
+    expect(gateOpenFor('camera')).toBe(true);
+    expect(gateOpenFor('fixture')).toBe(true);
+    for (const s of ['denied', 'ask', 'loading'] as const) expect(gateOpenFor(s)).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { canRequestAds, ensureConsent, rewarded } from '../../ads';
+import { canRequestAds, consentState, ensureConsent, rewarded } from '../../ads';
 import { track } from '../../analytics';
 import { unlockDeepScan } from '../../state/scans';
 import { useConsent } from '../../state/useConsent';
@@ -8,7 +8,7 @@ import { onRewardedShown } from '../interstitial';
 export type DeepState =
   /** Ad loaded and consent allows: the key is live. */
   | 'ready'
-  /** Consent not yet answered, or the ad is still loading. */
+  /** Consent not yet resolved in this launch, or the ad is still loading. */
   | 'warming'
   /** No consent to request, or the load failed. */
   | 'offline'
@@ -25,6 +25,8 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
   const [running, setRunning] = useState(false);
   const [failed, setFailed] = useState(false);
   const offered = useRef(false);
+  // The consent check has resolved in this launch. Until then the key warms; it never reads OFFLINE.
+  const [resolved, setResolved] = useState(() => consentState().resolved);
   const eligible = enabled && !unlocked && !failed;
 
   // Preload when the result mounts, only with consent to request.
@@ -32,7 +34,9 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
     if (!eligible) return;
     let alive = true;
     void ensureConsent().then(() => {
-      if (alive && canRequestAds()) void rewarded.load();
+      if (!alive) return;
+      setResolved(true);
+      if (canRequestAds()) void rewarded.load();
     });
     return () => {
       alive = false;
@@ -45,7 +49,8 @@ export function useDeepScan(opts: { id: string; enabled: boolean; unlockedAt: nu
   else if (running) state = 'running';
   else if (failed) state = 'offline';
   else if (!enabled) state = 'offline';
-  else if (!requestable) state = consent.status === 'unknown' ? 'warming' : 'offline';
+  else if (!resolved) state = 'warming';
+  else if (!requestable) state = 'offline';
   else if (status === 'ready') state = 'ready';
   else if (status === 'failed') state = 'offline';
   else state = 'warming';

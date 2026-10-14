@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { placeGhost } from '../../../fx/ghostV0/placement';
 import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../deepCopy';
 import { useDeepScan } from '../deepScan';
@@ -42,15 +42,17 @@ vi.mock('react', () => ({
 }));
 
 const track = vi.fn();
+const consent = vi.hoisted(() => ({ resolved: true, requestable: true }));
 const load = vi.fn(async () => true);
 const show = vi.fn(async () => ({ shown: true, earned: true }));
 vi.mock('../../../analytics', () => ({ track: (e: string) => track(e) }));
 vi.mock('../../../ads', () => ({
   ensureConsent: async () => ({}),
-  canRequestAds: () => true,
+  consentState: () => ({ resolved: consent.resolved }),
+  canRequestAds: () => consent.requestable,
   rewarded: { subscribe: () => () => {}, status: () => 'ready', load: () => load(), show: () => show() },
 }));
-vi.mock('../../../state/useConsent', () => ({ useConsent: () => ({ status: 'obtained', canRequestAds: true }) }));
+vi.mock('../../../state/useConsent', () => ({ useConsent: () => ({ status: 'obtained', canRequestAds: consent.requestable }) }));
 vi.mock('../../../state/scans', () => ({ unlockDeepScan: vi.fn() }));
 vi.mock('../../interstitial', () => ({ onRewardedShown: vi.fn() }));
 
@@ -159,5 +161,33 @@ describe('DEEP SCAN analytics', () => {
     expect(after.state).toBe('offline');
     await after.press();
     expect(show).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DEEP SCAN before consent resolves', () => {
+  beforeEach(() => {
+    rt.slots = [];
+    rt.effects = [];
+    load.mockClear();
+  });
+  afterEach(() => {
+    consent.resolved = true;
+    consent.requestable = true;
+  });
+
+  it('warms, not offline, while the consent check is still pending', () => {
+    consent.resolved = false;
+    consent.requestable = false;
+    expect(renderDeepScan()().state).toBe('warming');
+  });
+
+  it('goes offline only after a resolved denial', async () => {
+    consent.resolved = false;
+    consent.requestable = false;
+    const render = renderDeepScan();
+    expect(render().state).toBe('warming');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(render().state).toBe('offline');
   });
 });

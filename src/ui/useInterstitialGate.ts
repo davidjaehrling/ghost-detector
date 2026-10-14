@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { setGate } from './interstitial';
 
 /**
- * Viewfinder only. `clear` is true when the camera permission is settled (not being asked). The
+ * Viewfinder only. `clear` is true only when the camera permission is granted (see `gateOpenFor`). The
  * gate is open only while the screen is focused and mounted and the permission is clear.
  */
 export function useInterstitialGate(clear: boolean): void {
