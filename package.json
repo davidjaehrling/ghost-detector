@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "lint:copy": "node scripts/lint-copy.mjs",
+    "eas-build-pre-install": "node scripts/check-ad-ids.mjs",
     "check:ad-ids": "node scripts/check-ad-ids.mjs",
     "test": "vitest run",
     "smoke": "pnpm typecheck && pnpm lint && pnpm lint:copy && pnpm check:ad-ids && pnpm test",
