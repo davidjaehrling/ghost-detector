@@ -29,6 +29,10 @@ Maps every shipped SDK to the answers in Play Console, Data safety form. Status:
 | `expo-haptics` | none | Not collected | n/a | n/a | n/a |
 | `react-native-audio-api` (playback only, no microphone) | Audio files, Voice or sound recordings | Not collected. No microphone permission. | n/a | n/a | n/a |
 | Local scan history (app storage) | none transmitted | Not collected. Stays on device. | n/a | n/a | n/a |
+| Investigation log: location tags and case notes (app storage) | Free text typed by the user on the device. Not a Play Location type (no coordinates, no address lookup). | Not collected. Stays on device, never transmitted, never in an analytics event, never on a share card. | n/a | n/a | n/a |
+| `expo-notifications` (local scheduled notifications only, channel `Field log`; ships with P6) | none. No push token is requested, no FCM or Expo push service is used, no server sends anything. | Not collected. Schedules are computed on device from moon phase, clock and the local log. Text may name a user-typed tag on the lock screen. | Yes, opt-in, off until the user taps FIT RELAY and grants the system permission | n/a |
+| `POST_NOTIFICATIONS` permission (Android 13+ runtime permission, declared by `expo-notifications`) | Permission only. Play Data safety has no row for it; it needs the Permissions declaration in the manifest and the privacy policy. | Not collected | Yes | n/a |
+| `expo-sharing` (the field card leaves through the user's own share sheet; ships with P6) | Photos and videos (the card is a rendered PNG that includes a processed camera frame) | Not collected or shared by us. The user picks the target app and sends the file; no code path of ours uploads it. Same footing as a screenshot the user sends. | n/a (user action) | n/a |
 | `react-native-google-mobile-ads` 17.2.0 (Google Mobile Ads SDK) [U] | Device or other IDs (advertising ID, app set ID) | Collected and shared | Advertising or marketing; Analytics; Fraud prevention, security and compliance | No for the SDK; consent controls personalisation (UMP) | No |
 | same | App activity: App interactions (ad impressions, clicks) | Collected and shared | Advertising or marketing; Analytics | No | No |
 | same | App info and performance: Diagnostics (crash logs, performance) | Collected and shared | Analytics; Fraud prevention, security and compliance | No | No |
@@ -45,8 +49,10 @@ Not collected by any shipped SDK: name, email, address, phone, precise location,
 
 1. Adding any package that opens a network connection or reads a new permission requires a row here and a Compliance PASS before merge.
 2. If the Firebase backend is not shipped in a release (no `google-services.json`), delete the Firebase rows from the Play form for that release.
-3. Photos count as "not collected" only while no code path uploads an image or derived pixels. Keep it so; the share card is created on device and shared by the user through the system share sheet, which is a user action and not collection by us.
-4. The form must match the privacy policy sections 3, 5 and 6.
+3. Photos count as "not collected" only while no code path uploads an image or derived pixels. Keep it so; the share card is created on device and shared by the user through the system share sheet (`expo-sharing`), which is a user action and not collection by us. The card carries no EXIF or GPS (it is re-encoded from pixels) and no user-typed tag or note.
+4. The form must match the privacy policy sections 2, 3, 5 and 6.
+5. Notifications stay local. A push token, FCM registration, Expo push service or any server-side send is a new SDK row, a privacy policy change and a Compliance PASS before merge.
+6. Analytics events and parameters stay on the allowlist in `src/analytics/index.ts`. `share_card` carries no parameters today; if `format` is added (P6-02), the allowlist, the policy table in section 5 and this form change together.
 
 ## Before launch
 
@@ -55,4 +61,5 @@ Not collected by any shipped SDK: name, email, address, phone, precise location,
 3. Extend `scripts/check-ad-ids.mjs` so release mode also fails on the placeholder live IDs. Register test devices in AdMob.
 4. Banner height at phone check 3: record the SDK `onSizeChange` height at 360, 390 and 428 dp and confirm the slot height is at least that (`src/ads/Banner.tsx` clips with `overflow: hidden`).
 5. Firebase install: after prebuild, run `aapt dump xmltree` on the built APK and confirm the merged manifest shows `google_analytics_default_allow_analytics_storage`, `_ad_storage`, `_ad_user_data` and `_ad_personalization_signals` all `false`. The `firebase.json` keys that drive them are `analytics_default_allow_*`.
-6. Re-read the Data safety form against the lockfile and Google's SDK disclosure pages (items marked [U]).
+6. P6 manifest check: after prebuild, `aapt dump permissions` on the built APK lists `POST_NOTIFICATIONS` and must not list `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM`; confirm no push or FCM services are merged in. Add the notification permission and the log tags to privacy policy sections 2 and 6.
+7. Re-read the Data safety form against the lockfile and Google's SDK disclosure pages (items marked [U]).
