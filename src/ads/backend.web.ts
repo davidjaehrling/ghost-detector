@@ -27,8 +27,12 @@ function record(call: string, args: unknown[] = []): void {
   (window.__adsLog ??= []).push({ t: Date.now() - t0, call, args });
 }
 
+// Read once, at the first call, from the URL the page was opened with: the router drops the query
+// on a navigation (scan to result), and a harness flag must outlive that.
+let params: URLSearchParams | null = null;
 function query(): URLSearchParams {
-  return new URLSearchParams(typeof window !== 'undefined' ? (window.location?.search ?? '') : '');
+  params ??= new URLSearchParams(typeof window !== 'undefined' ? (window.location?.search ?? '') : '');
+  return params;
 }
 
 type Mode = 'required' | 'obtained' | 'notRequired' | 'denied' | 'error';

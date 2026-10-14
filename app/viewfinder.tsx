@@ -18,6 +18,7 @@ import { useReduceMotion } from '../src/ui/useReduceMotion';
 import { Housing } from '../src/ui/screens/Housing';
 import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
+import { useInterstitialGate } from '../src/ui/interstitial';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
 import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier } from '../src/ui/viewfinder/flux';
 import { useFlux } from '../src/ui/viewfinder/useFlux';
@@ -99,6 +100,8 @@ function Viewfinder({
   const narrow = windowW < 380;
   const fixture = harness.fixture ?? DEFAULT_FIXTURE;
   const source = sourceFor(permission, Platform.OS === 'web');
+  // An interstitial waits while the camera permission is being asked or is not yet known.
+  useInterstitialGate(source !== 'ask' && source !== 'loading');
 
   const reduceMotion = useReduceMotion();
   const active = useActive();

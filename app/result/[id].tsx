@@ -2,8 +2,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Rect as SkRect, Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
-import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { track } from '../../src/analytics';
+import { onBackToViewfinder, onFreshResult } from '../../src/ui/interstitial';
 import type { Tier } from '../../src/engine';
 import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
 import { PhosphorText, SnapshotCanvas, useVT323 } from '../../src/fx/glass';
@@ -26,6 +27,8 @@ import { readingsFor } from '../../src/ui/result/readings';
 import { PINNED_TIERS, stampText, thermalDelta } from '../../src/ui/result/stamp';
 import { Readout } from '../../src/ui/Readout';
 import { scareEligible } from '../../src/ui/result/scare';
+import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../../src/ui/result/deepCopy';
+import { type DeepState, useDeepScan } from '../../src/ui/result/deepScan';
 import { type ScareMode, useScare } from '../../src/ui/result/useScare';
 import { useReduceMotion } from '../../src/ui/useReduceMotion';
 import { SpiDial } from '../../src/ui/result/SpiDial';
@@ -50,17 +53,14 @@ const copy = {
   thermal: 'THERM',
   acoustic: 'ACOUST',
   profile: 'ENTITY PROFILE',
-  offer: 'Run DEEP SCAN to resolve designation, behaviour and EVP. Short video plays.',
   none: 'NO SIGNATURE',
   decoded: 'SIGNATURE PARTIALLY DECODED:',
   classLabel: 'CLASS',
   eraLabel: 'ERA',
-  hidden: ['DESIGNATION', 'BEHAVIOUR', 'EVP'],
+  hidden: ['DESIGNATION', 'BEHAVIOUR', deepCopy.evpHead],
   notFitted: 'NOT FITTED IN THIS UNIT',
   share: 'SHARE',
   shareLabel: 'Share result',
-  deep: 'DEEP SCAN',
-  deepLabel: 'Deep scan',
   thermKeyLabel: 'Thermal view',
   photoKey: 'PHOTO',
   photoKeyLabel: 'Photo view',
@@ -103,12 +103,12 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
@@ -124,7 +124,10 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
   const [fresh] = useState(() => (record ? consumeReveal(record.id) : false));
   // The result is shown for the first time right after a scan; reopening a case from the log is not a scan.
   useEffect(() => {
-    if (record && fresh) track('scan_complete', { tier: record.outcome.tier, intensity: getIntensity() });
+    if (record && fresh) {
+      track('scan_complete', { tier: record.outcome.tier, intensity: getIntensity() });
+      onFreshResult();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const scareMode: ScareMode =
@@ -141,12 +144,24 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
   const [photoLoaded, setPhotoLoaded] = useState(false);
   const [stable, setStable] = useState(harness.isStatic);
 
-  const toViewfinder = () => router.navigate('/viewfinder');
+  const toViewfinder = () => {
+    onBackToViewfinder();
+    router.navigate('/viewfinder');
+  };
+  // DEEP SCAN. The harness demo record is not in the store, so it keeps its unlock in memory;
+  // ?deepscan=unlocked starts it unlocked.
+  const isDemo = harness.isStatic && isDemoName(params.demo);
+  const tierWide = record ? record.outcome.tier !== 'quiet' && record.outcome.tier !== 'trace' : false;
+  const deep = useDeepScan({
+    id: record?.id ?? '',
+    enabled: tierWide,
+    unlockedAt: isDemo && params.deepscan === 'unlocked' ? 1 : record?.deepScanAt,
+    persist: !isDemo,
+  });
   const [notice, setNotice] = useState(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => void (noticeTimer.current && clearTimeout(noticeTimer.current)), []);
-  // Share and Deep Scan are not wired in P2 (plan section 8: Deep Scan is opt-in and
-  // rewarded, keys are inert). A press shows one line; under static it stays up.
+  // Share is not wired yet. A press shows one line; under static it stays up.
   const inert = () => {
     setNotice(true);
     if (harness.isStatic) return;
@@ -174,16 +189,15 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     );
   }
 
-  // Fixed four-slot row: BACK, SHARE, THERM (PHOTO while it shows), then the primary slot. DEEP SCAN
-  // takes the far right on ACTIVE and up and is a dummy cap below that.
-  const deepScan = record.outcome.tier !== 'quiet' && record.outcome.tier !== 'trace';
+  // Fixed four-slot row: BACK, SHARE, THERM (PHOTO while it shows), then a dummy cap. DEEP SCAN is
+  // the key on the glass under the decoded signature (it leads into it), not a hardware slot.
   const keySlots: (KeySlot | null)[] = [
     { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder },
     { testID: 'key-share', label: copy.shareLabel, legend: copy.share, onPress: inert },
     therm
       ? { testID: 'key-therm', label: copy.photoKeyLabel, legend: copy.photoKey, onPress: () => setTherm(false), backlit: true }
       : { testID: 'key-therm', label: copy.thermKeyLabel, legend: copy.thermal, onPress: () => setTherm(true) },
-    deepScan ? { testID: 'key-deepscan', label: copy.deepLabel, legend: copy.deep, onPress: inert, primary: true } : null,
+    null,
   ];
 
   return (
@@ -193,7 +207,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       fixedIdentity={harness.isStatic}
       glassLabel={copy.glass}
       keys={keySlots}
-      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}` }}
+      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}-${deep.state}` }}
     >
       {(size) => (
         <ResultGlass
@@ -204,6 +218,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
           notice={notice}
           scare={scareMode}
           therm={therm}
+          deep={deep}
           onPhotoLoaded={setPhotoLoaded}
           onStable={setStable}
         />
@@ -238,11 +253,12 @@ type GlassProps = {
   notice: boolean;
   scare: ScareMode;
   therm: boolean;
+  deep: { state: DeepState; press: () => void };
   onPhotoLoaded: (loaded: boolean) => void;
   onStable: (stable: boolean) => void;
 };
 
-function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPhotoLoaded, onStable }: GlassProps) {
+function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, deep, onPhotoLoaded, onStable }: GlassProps) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -326,7 +342,8 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
   const mainLine =
     tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
   const resultLine = notice ? copy.notFitted : mainLine;
-  const pct = profile.signatureDecodedPct;
+  const unlocked = deep.state === 'unlocked';
+  const pct = unlocked ? 100 : profile.signatureDecodedPct;
   const innerW = size.w - 24;
   const best = useMemo(() => (quiet ? bestSoFar(listScans(), record.id) : null), [quiet, record.id]);
 
@@ -335,6 +352,8 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
   const evpLen = 16 + Math.floor(mulberry32((record.seed ^ 0xe7e7) >>> 0)() * 15);
   const hiddenLen = [profile.name.length, profile.traits?.[0]?.length ?? 28, evpLen];
   const maskMax = innerW - LABEL_W;
+  // What DEEP SCAN resolves: the designation, the first behaviour line and the EVP fragment.
+  const unlockedValues = [profile.name, profile.traits?.[0] ?? '', evpLine(record.seed)];
 
   return (
     <View style={s.glass}>
@@ -348,6 +367,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
         therm={therm}
         thermalC={deltaC}
         stamp={stamp}
+        hires={unlocked}
         onPhotoLoaded={onPhotoLoaded}
       />
       <View style={s.body}>
@@ -413,24 +433,24 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
             <>
               <ProfileRow label={copy.classLabel} value={profile.class} />
               <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '').toUpperCase()} valueTestID="profile-era" />
-              {copy.hidden.map((l, i) => (
-                <ProfileRow key={l} label={l} maskW={Math.min(maskMax, Math.round(hiddenLen[i]! * CHAR_XS))} />
-              ))}
+              {copy.hidden.map((l, i) =>
+                unlocked ? (
+                  <ProfileRow key={l} label={l} value={unlockedValues[i]} valueTestID={`profile-${PROFILE_IDS[i]}`} />
+                ) : (
+                  <ProfileRow key={l} label={l} maskW={Math.min(maskMax, Math.round(hiddenLen[i]! * CHAR_XS))} />
+                ),
+              )}
             </>
           )}
         </View>
         {quiet ? null : (
           <View style={s.decodedBlock}>
-            <Text style={s.decoded} testID="result-decoded">{`${copy.decoded} ${pct}%`}</Text>
+            <Text style={s.decoded} testID="result-decoded">{unlocked ? deepCopy.decoded : `${copy.decoded} ${pct}%`}</Text>
             <DecodeBar pct={pct} />
           </View>
         )}
         {quiet ? null : <View style={s.spacer} />}
-        {wide ? (
-          <Text style={s.offer} testID="result-offer">
-            {copy.offer}
-          </Text>
-        ) : null}
+        {wide ? <DeepKey state={deep.state} onPress={deep.press} /> : null}
         {quiet ? (
           <View style={s.best} testID="result-best">
             {best ? (
@@ -450,6 +470,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, onPh
 }
 
 const LABEL_W = 88;
+const PROFILE_IDS = ['name', 'behaviour', 'evp'] as const;
 const SPI_PAD = 12; // canvas margin around the digit so the bloom is not clipped
 const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
@@ -457,7 +478,48 @@ function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value
   return (
     <View style={s.profRow}>
       <Text style={s.profLabel}>{label}</Text>
-      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={s.profileValue} testID={valueTestID}>{value}</Text>}
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
+    </View>
+  );
+}
+
+// The DEEP SCAN key on the glass, directly under the decoded signature it leads into. The sublabel
+// is always drawn while the key is offered. Disabled states print their reason in the key itself.
+const DEEP_LEGEND: Record<Exclude<DeepState, 'unlocked'>, string> = {
+  ready: deepCopy.legend,
+  warming: deepCopy.warming,
+  offline: deepCopy.offline,
+  running: deepCopy.running,
+};
+
+function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) {
+  if (state === 'unlocked') {
+    return (
+      <Text style={s.deepDone} testID="deepscan-done">
+        {deepCopy.done}
+      </Text>
+    );
+  }
+  const live = state === 'ready';
+  return (
+    <View style={s.deepWrap}>
+      <Pressable
+        testID="deepscan-key"
+        accessibilityRole="button"
+        accessibilityLabel={live ? deepCopy.label : DEEP_LEGEND[state]}
+        accessibilityState={{ disabled: !live }}
+        disabled={!live}
+        hitSlop={{ top: 6, bottom: 6 }}
+        onPress={onPress}
+        style={[s.deepKey, live ? s.deepKeyLive : s.deepKeyOff]}
+      >
+        <Text style={[s.deepLegend, live ? { color: color.p5 } : { color: color.p2 }]} numberOfLines={1}>
+          {DEEP_LEGEND[state]}
+        </Text>
+      </Pressable>
+      <Text style={s.deepSub} testID="deepscan-sub">
+        {deepCopy.sub}
+      </Text>
     </View>
   );
 }
@@ -475,6 +537,17 @@ function DecodeBar({ pct }: { pct: number }) {
 }
 
 type Layout = { placement: Placement; region: ReturnType<typeof panelRegion>; meanLuma: number; top: number } | null;
+
+// DEEP SCAN unlock: the compositor is asked for a larger output through its width and height (it
+// rasterises at width x pixel ratio), and the result is shown at panel size. k = 1 draws as before.
+function HiRes({ k, width, height, children }: { k: number; width: number; height: number; children: (k: number) => ReactNode }) {
+  if (k === 1) return <>{children(1)}</>;
+  return (
+    <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">
+      <View style={{ width: width * k, height: height * k, transform: [{ scale: 1 / k }], transformOrigin: 'top left' }}>{children(k)}</View>
+    </View>
+  );
+}
 
 // A flat mid-grey grid for a photo that cannot be read (the thermal view still has a room to draw).
 const FLAT_GRID: LumaGrid = { luma: new Uint8Array(72 * 96).fill(128), width: 72, height: 96 };
@@ -510,6 +583,7 @@ function PhotoPanel({
   therm,
   thermalC,
   stamp,
+  hires,
   onPhotoLoaded,
 }: {
   size: GlassSize;
@@ -521,6 +595,7 @@ function PhotoPanel({
   therm: boolean;
   thermalC: number;
   stamp: string;
+  hires: boolean;
   onPhotoLoaded: (loaded: boolean) => void;
 }) {
   const { outcome, photoUri, seed, id } = record;
@@ -616,25 +691,29 @@ function PhotoPanel({
           <V1Boundary onFail={() => setV1Failed(true)}>
             {/* Before the needle settles the photo shows alone (disabled draws photo and grain); the
                 figure's fade starts when the composite is mounted again at settle. */}
-            <Composite
-              key={showGhost ? 'figure' : 'photo'}
-              photo={image}
-              width={W}
-              height={height}
-              photoRect={{ x: 0, y: top, width: W, height: imgH }}
-              region={layout.region}
-              meanLuma={layout.meanLuma}
-              p80Luma={read.result?.p80Luma}
-              p90Luma={read.result?.p90Luma}
-              grid={read.result?.grid}
-              placement={layout.placement}
-              tier={outcome.tier}
-              seed={placementSeed}
-              static={isStatic}
-              fadeInMs={FADE_MS}
-              pop={pop}
-              disabled={!showGhost}
-            />
+            <HiRes k={hires ? HIRES_SCALE : 1} width={W} height={height}>
+              {(k) => (
+                <Composite
+                  key={showGhost ? 'figure' : 'photo'}
+                  photo={image}
+                  width={W * k}
+                  height={height * k}
+                  photoRect={{ x: 0, y: top * k, width: W * k, height: imgH * k }}
+                  region={layout.region}
+                  meanLuma={layout.meanLuma}
+                  p80Luma={read.result?.p80Luma}
+                  p90Luma={read.result?.p90Luma}
+                  grid={read.result?.grid}
+                  placement={k === 1 ? layout.placement : scalePlacement(layout.placement, k)}
+                  tier={outcome.tier}
+                  seed={placementSeed}
+                  static={isStatic}
+                  fadeInMs={FADE_MS}
+                  pop={pop}
+                  disabled={!showGhost}
+                />
+              )}
+            </HiRes>
           </V1Boundary>
         ) : null
       ) : (
@@ -721,10 +800,17 @@ const s = StyleSheet.create({
   profRow: { flexDirection: 'row', alignItems: 'center', height: 16 },
   profLabel: { ...type.lbXS, width: LABEL_W, color: color.p3 },
   profileValue: { ...type.rdXS, color: color.p4 },
+  profileFit: { flexShrink: 1 },
   mask: { height: 8, backgroundColor: color.p2 },
   decodedBlock: { marginTop: BODY.gap, gap: 2 },
   spacer: { flex: 1, minHeight: BODY.gap },
-  offer: { ...type.rdXS, color: color.p4, marginBottom: BODY.gap },
+  deepWrap: { marginBottom: BODY.gap },
+  deepKey: { height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  deepKeyLive: { borderColor: color.p3 },
+  deepKeyOff: { borderColor: color.p1 },
+  deepLegend: { ...type.rdXS },
+  deepSub: { ...type.lbXS, color: color.p3, height: 12, textAlign: 'center' },
+  deepDone: { ...type.rdXS, color: color.p4, height: BODY.offer - 4, marginBottom: BODY.gap },
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },

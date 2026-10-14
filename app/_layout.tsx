@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { ensureConsent } from '../src/ads';
 import { track } from '../src/analytics';
 import { useSkiaReady } from '../src/fx/useSkiaReady';
+import { startCadence } from '../src/ui/interstitial';
 import { readHarness } from '../src/ui/harness';
 import { color } from '../src/ui/tokens';
 
@@ -21,6 +22,10 @@ export default function RootLayout() {
     void ensureConsent().then((c) => {
       if (c.status === 'notRequired' || c.status === 'obtained') track('consent_status', { status: c.status });
     });
+  }, []);
+  // The cadence machine hears appLaunch and the first session once per process.
+  useEffect(() => {
+    startCadence();
   }, []);
   const [loaded] = useFonts({ VT323_400Regular, B612Mono_400Regular, B612Mono_700Bold });
   // Web waits for CanvasKit (Skia's wasm backend) before the first screen; native is ready at once.
