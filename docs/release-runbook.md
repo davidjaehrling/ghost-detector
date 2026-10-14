@@ -65,3 +65,19 @@ Replacing the three placeholders in `src/ads/adUnits.ts` and the app ID in `app.
   aapt dump xmltree app-release.apk AndroidManifest.xml | grep -A2 firebase_messaging_auto_init_enabled
   ```
   The value must read `0x0` (false). With `adb shell` network capture or a proxy, confirm no request to `fcm.googleapis.com` or `firebaseinstallations.googleapis.com` before the consent dialog is answered.
+
+## Web preview on GitHub Pages
+
+URL: `https://davidjaehrling.github.io/ghost-detector/`. The workflow `.github/workflows/pages.yml` runs on every push to `main` and on manual dispatch. It runs `EXPO_PUBLIC_BASE_URL=/ghost-detector pnpm web:export`, copies `dist/index.html` to `dist/404.html` (so a direct link such as `/ghost-detector/viewfinder` loads), and deploys `dist` with `actions/deploy-pages@v4`.
+
+Owner step, once: repository Settings, Pages, Source: GitHub Actions. Then run the `pages` workflow from the Actions tab, or merge to `main`.
+
+`app.config.js` loads `app.json` and sets `expo.experiments.baseUrl` only when `EXPO_PUBLIC_BASE_URL` is set. Without it, the Playwright harness, CI and local dev stay at the root path.
+
+- Works on web: glass (instrument), scan, composite, log, settings.
+- Stubs on web: ads, haptics, audio, notifications, share sheet.
+- The preview shows the same notice as the app: readings are generated in software and the unit detects nothing.
+
+Blocker (needs a `src/fx/` change by the FX Engineer): `src/fx/loadSkia.web.ts` line 9 passes `locateFile: (file: string) => '/' + file` to CanvasKit, an absolute path. Under `/ghost-detector/` the wasm request goes to `/canvaskit.wasm` and returns 404, CanvasKit never loads and the boot screen stays blank. Verified locally: with the template string changed to `${process.env.EXPO_BASE_URL ?? ''}/${file}` the wasm loads from `/ghost-detector/canvaskit.wasm` and the boot screen renders. Until that lands, the deployed page is blank.
+
+Local check of the subpath build: export with the env var, serve `dist` under `/ghost-detector/`, open it in Playwright, and watch for 404s on `canvaskit.wasm` and the font files.
