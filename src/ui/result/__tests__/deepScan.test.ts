@@ -1,6 +1,75 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { placeGhost } from '../../../fx/ghostV0/placement';
 import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../deepCopy';
+import { resetDeepScanSession, useDeepScan } from '../deepScan';
+
+// A minimal hook runtime: enough React to drive useDeepScan without a renderer.
+const rt = vi.hoisted(() => {
+  const r = {
+    slots: [] as unknown[],
+    i: 0,
+    dirty: false,
+    effects: [] as { slot: number; fn: () => void | (() => void); deps: unknown[] }[],
+  };
+  return r;
+});
+vi.mock('react', () => ({
+  useState: (init: unknown) => {
+    const n = rt.i++;
+    if (!(n in rt.slots)) rt.slots[n] = typeof init === 'function' ? (init as () => unknown)() : init;
+    return [
+      rt.slots[n],
+      (v: unknown) => {
+        rt.slots[n] = v;
+        rt.dirty = true;
+      },
+    ];
+  },
+  useRef: (init: unknown) => {
+    const n = rt.i++;
+    if (!(n in rt.slots)) rt.slots[n] = { current: init };
+    return rt.slots[n];
+  },
+  useSyncExternalStore: (_sub: unknown, get: () => unknown) => (rt.i++, get()),
+  useEffect: (fn: () => void | (() => void), deps: unknown[]) => {
+    const n = rt.i++;
+    const prev = rt.slots[n] as unknown[] | undefined;
+    if (!prev || prev.some((d, k) => d !== deps[k])) {
+      rt.slots[n] = deps;
+      rt.effects.push({ slot: n, fn, deps });
+    }
+  },
+}));
+
+const track = vi.fn();
+const show = vi.fn(async () => ({ shown: true, earned: true }));
+vi.mock('../../../analytics', () => ({ track: (e: string) => track(e) }));
+vi.mock('../../../ads', () => ({
+  ensureConsent: async () => ({}),
+  canRequestAds: () => true,
+  rewarded: { subscribe: () => () => {}, status: () => 'ready', load: async () => true, show: () => show() },
+}));
+vi.mock('../../../state/useConsent', () => ({ useConsent: () => ({ status: 'obtained', canRequestAds: true }) }));
+vi.mock('../../../state/scans', () => ({ unlockDeepScan: vi.fn() }));
+vi.mock('../../interstitial', () => ({ onRewardedShown: vi.fn() }));
+
+function renderDeepScan() {
+  let out!: ReturnType<typeof useDeepScan>;
+  const render = () => {
+    for (let pass = 0; pass < 5; pass++) {
+      rt.i = 0;
+      rt.dirty = false;
+      // The harness stands in for a component render, so the hook is called here on purpose.
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      out = useDeepScan({ id: 'scan-1', enabled: true, unlockedAt: undefined, persist: false });
+      const todo = rt.effects.splice(0);
+      for (const e of todo) e.fn();
+      if (!rt.dirty && todo.length === 0) break;
+    }
+    return out;
+  };
+  return render;
+}
 
 const BANNED = [/\bfree\b/i, /unlock now/i, /tap to continue/i, /continue scan/i, /\breal\b/i, /\btruer\b/i, /\baccurate\b/i, /\bactual\b/i];
 
@@ -36,5 +105,36 @@ describe('scalePlacement', () => {
     expect(q.offsetCopies.map((c) => c.alpha)).toEqual(p.offsetCopies.map((c) => c.alpha));
     expect(q.offsetCopies.map((c) => c.dx)).toEqual(p.offsetCopies.map((c) => c.dx * 2));
     if (p.echo) expect(q.echo?.dy).toBe(p.echo.dy * 2);
+  });
+});
+
+describe('DEEP SCAN analytics', () => {
+  beforeEach(() => {
+    rt.slots = [];
+    rt.effects = [];
+    track.mockClear();
+    show.mockClear();
+    resetDeepScanSession();
+  });
+
+  it('tracks deep_scan_offered once when the key goes live, and not deep_scan_rewarded yet', () => {
+    const render = renderDeepScan();
+    expect(render().state).toBe('ready');
+    render();
+    expect(track.mock.calls).toEqual([['deep_scan_offered']]);
+  });
+
+  it('tracks deep_scan_rewarded when the reward is earned', async () => {
+    const render = renderDeepScan();
+    await render().press();
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(track.mock.calls).toEqual([['deep_scan_offered'], ['deep_scan_rewarded']]);
+  });
+
+  it('does not track deep_scan_rewarded when the ad is dismissed without the reward', async () => {
+    show.mockResolvedValueOnce({ shown: true, earned: false });
+    const render = renderDeepScan();
+    await render().press();
+    expect(track).not.toHaveBeenCalledWith('deep_scan_rewarded');
   });
 });
