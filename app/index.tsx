@@ -26,7 +26,7 @@ import {
 import { dayKey } from '../src/ui/boot/seed';
 import { selfTestReadings } from '../src/ui/boot/selftest';
 import { bootSpike } from '../src/fx/scope';
-import { PrimingTransient, transientLine, usePrimingTransient } from '../src/ui/boot/Transient';
+import { PrimingTransient, usePrimingTransient } from '../src/ui/boot/Transient';
 import { Readout } from '../src/ui/Readout';
 import { composeFields } from '../src/ui/readoutFields';
 import { Housing } from '../src/ui/screens/Housing';
@@ -39,7 +39,6 @@ const copy = copyOf({
   trig: 'hud.trig',
   timebase: 'hud.timebase',
   selftestOk: 'boot.selftestOk',
-  transient: 'boot.transient',
   actIdx: 'boot.actIdx',
   moon: 'boot.moon',
   nextPeak: 'boot.nextPeak',
@@ -218,7 +217,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
               {calibrating ? null : <Text style={s.stM}>{copy.selftestOk.slice(0, Math.max(0, typed - lineLen.reduce((n, p) => n + p, 0)))}</Text>}
               {calibrating ? null : (
                 <Text style={[s.transient, { opacity: transient.logged ? 1 : 0 }]} testID="transient">
-                  {transientLine(copy.transient, spikeParams.count)}
+                  {t('boot.transient', { count: spikeParams.count })}
                 </Text>
               )}
               <View style={s.activity}>

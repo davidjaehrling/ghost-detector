@@ -93,8 +93,3 @@ export function PrimingTransient({
     </View>
   );
 }
-
-/** The boot line with this launch's event count in place of the catalogue's `1`. */
-export function transientLine(text: string, count: number): string {
-  return text.replace(/\b1\b/, String(count));
-}
