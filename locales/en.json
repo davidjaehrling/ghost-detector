@@ -100,7 +100,7 @@
   "share.keyLabel": "Share result",
   "share.cancel": "CANCEL",
   "share.cancelLabel": "Cancel",
-  "share.ready": "Field card ready. CASE {id}.",
+  "share.ready": "Field card ready. SHARE prints it.",
   "share.updated": "Field card updated. Class and EVP added.",
   "share.format": "Print field card. Format?",
   "share.story": "9:16",

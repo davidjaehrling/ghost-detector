@@ -3,7 +3,7 @@ import { HIRES_SETTLE_MS, OFFER_DELAY_MS, OFFER_TIERS, offerDueAt, shareCopy } f
 
 describe('share copy', () => {
   it('carries the brief strings exactly', () => {
-    expect(shareCopy.ready('0041')).toBe('Field card ready. CASE 0041.');
+    expect(shareCopy.ready()).toBe('Field card ready. SHARE prints it.');
     expect(shareCopy.updated).toBe('Field card updated. Class and EVP added.');
     expect(shareCopy.format).toBe('Print field card. Format?');
     expect([shareCopy.story, shareCopy.square, shareCopy.cancel]).toEqual(['9:16', '1:1', 'CANCEL']);

@@ -444,7 +444,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
 
   const mainLine =
     tier === 'critical' ? resultLineFor(tier, reading.evpHz) : resultLineFor(tier, 0);
-  const resultLine = share.mode === 'fault' ? shareCopy.fault : share.line === 'ready' ? shareCopy.ready(record.id) : share.line === 'updated' ? shareCopy.updated : mainLine;
+  const resultLine = share.mode === 'fault' ? shareCopy.fault : share.line === 'ready' ? shareCopy.ready() : share.line === 'updated' ? shareCopy.updated : mainLine;
   const lineCount = PINNED_TIERS.includes(tier) ? 2 : 1;
   const sharePanel = share.mode === 'format' || share.mode === 'printing';
   // No ad-starting key shares the glass with the share moment: the offer line, format, printing, fault.

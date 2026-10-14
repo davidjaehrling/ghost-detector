@@ -87,7 +87,7 @@ test('ACTIVE: the line comes 3.0 s after the reveal settles, once, and goes afte
   });
   await page.goto(`${ACTIVE}&share=timer`);
   await expect(page.getByTestId('result-tier')).toHaveText('ACTIVE');
-  await offerAt(page, 'Field card ready. CASE 0007.');
+  await offerAt(page, 'Field card ready. SHARE prints it.');
   const t = await page.evaluate(() => (window as unknown as { __t: { mount: number; offer: number } }).__t);
   // 3.0 s after the settle (exact in the unit test); the settle is the mount plus the font load, and
   // the observer reports a mount late, so the window here is loose.
@@ -150,7 +150,7 @@ test('no proactive line while a rewarded ad plays, nor within 3 s after it close
   });
   await page.goto(`${STRONG}&share=timer&adReady=1&reward=0`);
   // The line was due about 3.0 s after the settle; the ad closed right after the press, so it waits.
-  await expect(page.getByTestId('result-line')).toHaveText('Field card ready. CASE 0003.', { timeout: 15_000 });
+  await expect(page.getByTestId('result-line')).toHaveText('Field card ready. SHARE prints it.', { timeout: 15_000 });
   const log = await readLog(page);
   const press = log.presses[1]!;
   // A line that was up just before the press is taken off by the ad; the one that follows is the one counted.
@@ -264,7 +264,7 @@ test('goldens: the offer line and the format choice', async ({ page }, testInfo)
   test.skip(testInfo.project.name !== 'android-390x844', 'goldens at 390 only');
   const check = watch(page);
   await page.goto(`${ACTIVE}&share=offer`);
-  await offerAt(page, 'Field card ready. CASE 0007.');
+  await offerAt(page, 'Field card ready. SHARE prints it.');
   await settle(page);
   await expect(page).toHaveScreenshot('result-share-offer.png', { maxDiffPixels: 150 });
   await page.goto(`${ACTIVE}&share=format`);
@@ -278,7 +278,7 @@ test('no ad-starting key shares the glass with the share moment', async ({ page 
   const check = watch(page);
   // The offer line is up: key 4 is a dark cap and nothing sponsored prints, the SHARE legend is lit (p5).
   await page.goto(`${ACTIVE}&share=offer`);
-  await offerAt(page, 'Field card ready. CASE 0007.');
+  await offerAt(page, 'Field card ready. SHARE prints it.');
   await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
   await expect(page.getByTestId('deepscan-line')).toHaveCount(0);
   await expect(page.getByText(/sponsored video/i)).toHaveCount(0);

@@ -100,7 +100,7 @@
   "share.keyLabel": "Partilhar resultado",
   "share.cancel": "CANCELAR",
   "share.cancelLabel": "Cancelar",
-  "share.ready": "Ficha de campo pronta. CASE {id}.",
+  "share.ready": "Ficha pronta. ENVIAR imprime-a.",
   "share.updated": "Ficha de campo atualizada. Classe e EVP acrescentados.",
   "share.format": "Imprimir ficha de campo. Formato?",
   "share.story": "9:16",

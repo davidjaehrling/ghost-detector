@@ -146,7 +146,7 @@ test('INTENSITY cycles CALM, STANDARD, BRAVE, persists, and Calm turns the scare
 test('the relay row reads FIELD LOG RELAY with one help line', async ({ page }) => {
   await page.goto('/settings?static=1');
   await expect(page.getByTestId('setting-relay')).toContainText('FIELD LOG RELAY');
-  await expect(page.getByTestId('setting-relay-help')).toHaveText('Max 1 line a night. 18:00 to 22:00.');
+  await expect(page.getByTestId('setting-relay-help')).toHaveText('Max 1 line a night. 18:00 to 22:00. CALM sends fewer.');
 });
 
 const locale = (lang: string) => JSON.parse(readFileSync(join(__dirname, '..', '..', 'locales', `${lang}.json`), 'utf8')) as Record<string, string>;

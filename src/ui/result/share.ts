@@ -19,7 +19,7 @@ export const shareCopy = {
   get cancelLabel() {
     return t('share.cancelLabel');
   },
-  ready: (id: string) => t('share.ready', { id }),
+  ready: () => t('share.ready'),
   get updated() {
     return t('share.updated');
   },
