@@ -92,8 +92,10 @@ export function extraKeys(enTbl: EngineStrings, other: EngineStrings): string[] 
 }
 /** Keys whose placeholder set differs from `en`'s (a translated template must keep every name). */
 export function placeholderMismatches(enTbl: EngineStrings, other: EngineStrings): string[] {
-  return Object.keys(enTbl).filter((k) => other[k] !== undefined
-    && placeholders(enTbl[k]!).join() !== placeholders(other[k]!).join());
+  // Case variants of a name are one pair ({tag} / {Tag}): German nouns take a capital where
+  // EN/ES/PT keep the lowercase tag mid-sentence, so the casing may differ per locale.
+  const names = (t: string) => [...new Set(placeholders(t).map((n) => n.toLowerCase()))].sort().join();
+  return Object.keys(enTbl).filter((k) => other[k] !== undefined && names(enTbl[k]!) !== names(other[k]!));
 }
 
 /**

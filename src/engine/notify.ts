@@ -260,7 +260,7 @@ function build(id: TemplateId, c: Ctx): Notification | null {
       return {
         templateId: 4, fireAtMs: t, caseId: c4.caseId,
         title: T('t4.title', { prefix: base.prefix, caseId: pad4(c4.caseId) }),
-        body: T(tag ? 't4.body' : 't4.body.untagged', { pct: fmt(Math.round(c4.decodedPct)), time, tag: tag ?? '' }),
+        body: T(tag ? 't4.body' : 't4.body.untagged', { pct: fmt(Math.round(c4.decodedPct)), time, tag: tag ?? '', Tag: cap1(tag ?? '') }),
       };
     }
     case 5: {
