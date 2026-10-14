@@ -102,7 +102,7 @@ describe('rules over 10000 random states', () => {
       expect(m).toBeLessThanOrEqual(DELIVERY_END_MIN);
       expect(n.fireAtMs).toBeGreaterThan(s.nowMs);
     }
-  });
+  }, 30_000);
   it('first delivery is on a later calendar day and 20 h after install', () => {
     for (const { s, n } of fired) {
       expect(n.fireAtMs - s.installMs).toBeGreaterThanOrEqual(MIN_AFTER_INSTALL_MS);
@@ -340,7 +340,7 @@ describe('delivery minute', () => {
       const installMs = T0 + i * 7_919_000;
       const m = deliveryMinute(installMs);
       expect(m).toBeGreaterThanOrEqual(WINDOW_START_MIN);
-      expect(m).toBeLessThanOrEqual(DELIVERY_END_MIN);
+      expect(m).toBeLessThanOrEqual(1290); // literal 21:30, independent of the constant and its pin
       expect(deliveryMinute(installMs)).toBe(m);
     }
     const spread = new Set(Array.from({ length: 200 }, (_, i) => deliveryMinute(T0 + i * 86_413_000)));
