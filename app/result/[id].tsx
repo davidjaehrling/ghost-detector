@@ -851,7 +851,8 @@ function DataStrip({ text, width, height, font }: { text: string; width: number;
   const base = STRIP_H - 8;
   const textW = font ? font.measureText(text).width : 0;
   // A longer line (a long locale, a narrow phone) is scaled down so the mark at its end is never cut off.
-  const k = textW > 0 ? Math.min(1, (width - 2 * STRIP_X) / textW) : 1;
+  const avail = width - 2 * STRIP_X;
+  const k = textW > avail + 2 ? avail / textW : 1; // a line within 2 px of fitting is left alone, so a fitting line keeps its size
   const scrimW = font ? Math.min(width, textW * k + 2 * STRIP_X) : 0;
   // Web only (`data-*`): the drawn text width after scaling, so the layout goldens can assert the mark fits the strip.
   const web = { dataSet: { textW: String(Math.ceil(textW * k)) } } as object;
