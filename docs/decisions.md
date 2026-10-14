@@ -187,3 +187,8 @@ Weighted means (Hollow x2, Art): boot 7.43 (min 5.67), viewfinder 7.29 (min 6.0)
 - Owner item: Compliance recommends the Play target audience at 16+ (Germany's digital consent age), which the plan already names as ideal; adopted as the working default for P9 and the privacy policy, for the owner to confirm at Gate 2.
 - Launch blockers recorded: the privacy policy and the Impressum must be hosted at live public URLs before the Play submission; the share card (P6) carries a small SIMULATED mark.
 - Docs delivered (b15a17c): docs/privacy-policy.md, docs/data-safety.md, docs/impressum.md with placeholders only.
+
+## 2026-10-14 · D-027 · Boot golden flake: glass-warp snapshot before glyphs
+- CI on PR #5 (7de067d) failed `boot.png` at 428x926 by 1385 px. QA reproduced it under Chromium CPU throttle x12 on both 7de067d and `main` 208dbbe: the glass-warp snapshot of the boot screen sometimes captures the Skia canvas before the two `<PhosphorText>` rows (ACT IDX, MOON) have loaded VT323 and drawn, and the warped image then lacks that row for good because `refreshKey` is fed by a separate font hook. A second mode under heavy throttle captures the frame before the warp lands (the spec's fixed 600 ms wait). The P5 consent effect is not involved (no state change, same odds on main). The golden is correct and stays.
+- Fix: `PhosphorText` gets `onReady`, `GlassWarp` gets `onSnapshot` and a `data-warped` attribute (FX Engineer); `app/index.tsx` feeds the retake from the rows' readiness (Builder A); the boot spec waits on `data-warped` instead of sleeping (QA). Carried in this PR because the flake can be made robust within it.
+- Cost: QA diagnosis 126k.
