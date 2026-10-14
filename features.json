@@ -1226,7 +1226,7 @@
       "id": "P7-02",
       "phase": "P7",
       "description": "Engine copy as locale resources",
-      "acceptance": "The profile bank (class names, designations, behaviour lines, EVP lines, lore lines) and the notification templates become locale-keyed resources in `locales/<lang>.json`; `src/engine` functions take a strings table as an input (pure, no locale detection in the engine) and keep their seeds and distributions byte-identical in `en` (existing tests pass unchanged); the claim-word and banned-word tests run per locale against per-language lists; key parity across the four locales is a test",
+      "acceptance": "The profile bank (class names, designations, behaviour lines, EVP lines, lore lines) and the notification templates become locale-keyed resources in `locales/engine/<lang>.json` (merged by the i18n loader into one namespace, prefixed `engine.`); `src/engine` functions take a strings table as an input (pure, no locale detection in the engine) and keep their seeds and distributions byte-identical in `en` (existing tests pass unchanged); the claim-word and banned-word tests run per locale against per-language lists; key parity across the four locales is a test",
       "evidence": [],
       "passes": false
     },
