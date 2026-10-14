@@ -71,6 +71,46 @@ words (simulated, "detects nothing", video and an advertising word).
 Left in code on purpose: the brand plate `VELDEN  FS-4/87-P`, the sticker stamps `CAL` and `PRÜF`, the
 unit strings, serial numbers and the dev-only probe pages (`app/*-probe.tsx`).
 
+## Per-language notes (P7-03)
+
+Register (D-038): instrument surfaces are impersonal in every language; `Sie` (DE), `usted` (ES) and the polite third person with `o utilizador` (PT) appear only on consequence surfaces (Deep Scan, permission rationale, relay opt-in, consent, Settings help, legal) and never share a screen with the other register. A consequence line that needs no pronoun stays impersonal.
+
+Kept English everywhere: tier names, `CASE`, `DEEP SCAN`, fault codes, serials, `SPI`, `IDX`, `CH`, `EVP`, `GEO`, units, the brand plate, the `profile.prefix.*` three-letter codes (they are serial codes, so they no longer match the localised class word) and the language names.
+
+Number and plural handling: no digit is typed in a string except the fixed instrument constants the English file already hard-codes (`2048`, `100%`, `12%`, `8%`, `650 mG`, `30 cm`, `03:00`). Everything else goes through placeholders. `log.cases_*` and `history.*` count nouns use the local word (`FALL`/`FÄLLE`, `CASO(S)`); the code word `CASE` stays English next to a number.
+
+Open question for Builder A: engine notifications take `{tag}` from the stored tag id (`cellar`, `attic`). If the id is printed as is, a German notification reads `... · CELLAR`. The templates are ready for a localised tag, but the code has to pass the localised word (`tag.<id>`). `notify.lore.<id>` keys are looked up by the same id, so they stay English-keyed.
+
+### DE
+
+- Variant: standard German. Instrument voice is the infinitive or noun style of a technical manual. `Sie` on the camera rationale (`Ihr Gerät`) and the relay opt-in; the `du` of the old voice guide is gone.
+- Rewritten, not translated: location tags and lore (`Dachstuhl`, `First`, `Zugluft`, `Türzargen`, `Kachelofen`, `Dachschräge`), the 24 class names (`NACHBILD`, `IRRLICHT`, `RAUNEN`, `HÜTER`, `SIEDLER` ...), attachments in German housing (Altbau, Kachelofen, Treppenhaus), the EVP fragments, `QUIT` for `ACK` (the German word for acknowledging on a control panel), `FELD` for `FLUX` (the HUD already says field), `KÄLTEPUNKT`, `FELDKARTE`, `FELDPROTOKOLL`.
+- No word from the claim list is used for a class: `PRESENCE` became `GEGENWART` because `Präsenz*` is listed.
+- Abbreviation table (legend or short form; English length in brackets, budget = English + 2):
+
+| Key | EN | DE |
+| --- | --- | --- |
+| `boot.key` | ACK (3) | QUIT (4) |
+| `history.next` | SETUP (5) | SETUP (5) |
+| `settings.next`, `legal.next` | BACK (4) | ZURÜCK (6) |
+| `scan.cancel`, `share.cancel` | CANCEL (6) | ABBRUCH (7) |
+| `viewfinder.hud.allow` | ALLOW (5) | ZUGANG (6) |
+| `viewfinder.hud.log` | LOG (3) | LOG (3) |
+| `viewfinder.hud.capture` | CAPTURE (7) | AUFNAHME (8) |
+| `result.photoKey` | PHOTO (5) | FOTO (4) |
+| `result.back` | NEW SCAN (8) | NEUER SCAN (10, two lines) |
+| `share.key` | SHARE (5) | TEILEN (6) |
+| `onboarding.unsure` | NOT SURE (8) | UNSICHER (8) |
+| `onboarding.skip` | SKIP (4) | WEITER (6) |
+| `relay.fit` | FIT RELAY (9) | EINBAUEN (8) |
+| `relay.notNow` | NOT NOW (7) | SPÄTER (6) |
+| `history.emptyLegend` | VIEW FINDER (11) | SUCHER (6) |
+| `settings.open`, `legal.open` | OPEN (4) | ÖFFNEN (6) |
+| `tag.short.*` | CELLAR ATTIC BEDROOM HALL OUTSIDE | KELLER DACH SCHLAFZ. FLUR AUSSEN |
+
+- Longer than the +35% allowance and worth a layout look: `settings.legal` is `RECHT` (5) to stay short; `viewfinder.hud.stored` is `SU · GESP.`; `history.relayOn` is `FELDPROTOKOLL: EIN` (18 against 19, no stretch).
+- `result.eraLabel` is `ÄRA`, a short label that also reads as German.
+
 ## Checks
 
 `pnpm test` fails when code uses a key that `en.json` lacks, when an `en.json` key is not referenced,
