@@ -115,6 +115,12 @@ describe('rules over 10000 random states', () => {
       expect(s.sent.some((x) => localDayNumber(x.sentAtMs, s.utcOffsetMin) === day)).toBe(false);
     }
   });
+  it('no line on the night after a sent line', () => {
+    for (const { s, n } of fired) {
+      const day = localDayNumber(n.fireAtMs, s.utcOffsetMin);
+      expect(s.sent.some((x) => localDayNumber(x.sentAtMs, s.utcOffsetMin) === day - 1)).toBe(false);
+    }
+  });
   it('weekly caps hold over every 7 day window', () => {
     for (const { s, n } of fired) {
       expect(withinWeeklyCap([...s.sent.map((x) => x.sentAtMs), n.fireAtMs], effectiveCap(s))).toBe(true);
@@ -219,8 +225,22 @@ describe('templates', () => {
     // other templates may win on a given night; scan seeds until template 4 shows
     const t4 = firstOf(4, (k) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 9 * DAY_MS, scans: [scan({ caseId: 41, atMs: day(k) - DAY_MS, decodedPct: 63 })] }));
     expect(t4.title).toBe('FIELD LOG · CASE 0041');
-    expect(t4.body).toBe('Signature 63% decoded. Unresolved.');
+    expect(t4.body).toBe('Logged 08:00. Signature 63% decoded. Unresolved.');
     expect(t4.caseId).toBe(41);
+  });
+  it('4: carries the case tag and its own logged HH:MM in local time', () => {
+    const mk = (tags: string[], utcOffsetMin: number) => (k: number) => base({
+      nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 9 * DAY_MS, utcOffsetMin,
+      scans: [scan({ caseId: 41, atMs: day(k) - DAY_MS + 7 * 60_000, decodedPct: 63, tags })],
+    });
+    const a = firstOf(4, mk(['Cellar'], 0));
+    expect(a.body).toBe('Logged 08:07, cellar. Signature 63% decoded. Unresolved.');
+    const b = firstOf(4, mk(['Cellar'], 120));
+    expect(b.body).toBe('Logged 10:07, cellar. Signature 63% decoded. Unresolved.');
+    const c = firstOf(4, mk(['real', 'attic'], 0)); // a claim-word tag is skipped
+    expect(c.body).toBe('Logged 08:07, attic. Signature 63% decoded. Unresolved.');
+    const d = firstOf(4, mk([], 0));
+    expect(d.body).toBe('Logged 08:07. Signature 63% decoded. Unresolved.');
   });
   it('5: catalogue, unlogged wording', () => {
     const n = firstOf(5, (k) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 9 * DAY_MS, catalogueCount: 7, scans: [scan({ decoded: true, newClass: true, decodedPct: 100 })] }));
@@ -356,5 +376,85 @@ describe('delivery minute', () => {
       expect(localMinuteOfDay(a.fireAtMs, off)).toBe(localMinuteOfDay(b.fireAtMs, off));
       expect(localMinuteOfDay(a.fireAtMs, off)).toBe(deliveryMinute(s.installMs));
     }
+  });
+});
+
+describe('two-night spacing (A-83)', () => {
+  it('a line sent last night pushes the next one out by a night; the scheduler never chains consecutive nights', () => {
+    const open = base({ intensity: 'brave', installMs: T0 - 20 * DAY_MS, utcOffsetMin: 0, catalogueCount: 3,
+      scans: [scan({ atMs: T0 - HOUR_MS, decoded: true, newClass: true, decodedPct: 90 })] });
+    const first = nextNotification(open, 1)!;
+    expect(first).not.toBeNull();
+    const sentFirst: SentItem = { templateId: first.templateId, sentAtMs: first.fireAtMs, opened: true };
+    const dayOf = (ms: number) => localDayNumber(ms, 0);
+    for (let seed = 1; seed < 20; seed++) {
+      let st: NotifyState = open;
+      const nights: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const n = nextNotification({ ...st, scans: [scan({ caseId: 100 + i, atMs: T0 - HOUR_MS, decoded: true, newClass: true, decodedPct: 90 })], catalogueCount: 3 + i }, seed);
+        if (!n) break;
+        nights.push(dayOf(n.fireAtMs));
+        st = { ...st, sent: [...st.sent, { templateId: n.templateId, sentAtMs: n.fireAtMs, opened: true }] };
+      }
+      for (let i = 1; i < nights.length; i++) expect(nights[i]! - nights[i - 1]!).toBeGreaterThanOrEqual(2);
+    }
+    const second = nextNotification({ ...open, catalogueCount: 4, sent: [sentFirst] }, 1);
+    if (second) expect(dayOf(second.fireAtMs) - dayOf(first.fireAtMs)).toBeGreaterThanOrEqual(2);
+  });
+  it('the night right after a sent line is skipped even when it is the only eligible night', () => {
+    // Full moon window only; install old; one prior line the night before the first candidate.
+    const st = base({ intensity: 'brave', installMs: T0 - 40 * DAY_MS, scans: [scan({ atMs: T0 - HOUR_MS, decoded: true, newClass: true, decodedPct: 90 })] });
+    const n0 = nextNotification(st, 1)!;
+    const d0 = localDayNumber(n0.fireAtMs, 0);
+    const prev: SentItem = { templateId: 1, sentAtMs: n0.fireAtMs - DAY_MS, opened: true };
+    const n1 = nextNotification({ ...st, sent: [prev] }, 1);
+    // without the gap the candidate on d0 would repeat; with it the line moves at least one night later
+    expect(n1).not.toBeNull();
+    expect(localDayNumber(n1!.fireAtMs, 0)).toBeGreaterThan(d0);
+  });
+});
+
+describe('Calm sends fewer lines than Standard over a seeded year (A-71)', () => {
+  /** One simulated year: each day the scheduler is asked once; a line due within the next 24 h is recorded as sent. */
+  function year(seed: number, intensity: Intensity, openRate: number): number {
+    const r = mulberry32(seed);
+    const start = T0 + Math.floor(r() * 30) * DAY_MS;
+    let st = base({ intensity, belief: 'unsure', installMs: start - 3 * DAY_MS, nowMs: start, sent: [], scans: [], loggedTags: [], catalogueCount: 0 });
+    let count = 0;
+    for (let d = 0; d < 365; d++) {
+      const nowMs = start + d * DAY_MS + 9 * HOUR_MS;
+      const scans = st.scans.filter((x) => nowMs - x.atMs < 10 * DAY_MS);
+      let loggedTags = st.loggedTags, catalogueCount = st.catalogueCount;
+      if (r() < 0.5) {
+        const decoded = r() < 0.35, newClass = decoded && r() < 0.5;
+        scans.push(scan({ caseId: d + 1, atMs: nowMs - Math.floor(r() * 6 * HOUR_MS), decodedPct: 41 + Math.floor(r() * 33), decoded, declined: false, newClass }));
+        loggedTags = [...loggedTags, ['cellar', 'attic', 'hall'][Math.floor(r() * 3)]!];
+        if (newClass) catalogueCount = Math.min(CATALOGUE_SIZE, catalogueCount + 1);
+      }
+      st = { ...st, nowMs, lastAppOpenMs: nowMs - HOUR_MS, scans, loggedTags, catalogueCount };
+      const n = nextNotification(st, seed);
+      if (n && n.fireAtMs < nowMs + DAY_MS) {
+        count++;
+        // openRate 1 isolates cap and template set; lower rates add the ignored back-off
+        st = { ...st, sent: [...st.sent, { templateId: n.templateId, caseId: n.caseId, sentAtMs: n.fireAtMs, opened: r() < openRate }] };
+      }
+    }
+    return count;
+  }
+  for (const openRate of [1, 0.5]) {
+    it(`Calm sends fewer than Standard, which sends no more than Brave (open rate ${openRate})`, () => {
+      const tot: Record<Intensity, number> = { calm: 0, standard: 0, brave: 0 };
+      for (let seed = 1; seed <= 30; seed++) {
+        const c = year(seed, 'calm', openRate), st = year(seed, 'standard', openRate), b = year(seed, 'brave', openRate);
+        tot.calm += c; tot.standard += st; tot.brave += b;
+        if (openRate === 1) { expect(c).toBeLessThan(st); expect(st).toBeLessThanOrEqual(b); }
+      }
+      console.log(`lines over 30 simulated years, open rate ${openRate}:`, JSON.stringify(tot));
+      if (openRate === 1) expect(tot.calm).toBeLessThan(tot.standard * 0.8);
+    });
+  }
+  it('switching to Calm cancels pending lines and the new state sends no template 1, 3 or 4', () => {
+    const pending = [{ id: 'a', templateId: 1 as TemplateId, fireAtMs: T0 + DAY_MS }, { id: 'b', templateId: 4 as TemplateId, fireAtMs: T0 + 3 * DAY_MS }];
+    expect(applyIntensityChange({ intensity: 'standard' }, base({ intensity: 'calm' }), pending).cancelIds).toEqual(['a', 'b']);
   });
 });
