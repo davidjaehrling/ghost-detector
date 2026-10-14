@@ -61,10 +61,10 @@ No photo, image data, scan result text or location is part of these events. Fire
 - **Vibration:** haptic feedback during a scan. No data is read or sent.
 - **Motion and magnetic sensors:** to drive the on-screen instrument. No data is sent. On some devices high sampling rate sensor access is requested for smoother readings.
 - **Advertising ID (Google Play services):** declared because the ads SDK can read it. You can reset or delete it in Android settings.
-- **Notifications (Android 13 and later):** only if you turn on the field log relay. Notifications are scheduled on your device from the moon phase, the clock and your local log. There is no push service and no push token, and nothing is sent to us. You can turn the relay off in the app settings or in Android settings.
+- **Notifications (Android 13 and later):** only if you turn on the field log relay. Notifications are scheduled on your device from the moon phase, the clock and your local log. The notification channel is silent, and its lock-screen visibility is private, so no line content shows on the lock screen. There is no push service and no push token: the Firebase Cloud Messaging client that ships with the notification library has its automatic start switched off, and nothing is sent to us. You can turn the relay off in the app settings or in Android settings.
 - **Internet:** needed to load ads and to send analytics after consent.
 
-The app does not use the microphone, contacts, files or precise location.
+The app does not use the microphone, contacts or precise location, and it does not read your files.
 
 ## 7. Children
 
