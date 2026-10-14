@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitWarped } from './warped';
 
 // P5-04. ?static=1&demo=strong builds the result from a fixed seed. The web ads stub takes
 // ?adReady=0 (the rewarded ad never loads) and ?reward=1|0 (whether the fake show earns it).
@@ -30,7 +31,7 @@ async function settle(page: Page) {
   await page.waitForFunction(() => Array.from(document.images).every((i) => i.complete && i.naturalWidth > 0));
   await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-busy', 'false');
   await frames(page);
-  await page.waitForTimeout(400);
+  await waitWarped(page);
 }
 
 const adsLog = (page: Page) => page.evaluate(() => (window.__adsLog ?? []).map((e) => e.call));

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitWarped } from './warped';
 
 // ?static=1&demo=quiet|active|critical builds the record from a fixed seed
 // (src/ui/result/demo.ts) over the cellar fixture, so the picture is the same
@@ -39,7 +40,7 @@ async function settle(page: import('@playwright/test').Page) {
   await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-busy', 'false');
   // The photo and digit canvases have drawn and the warped snapshot has been retaken.
   await frames(page);
-  await page.waitForTimeout(400);
+  await waitWarped(page);
 }
 
 for (const { demo, tier } of DEMOS) {
