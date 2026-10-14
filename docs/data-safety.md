@@ -30,7 +30,7 @@ Maps every shipped SDK to the answers in Play Console, Data safety form. Status:
 | `react-native-audio-api` (playback only, no microphone) | Audio files, Voice or sound recordings | Not collected. No microphone permission. | n/a | n/a | n/a |
 | Local scan history (app storage) | none transmitted | Not collected. Stays on device. | n/a | n/a | n/a |
 | Investigation log: location tags and case notes (app storage) | Free text typed by the user on the device. Not a Play Location type (no coordinates, no address lookup). | Not collected. Stays on device, never transmitted, never in an analytics event, never on a share card. | n/a | n/a | n/a |
-| `expo-notifications` (local scheduled notifications only, channel `Field log`; ships with P6) | none. The library links the Firebase Cloud Messaging (FCM) client and declares its service, but `plugins/withFcmAutoInitOff.js` sets `firebase_messaging_auto_init_enabled=false` in the merged manifest, so no installation ID or push token is created and none is requested. No Expo push service is used, no server sends anything. | Not collected. Schedules are computed on device from moon phase, clock and the local log. The channel's lock-screen visibility is PRIVATE, so no line content (including a tag) shows on the lock screen. | Yes, opt-in, off until the user taps FIT RELAY and grants the system permission | n/a |
+| `expo-notifications` (local scheduled notifications only, channel `Field log`, localised per app language as `Field log` / `Feldprotokoll` / `Registro de campo` / `Registo de campo`; ships with P6) | none. The library links the Firebase Cloud Messaging (FCM) client and declares its service, but `plugins/withFcmAutoInitOff.js` sets `firebase_messaging_auto_init_enabled=false` in the merged manifest, so no installation ID or push token is created and none is requested. No Expo push service is used, no server sends anything. | Not collected. Schedules are computed on device from moon phase, clock and the local log. The channel's lock-screen visibility is PRIVATE, so no line content (including a tag) shows on the lock screen. | Yes, opt-in, off until the user taps FIT RELAY and grants the system permission | n/a |
 | `expo-file-system` (cache write of the rendered field card, `src/fx/share/save.ts`) | none transmitted | Not collected. The PNG is written to the app cache on the device and handed to the share sheet by the user. | n/a | n/a |
 | `POST_NOTIFICATIONS` permission (Android 13+ runtime permission, declared by `expo-notifications`) | Permission only. Play Data safety has no row for it; it needs the Permissions declaration in the manifest and the privacy policy. | Not collected | Yes | n/a |
 | `expo-sharing` (the field card leaves through the user's own share sheet; ships with P6) | Photos and videos (the card is a rendered PNG that includes a processed camera frame) | Not collected or shared by us. The user picks the target app and sends the file; no code path of ours uploads it. Same footing as a screenshot the user sends. | n/a (user action) | n/a |
@@ -42,6 +42,7 @@ Maps every shipped SDK to the answers in Play Console, Data safety form. Status:
 | same | App activity: App interactions (the six allowlisted events) | Collected | Analytics | Yes, off until consent | No |
 | same | App info and performance: Diagnostics [U] | Collected | Analytics | Yes | No |
 | same | Location: Approximate location (country from IP) [U] | Collected | Analytics | Yes | No |
+| `expo-localization` (reads the device locale to choose the UI language) | none | Not collected. The locale is read on the device and nothing is transmitted. | n/a | n/a | n/a |
 | `expo-router`, `expo-linking`, `expo-constants`, `expo-font`, `expo-asset`, reanimated, screens and other UI packages | none | No data leaves the device | n/a | n/a | n/a |
 
 Not collected by any shipped SDK: name, email, address, phone, precise location, contacts, files, health, financial info, messages, microphone audio, photos and videos.
@@ -54,6 +55,7 @@ Not collected by any shipped SDK: name, email, address, phone, precise location,
 4. The form must match the privacy policy sections 2, 3, 5 and 6.
 5. Notifications stay local. A push token, FCM registration, Expo push service or any server-side send is a new SDK row, a privacy policy change and a Compliance PASS before merge.
 6. Analytics events and parameters stay on the allowlist in `src/analytics/index.ts`. `share_card` carries no parameters today; if `format` is added (P6-02), the allowlist, the policy table in section 5 and this form change together.
+7. A disclosure may never be clipped, only reflowed or scaled. This covers the SIMULATED mark, the sticker, the ABOUT line, the DEEP SCAN sublabel and the footer, in every locale and at every supported width (360 dp and up).
 
 ## Before launch
 
@@ -72,3 +74,7 @@ Not collected by any shipped SDK: name, email, address, phone, precise location,
    - Viewfinder key swap: FIT RELAY lands on the LOG slot and NOT NOW on the CAPTURE slot; a habitual tap cannot start a system dialog without a second deliberate tap.
    - Replace `[STORE NAME]` on the card and footer at Gate 1.
 8. Re-read the Data safety form against the lockfile and Google's SDK disclosure pages (items marked [U]).
+9. Localised legal URLs (D-038): `src/ui/legal.ts` and `app/legal.tsx` open the Impressum and privacy policy for the active language with an EN fallback. The DE Impressum and DE policy are live before the DE locale ships; ES and PT policies before those locales ship [U, lawyer].
+10. Localised store listings: each locale's title, short description, first sentence of the full description, feature graphic and first screenshot say plainly in that language that readings are simulated. No title carries echt, real, verdadero, auténtico or wirklich. PT store locale is pt-PT.
+11. Card profile line: localise the leftover English `TO` in `ÄRA EST. 1880 TO 1934` and `ÉPOCA EST. 1880 TO 1934` (in-fiction text, not a disclosure).
+12. Notification channel name: Android keeps the name from channel creation. After an in-app language switch, update or recreate the `field-log` channel so the name follows, or accept the stale name (every localised name passes).
