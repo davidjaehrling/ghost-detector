@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TIERS, mulberry32, type Tier } from '../../../engine';
-import { displayPos, displayRange, encodeField } from '../encode';
+import { barDeltas, COLD_BAND, displayPos, displayRange, encodeField } from '../encode';
 import { PH_WHT, hexToRgb, phWht } from '../palette';
 import {
   AMBIENT_RANGE,
@@ -243,7 +243,7 @@ describe('PH-WHT and encoding', () => {
     const f = buildThermalField(grid, region, { seed: 9, tier: 'critical' });
     const e = encodeField(f);
     const { lo, hi } = displayRange(f);
-    expect(lo).toBe(f.minC);
+    expect(lo).toBe(Math.min(f.roomMinC!, f.ambientC + f.coldSpotC!));
     expect(hi).toBe(f.maxC);
     let mn = 255;
     let mx = 0;
@@ -277,3 +277,45 @@ describe('PH-WHT and encoding', () => {
     expect(formatDelta(-0.01)).toBe('0.0 °C');
   });
 });
+
+describe('scale bar and cold column at the crosshair (A-46, A-48)', () => {
+  it('the bar reads ΔT °C and its coldest value is the spot readout on every spot tier', () => {
+    for (let k = 0; k < 6; k++)
+      for (const tier of ['trace', 'active', 'strong', 'critical'] as const) {
+        const { grid, region } = room(20 + k);
+        const f = buildThermalField(grid, region, { seed: 100 + k, tier });
+        const b = barDeltas(f);
+        expect(b.lo).toBeLessThanOrEqual(f.coldSpotC!);
+        if (tier === 'strong' || tier === 'critical') expect(b.lo, `${tier} ${k}`).toBe(f.coldSpotC);
+        expect(b.hi).toBeGreaterThan(0);
+        // The bar's bottom is where the scale starts: nothing on the picture reads colder.
+        expect(displayPos(f, f.ambientC + b.lo)).toBeLessThan(0.02);
+      }
+  });
+
+  it('CRITICAL: the column under the crosshair is darker than the darkest room around it', () => {
+    for (let k = 0; k < 6; k++) {
+      const { grid, region } = room(40 + k);
+      const f = buildThermalField(grid, region, { seed: 7 + k, tier: 'critical' });
+      const e = encodeField(f);
+      const s = f.coldSpot!;
+      const cx = Math.floor(s.x * f.width);
+      const cy = Math.floor(s.y * f.height);
+      const v = (x: number, y: number) => e[(y * f.width + x) * 4]!;
+      // 5 x 5 sensor pixels at the crosshair.
+      let spot = 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) spot += v(cx + dx, cy + dy);
+      spot /= 25;
+      // The room: every pixel farther than 3 short-side radii from the spot, its darkest 5%.
+      const around: number[] = [];
+      const r = s.radius * Math.min(f.width, f.height) * 3;
+      for (let y = 0; y < f.height; y++) for (let x = 0; x < f.width; x++) if (Math.hypot(x - cx, (y - cy) / 2.5) > r) around.push(v(x, y));
+      around.sort((a, b) => a - b);
+      const dark = around[Math.floor(around.length * 0.05)]!;
+      console.log(`[therm] seed ${k}: crosshair 5x5 mean ${spot.toFixed(1)} / 255, room darkest 5% ${dark} / 255`);
+      expect(spot, `seed ${k}`).toBeLessThan(COLD_BAND * 255 * 0.6);
+      expect(dark, `seed ${k}`).toBeGreaterThanOrEqual(COLD_BAND * 255 - 1);
+    }
+  });
+});
+

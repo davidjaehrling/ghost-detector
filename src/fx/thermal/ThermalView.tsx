@@ -4,7 +4,7 @@ import { View } from 'react-native';
 
 import { color } from '../../ui/tokens';
 import { SnapshotCanvas } from '../glass/snapshotRegistry';
-import { displayPos, displayRange } from './encode';
+import { barDeltas, displayPos, displayRange } from './encode';
 import { PALETTE_NAME, PH_WHT } from './palette';
 import { makeLutEffect, renderThermalImage } from './render';
 import { formatDelta, sampleField, type ThermalField } from './thermalField';
@@ -18,7 +18,7 @@ export const LIVE_HZ = 9;
 export const BAR_W = 10;
 export const BAR_H = 220;
 const BAR_INSET = 8; // bar's right edge to the panel's right edge
-const PLATE_W = 44; // n0 plate behind the bar and its labels
+const LABEL_GAP = 6; // tick end to label (A-48: labels outside the bar, on its left)
 const RETICLE = 15; // crosshair span, px (Bible section 3)
 const POINTER = 6; // cold-spot triangle, px
 
@@ -92,9 +92,11 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
 
   const delta = deltaLabel(vt);
   const readout = spotReadout(field, delta);
-  const maxT = field.maxC.toFixed(1);
-  const minT = field.minC.toFixed(1);
-  const ambT = field.ambientC.toFixed(1);
+  // A-48: the bar reads in ΔT against the room, °C, so its bottom is the spot readout's value.
+  const ends = barDeltas(field);
+  const maxT = formatDelta(ends.hi);
+  const minT = formatDelta(ends.lo);
+  const ambT = formatDelta(0);
   const ambY = posY(field.ambientC);
 
   const marks = useMemo(() => {
@@ -133,7 +135,9 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
   }, [field, spot, lo, hi, barX, barY, barH, width, imgH, y0]);
 
   const readW = textW(vt, readout ?? '') + 10;
-  const plateX = width - BAR_INSET - PLATE_W;
+  const labelX = barX - 4 - LABEL_GAP; // labels end here (right-aligned)
+  const labelW = Math.max(textW(vt, maxT), textW(vt, minT), textW(vt, ambT));
+  const plateX = Math.floor(labelX - labelW - 6);
 
   return (
     <View
@@ -161,7 +165,7 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
         ) : null}
 
         {/* Scale bar: n0 plate, PH-WHT gradient warm at the top, 1 px n4 keyline. */}
-        <Rect x={plateX} y={barY - 22} width={PLATE_W + BAR_INSET - 2} height={barH + 44} color={color.n0} />
+        <Rect x={plateX} y={barY - 12} width={width - plateX - 2} height={barH + 24} color={color.n0} />
         <Rect x={barX} y={barY} width={BAR_W} height={barH}>
           <LinearGradient start={vec(0, barY + barH)} end={vec(0, barY)} colors={[...PH_WHT]} />
         </Rect>
@@ -170,10 +174,10 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
         {spot ? <Path path={marks.pointer} color={color.p4} /> : null}
         {vt ? (
           <Group>
-            <Text x={barX + BAR_W - textW(vt, maxT)} y={barY - 6} text={maxT} font={vt} color={color.p4} />
-            <Text x={barX + BAR_W - textW(vt, minT)} y={barY + barH + 15} text={minT} font={vt} color={color.p4} />
+            <Text x={labelX - textW(vt, maxT)} y={barY + 5} text={maxT} font={vt} color={color.p4} />
+            <Text x={labelX - textW(vt, minT)} y={barY + barH + 5} text={minT} font={vt} color={color.p4} />
             {Math.abs(ambY - barY) > 14 && Math.abs(ambY - barY - barH) > 14 ? (
-              <Text x={barX - 6 - textW(vt, ambT)} y={ambY + 5} text={ambT} font={vt} color={color.p3} />
+              <Text x={labelX - textW(vt, ambT)} y={ambY + 5} text={ambT} font={vt} color={color.p3} />
             ) : null}
           </Group>
         ) : null}

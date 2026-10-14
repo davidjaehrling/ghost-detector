@@ -109,6 +109,8 @@ export interface ThermalField {
    * Null on QUIET. This is the one reading the screen should print next to the view.
    */
   coldSpotC: number | null;
+  /** Coldest room pixel without the cold spot's dip, °C (A-46: the display keeps the band below it for the cold body). */
+  roomMinC?: number;
 }
 
 export interface ThermalOptions {
@@ -293,6 +295,7 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
   const data = new Float32Array(w * h);
   let minC = Infinity;
   let maxC = -Infinity;
+  let roomMinC = Infinity;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
@@ -310,6 +313,7 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
         dip = depth * ((1 - SMUDGE_SHARE) * core + SMUDGE_SHARE * Math.exp(-(ux * ux) / (2 * wx * wx) - (dy * dy) / (2 * sy * sy)));
       } else if (depth > 0) dip = depth * round;
       data[i] = ambientC + base + edge + noise - dip;
+      roomMinC = Math.min(roomMinC, Math.fround(ambientC + base + edge + noise));
       const t = data[i]!; // min and max of the stored float32 values
       if (t < minC) minC = t;
       if (t > maxC) maxC = t;
@@ -317,7 +321,7 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
   }
 
   const coldSpot = depth > 0 ? { x: centre.x, y: centre.y, radius, depthC: depth } : null;
-  return { width: w, height: h, data, ambientC, minC, maxC, coldSpot, coldSpotC: coldSpot ? -depth : null };
+  return { width: w, height: h, data, ambientC, minC, maxC, coldSpot, coldSpotC: coldSpot ? -depth : null, roomMinC };
 }
 
 /** Temperature at a normalised point (nearest sensor pixel). */
