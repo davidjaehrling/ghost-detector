@@ -1,4 +1,4 @@
-import type { AdKind, AdsBackend, ConsentInfo } from './core';
+import type { AdKind, AdsBackend, ConsentInfo, FullscreenAd, FullscreenKind } from './core';
 
 // Web no-op. Never loads the native module; records every call in window.__adsLog for the L2 harness
 // (same pattern as src/audio/engine.web.ts). The consent state is faked from the URL:
@@ -9,6 +9,8 @@ import type { AdKind, AdsBackend, ConsentInfo } from './core';
 //   ?consent=error         the form fails to load
 //   ?purpose1=0|1          TCF Purpose 1 (default 1)
 //   ?privacyOptions=1      the PRIVACY entry is required
+//   ?adReady=0             the rewarded ad never loads (DEEP SCAN OFFLINE)
+//   ?reward=1|0            whether the fake rewarded show earns the reward (default 1)
 
 export type AdsLogEntry = { t: number; call: string; args: unknown[] };
 
@@ -83,5 +85,19 @@ export const backend: AdsBackend = {
   },
   unitId(kind: AdKind) {
     return `test-${kind}`;
+  },
+  fullscreen(kind: FullscreenKind): FullscreenAd {
+    return {
+      async load() {
+        record(`${kind}Load`);
+        return kind === 'interstitial' || query().get('adReady') !== '0';
+      },
+      async show() {
+        record(`${kind}Show`);
+        // A short fake play so the screen can show its loading state; instant under ?static=1.
+        if (query().get('static') !== '1') await new Promise((r) => setTimeout(r, 400));
+        return { shown: true, earned: kind === 'rewarded' && query().get('reward') !== '0' };
+      },
+    };
   },
 };

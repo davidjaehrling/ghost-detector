@@ -36,6 +36,7 @@ function fake(script: Script, gate?: Promise<void>) {
       calls.push('initialize');
     },
     unitId: (k) => `test-${k}`,
+    fullscreen: () => ({ load: async () => true, show: async () => ({ shown: true, earned: false }) }),
   };
   const store = createConsentStore(null);
   return { ads: createAds(backend, store), calls, store };

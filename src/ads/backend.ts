@@ -1,4 +1,4 @@
-import type { AdKind, AdsBackend, ConsentInfo } from './core';
+import type { AdKind, AdsBackend, ConsentInfo, FullscreenAd, FullscreenKind } from './core';
 
 // Native backend: the only file that touches react-native-google-mobile-ads. The module is required
 // on first use, not at import, so nothing from the SDK loads before the facade asks. Web uses
@@ -48,6 +48,46 @@ export const backend: AdsBackend = {
   },
   unitId(kind: AdKind) {
     const { TestIds } = sdk();
-    return kind === 'rewarded' ? TestIds.REWARDED : kind === 'interstitial' ? TestIds.INTERSTITIAL : TestIds.BANNER;
+    return kind === 'rewarded' ? TestIds.REWARDED : kind === 'interstitial' ? TestIds.INTERSTITIAL : TestIds.ADAPTIVE_BANNER;
+  },
+  fullscreen(kind: FullscreenKind): FullscreenAd {
+    const { RewardedAd, InterstitialAd, AdEventType, RewardedAdEventType } = sdk();
+    const unit = backend.unitId(kind);
+    const ad = kind === 'rewarded' ? RewardedAd.createForAdRequest(unit) : InterstitialAd.createForAdRequest(unit);
+    const on = ad as { addAdEventListener(type: import('react-native-google-mobile-ads').AdEventType, listener: (arg?: unknown) => void): () => void };
+    // Every listener this object adds is removed when its promise settles.
+    return {
+      load: () =>
+        new Promise<boolean>((resolve) => {
+          const offs: (() => void)[] = [];
+          const done = (ok: boolean) => {
+            for (const off of offs) off();
+            resolve(ok);
+          };
+          if (ad instanceof RewardedAd) offs.push(ad.addAdEventListener(RewardedAdEventType.LOADED, () => done(true)));
+          else offs.push(on.addAdEventListener(AdEventType.LOADED, () => done(true)));
+          offs.push(on.addAdEventListener(AdEventType.ERROR, () => done(false)));
+          try {
+            ad.load();
+          } catch {
+            done(false);
+          }
+        }),
+      show: () =>
+        new Promise<{ shown: boolean; earned: boolean }>((resolve) => {
+          const offs: (() => void)[] = [];
+          let shown = false;
+          let earned = false;
+          const done = () => {
+            for (const off of offs) off();
+            resolve({ shown, earned });
+          };
+          if (ad instanceof RewardedAd) offs.push(ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => (earned = true)));
+          offs.push(on.addAdEventListener(AdEventType.OPENED, () => (shown = true)));
+          offs.push(on.addAdEventListener(AdEventType.CLOSED, done));
+          offs.push(on.addAdEventListener(AdEventType.ERROR, done));
+          ad.show().catch(done);
+        }),
+    };
   },
 };

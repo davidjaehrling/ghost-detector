@@ -2,7 +2,7 @@ import { consentStore } from '../state/consent';
 import { backend } from './backend';
 import { createAds } from './core';
 
-export type { AdKind, Ads, AdsBackend, AdSlot, ConsentInfo, ConsentState } from './core';
+export type { AdKind, Ads, AdsBackend, AdSlot, ConsentInfo, ConsentState, FullscreenAd, FullscreenKind, FullscreenSlot, FullscreenStatus } from './core';
 export { createAds } from './core';
 
 // `./backend` is the native module on Android and iOS and the logging no-op on web (backend.web.ts).

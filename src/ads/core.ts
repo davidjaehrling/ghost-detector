@@ -13,6 +13,15 @@ export type ConsentInfo = {
 };
 
 export type AdKind = 'rewarded' | 'interstitial' | 'banner';
+export type FullscreenKind = 'rewarded' | 'interstitial';
+
+/** One full-screen ad object (load once, show once). The backend makes a fresh one per request. */
+export interface FullscreenAd {
+  /** Resolves true when the ad is loaded, false when the load failed. Never rejects. */
+  load(): Promise<boolean>;
+  /** Shows the loaded ad and resolves when it is closed. `earned` is only ever true for rewarded. */
+  show(): Promise<{ shown: boolean; earned: boolean }>;
+}
 
 export interface AdsBackend {
   /** UMP requestInfoUpdate. Runs on every launch. */
@@ -27,6 +36,8 @@ export interface AdsBackend {
   initialize(): Promise<void>;
   /** Test unit ID for a slot until launch. */
   unitId(kind: AdKind): string;
+  /** A fresh rewarded or interstitial ad object. Not called before the facade allows a request. */
+  fullscreen(kind: FullscreenKind): FullscreenAd;
 }
 
 /**
@@ -35,6 +46,19 @@ export interface AdsBackend {
  * interstitial load and a disabled DEEP SCAN key.
  */
 export type AdSlot = { readonly kind: AdKind; readonly unitId: string; enabled(): boolean };
+
+export type FullscreenStatus = 'idle' | 'loading' | 'ready' | 'failed';
+
+/**
+ * A rewarded or interstitial slot. `load()` requests nothing unless `canRequestAds()`; `show()`
+ * shows only an ad this slot loaded, once. `status()` and `subscribe()` feed `useSyncExternalStore`.
+ */
+export type FullscreenSlot = AdSlot & {
+  status(): FullscreenStatus;
+  subscribe(fn: () => void): () => void;
+  load(): Promise<boolean>;
+  show(): Promise<{ shown: boolean; earned: boolean }>;
+};
 
 export type ConsentState = ConsentSummary & {
   /** requestInfoUpdate resolved in this launch. Until then nothing is allowed. */
@@ -48,10 +72,13 @@ export type Ads = {
   analyticsAllowed(): boolean;
   showPrivacyOptions(): Promise<ConsentState>;
   initialize(): Promise<boolean>;
-  rewarded: AdSlot;
-  interstitial: AdSlot;
+  rewarded: FullscreenSlot;
+  interstitial: FullscreenSlot;
   banner: AdSlot;
 };
+
+/** A load that has not answered by now counts as failed (the slot may retry on the next request). */
+const LOAD_TIMEOUT_MS = 20_000;
 
 const NO_CONSENT: ConsentSummary = { ...EMPTY_CONSENT, status: 'error' };
 
@@ -116,6 +143,69 @@ export function createAds(backend: AdsBackend, store: ConsentStore): Ads {
     enabled: () => canRequestAds(),
   });
 
+  const fullscreen = (kind: FullscreenKind): FullscreenSlot => {
+    let ad: FullscreenAd | null = null;
+    let status: FullscreenStatus = 'idle';
+    let pending: Promise<boolean> | null = null;
+    const listeners = new Set<() => void>();
+    const set = (next: FullscreenStatus) => {
+      if (status === next) return;
+      status = next;
+      for (const l of listeners) l();
+    };
+    const base = slot(kind);
+    return {
+      kind,
+      // Not spread from the base slot: a spread would read unitId, which touches the SDK, at import.
+      get unitId() {
+        return base.unitId;
+      },
+      enabled: base.enabled,
+      status: () => status,
+      subscribe(fn) {
+        listeners.add(fn);
+        return () => void listeners.delete(fn);
+      },
+      load() {
+        if (!canRequestAds()) return Promise.resolve(false);
+        if (status === 'ready') return Promise.resolve(true);
+        if (pending) return pending;
+        let next: FullscreenAd;
+        try {
+          next = backend.fullscreen(kind);
+        } catch {
+          set('failed');
+          return Promise.resolve(false);
+        }
+        set('loading');
+        const timeout = new Promise<boolean>((res) => setTimeout(() => res(false), LOAD_TIMEOUT_MS));
+        const request = Promise.race([next.load(), timeout]).then(
+          (ok) => ok,
+          () => false,
+        );
+        pending = request.then((ok) => {
+          pending = null;
+          ad = ok ? next : null;
+          set(ok ? 'ready' : 'failed');
+          return ok;
+        });
+        return pending;
+      },
+      async show() {
+        const shown = ad;
+        if (status !== 'ready' || !shown || !canRequestAds()) return { shown: false, earned: false };
+        // One ad object, one show: the slot is spent whatever happens next.
+        ad = null;
+        set('idle');
+        try {
+          return await shown.show();
+        } catch {
+          return { shown: false, earned: false };
+        }
+      },
+    };
+  };
+
   return {
     ensureConsent() {
       pending ??= run();
@@ -135,8 +225,8 @@ export function createAds(backend: AdsBackend, store: ConsentStore): Ads {
       return state();
     },
     initialize,
-    rewarded: slot('rewarded'),
-    interstitial: slot('interstitial'),
+    rewarded: fullscreen('rewarded'),
+    interstitial: fullscreen('interstitial'),
     banner: slot('banner'),
   };
 }
