@@ -923,3 +923,5 @@ const s = StyleSheet.create({
   best: { flex: 1, borderTopWidth: 1, borderTopColor: color.p1, marginTop: BODY.gap, paddingTop: 6 },
   bestText: { ...type.rdXS, color: color.p4 },
 });
+
+export { RouteFault as ErrorBoundary } from '../../src/ui/screens/FaultScreen';

@@ -32,6 +32,11 @@ export function registerResources(lang: string, flat: Dict, engine = false): voi
   }
 }
 
+/** Harness: forgets a language's table, as if its file were missing. */
+export function clearResources(lang: Lang): void {
+  delete dicts[lang];
+}
+
 export function resourcesOf(lang: Lang): Dict {
   return dicts[lang] ?? {};
 }

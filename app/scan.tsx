@@ -136,3 +136,5 @@ function Scan({ params }: { params: ScanParams }) {
 const s = StyleSheet.create({
   empty: { flex: 1, backgroundColor: color.n3 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

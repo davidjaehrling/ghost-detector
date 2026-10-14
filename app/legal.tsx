@@ -65,3 +65,5 @@ const s = StyleSheet.create({
   state: { ...type.rdM, color: color.p2 },
   about: { ...type.rdXS, color: color.p3, marginTop: 12 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

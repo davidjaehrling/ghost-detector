@@ -2,6 +2,7 @@ import { CameraView, type PermissionResponse, useCameraPermissions } from 'expo-
 import { useFocusEffect, useRouter } from 'expo-router';
 import { type RefObject, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { fault } from '../src/state/faults';
 import { cadenceStore } from '../src/state/cadence';
 import { syncRelay } from '../src/state/notifyRuntime';
 import { relayDue, relayStore } from '../src/state/relay';
@@ -83,8 +84,8 @@ function NativeViewfinder({ harness }: { harness: Harness }) {
 
 type Source = 'loading' | 'camera' | 'ask' | 'fixture' | 'denied';
 
-function sourceFor(permission: PermissionResponse | null | undefined, web: boolean): Source {
-  if (web) return 'fixture';
+function sourceFor(permission: PermissionResponse | null | undefined, web: boolean, webDenied = false): Source {
+  if (web) return webDenied ? 'denied' : 'fixture';
   if (!permission) return 'loading';
   if (permission.granted) return 'camera';
   return permission.status === 'undetermined' ? 'ask' : 'denied';
@@ -108,7 +109,15 @@ function Viewfinder({
   // Under 380 px the dial plate leaves 126 px beside GEO: the thermal digit drops its spaces to fit.
   const narrow = windowW < 380;
   const fixture = harness.fixture ?? DEFAULT_FIXTURE;
-  const source = sourceFor(permission, Platform.OS === 'web');
+  // Harness (web only): ?fault=camera-denied starts denied; ?fault=camera-revoked takes the
+  // permission away a moment after the screen is up, as the system settings would mid-session.
+  const [revoked, setRevoked] = useState(false);
+  useEffect(() => {
+    if (!fault('camera-revoked')) return;
+    const id = setTimeout(() => setRevoked(true), 1200);
+    return () => clearTimeout(id);
+  }, []);
+  const source = sourceFor(permission, Platform.OS === 'web', fault('camera-denied') || revoked);
   // An interstitial may show only once the camera permission is granted (or on web, where there is none).
   useInterstitialGate(gateOpenFor(source));
 
@@ -418,3 +427,5 @@ const s = StyleSheet.create({
   noticeHead: { ...type.rdM, color: color.p5 },
   noticeText: { ...type.rdS, color: color.p4 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

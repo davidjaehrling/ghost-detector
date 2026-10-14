@@ -242,5 +242,12 @@
   "share.card.decoded": "FIRMA {pct}% DECODIFICADA",
   "share.card.none": "SIN FIRMA",
   "share.card.evp": "EVP {line}",
-  "share.card.detail": "CLASE: {cls} · ÉPOCA {era}"
+  "share.card.detail": "CLASE: {cls} · ÉPOCA {era}",
+  "fault.unit.code": "E-60 FALLO DE UNIDAD",
+  "fault.unit.cause": "PROCESO DE PANTALLA DETENIDO.",
+  "fault.optics.code": "E-52 ÓPTICA FUERA DE LÍNEA",
+  "fault.optics.cause": "NÚCLEO DE PANTALLA NO INICIADO.",
+  "fault.next": "PULSAR RESET.",
+  "fault.reset": "RESET",
+  "fault.resetLabel": "Reiniciar pantalla"
 }

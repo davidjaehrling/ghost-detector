@@ -12,6 +12,7 @@ import { calmLine, setHaptics, setJumpScares, setSound } from '../src/state/sett
 import { useConsent } from '../src/state/useConsent';
 import { useSettings } from '../src/state/useSettings';
 import { sound } from '../src/ui/audio';
+import { faultArmed } from '../src/state/faults';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 import { color, type } from '../src/ui/tokens';
 import type { LangSetting } from '../src/i18n';
@@ -37,6 +38,8 @@ const copy = copyOf({
 });
 
 export default function Settings() {
+  // Harness: ?fault=render stops this screen until RESET (web only; native never arms it).
+  if (faultArmed('render')) throw new Error('E-60 injected render fault');
   useLocale();
   const languageSetting = useLanguageSetting();
   const router = useRouter();
@@ -172,3 +175,5 @@ const s = StyleSheet.create({
   about: { ...type.rdXS, color: color.p3, marginTop: 12 },
   note: { ...type.rdXS, color: color.p5, marginTop: 12 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

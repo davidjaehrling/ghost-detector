@@ -10,6 +10,8 @@ import { type Backend, type EventParams, backend } from './backend';
 const TIERS = ['quiet', 'trace', 'active', 'strong', 'critical'] as const;
 const INTENSITIES = ['calm', 'standard', 'brave'] as const;
 const CONSENT = ['notRequired', 'obtained'] as const;
+/** Fault codes the FAULT screen can show (docs: E-52 optics offline, E-60 route fault). */
+export const FAULT_CODES = ['E-52', 'E-60'] as const;
 
 type ParamSpec = readonly string[] | 'number';
 
@@ -23,10 +25,13 @@ export const ALLOWLIST = {
   deep_scan_rewarded: {},
   interstitial_shown: {},
   share_card: {},
+  // The code only: no message, no stack, no route.
+  fault: { code: FAULT_CODES },
 } as const satisfies Record<string, Record<string, ParamSpec>>;
 
 export type AnalyticsEvent = keyof typeof ALLOWLIST;
 export type ScanCompleteParams = { tier: (typeof TIERS)[number]; intensity: (typeof INTENSITIES)[number] };
+export type FaultParams = { code: (typeof FAULT_CODES)[number] };
 export type ConsentStatusParams = { status: (typeof CONSENT)[number] };
 
 type Allowed = Record<string, ParamSpec>;
@@ -71,7 +76,8 @@ const analytics = createAnalytics(backend, analyticsAllowed);
 
 export function track(event: 'scan_complete', params: ScanCompleteParams): void;
 export function track(event: 'consent_status', params: ConsentStatusParams): void;
-export function track(event: Exclude<AnalyticsEvent, 'scan_complete' | 'consent_status'>, params?: Record<string, never>): void;
+export function track(event: 'fault', params: FaultParams): void;
+export function track(event: Exclude<AnalyticsEvent, 'scan_complete' | 'consent_status' | 'fault'>, params?: Record<string, never>): void;
 export function track(event: string, params?: Record<string, unknown>): void {
   analytics.track(event, params);
 }

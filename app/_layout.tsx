@@ -8,11 +8,15 @@ import { track } from '../src/analytics';
 // Loaded at start so the web stub latches ?notify= before the router drops the query.
 import '../src/state/notifyBackend';
 import { listenForTaps, syncRelay } from '../src/state/notifyRuntime';
-import { useSkiaReady } from '../src/fx/useSkiaReady';
 import { AppState } from 'react-native';
 import { startCadence } from '../src/ui/interstitial';
 import { readHarness } from '../src/ui/harness';
+import { FaultScreen, reloadPage } from '../src/ui/screens/FaultScreen';
 import { color } from '../src/ui/tokens';
+import { useSkiaGate } from '../src/ui/useSkiaGate';
+
+// A crash inside the layout or any route without its own boundary lands here.
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';
 
 // Latch the sticky harness params (static, fixture, speed) from the first URL.
 readHarness();
@@ -43,12 +47,13 @@ export default function RootLayout() {
   }, []);
   const [loaded] = useFonts({ VT323_400Regular, B612Mono_400Regular, B612Mono_700Bold });
   // Web waits for CanvasKit (Skia's wasm backend) before the first screen; native is ready at once.
-  const skia = useSkiaReady();
-  const ready = loaded && skia;
+  const skia = useSkiaGate();
+  const ready = loaded && skia === 'ready';
   useEffect(() => {
     if (!ready) return;
     return listenForTaps((route) => router.navigate(route));
   }, [ready, router]);
+  if (skia === 'failed') return <FaultScreen kind="optics" onReset={reloadPage} />;
   if (!ready) return null;
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.n3 } }} />;
 }

@@ -302,3 +302,5 @@ const s = StyleSheet.create({
   skipText: { ...type.lbS, color: color.p3 },
   note: { ...type.rdXS, color: color.p3, marginTop: 6, height: 36 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

@@ -242,5 +242,12 @@
   "share.card.decoded": "SIGNATUR {pct}% DEKODIERT",
   "share.card.none": "KEINE SIGNATUR",
   "share.card.evp": "EVP {line}",
-  "share.card.detail": "KLASSE: {cls} · ÄRA {era}"
+  "share.card.detail": "KLASSE: {cls} · ÄRA {era}",
+  "fault.unit.code": "E-60 GERÄTEFEHLER",
+  "fault.unit.cause": "BILDSCHIRMPROZESS GESTOPPT.",
+  "fault.optics.code": "E-52 OPTIK OFFLINE",
+  "fault.optics.cause": "ANZEIGEKERN NICHT GESTARTET.",
+  "fault.next": "RESET BETÄTIGEN.",
+  "fault.reset": "RESET",
+  "fault.resetLabel": "Bildschirm zurücksetzen"
 }

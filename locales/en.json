@@ -242,5 +242,12 @@
   "share.card.decoded": "SIGNATURE {pct}% DECODED",
   "share.card.none": "NO SIGNATURE",
   "share.card.evp": "EVP {line}",
-  "share.card.detail": "CLASS: {cls} · ERA {era}"
+  "share.card.detail": "CLASS: {cls} · ERA {era}",
+  "fault.unit.code": "E-60 UNIT FAULT",
+  "fault.unit.cause": "SCREEN PROCESS STOPPED.",
+  "fault.optics.code": "E-52 OPTICS OFFLINE",
+  "fault.optics.cause": "DISPLAY CORE DID NOT START.",
+  "fault.next": "PRESS RESET.",
+  "fault.reset": "RESET",
+  "fault.resetLabel": "Reset screen"
 }

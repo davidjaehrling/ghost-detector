@@ -22,6 +22,7 @@ import { listScans, moonsLogged, nightsLogged, type ScanRecord } from '../src/st
 import { sound } from '../src/ui/audio';
 import { readHarness } from '../src/ui/harness';
 import { isDemoLog, seedDemoLog } from '../src/ui/log/demo';
+import { faultArmed } from '../src/state/faults';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 import { color, type } from '../src/ui/tokens';
 import { copyOf, t, useLocale } from '../src/i18n';
@@ -47,6 +48,8 @@ const tagWord = tagLabel;
 const casesWord = casesLabel;
 
 export default function History() {
+  // Harness: ?fault=render stops this screen until RESET (web only; native never arms it).
+  if (faultArmed('render')) throw new Error('E-60 injected render fault');
   useLocale();
   const router = useRouter();
   // Harness: ?static=1&log=demo3 seeds three tags before the first read.
@@ -250,3 +253,5 @@ const s = StyleSheet.create({
   moons: { ...type.rdXS, color: color.p4, marginTop: 4 },
   relayRow: { marginTop: 10 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

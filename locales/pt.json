@@ -242,5 +242,12 @@
   "share.card.decoded": "ASSINATURA {pct}% DESCODIFICADA",
   "share.card.none": "SEM ASSINATURA",
   "share.card.evp": "EVP {line}",
-  "share.card.detail": "CLASSE: {cls} · ÉPOCA {era}"
+  "share.card.detail": "CLASSE: {cls} · ÉPOCA {era}",
+  "fault.unit.code": "E-60 FALHA DA UNIDADE",
+  "fault.unit.cause": "PROCESSO DO ECRÃ PARADO.",
+  "fault.optics.code": "E-52 ÓTICA OFFLINE",
+  "fault.optics.cause": "NÚCLEO DO ECRÃ NÃO INICIADO.",
+  "fault.next": "PREMIR RESET.",
+  "fault.reset": "RESET",
+  "fault.resetLabel": "Repor ecrã"
 }

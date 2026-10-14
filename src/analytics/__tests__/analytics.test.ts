@@ -39,7 +39,11 @@ describe('analytics gate', () => {
 
 describe('analytics allowlist', () => {
   it('lists exactly the contract events', () => {
-    expect(Object.keys(ALLOWLIST).sort()).toEqual(['consent_status', 'deep_scan_offered', 'deep_scan_rewarded', 'interstitial_shown', 'scan_complete', 'share_card']);
+    expect(Object.keys(ALLOWLIST).sort()).toEqual(['consent_status', 'deep_scan_offered', 'deep_scan_rewarded', 'fault', 'interstitial_shown', 'scan_complete', 'share_card']);
+  });
+  it('fault carries the code and nothing else', () => {
+    expect(sanitize('fault', { code: 'E-60', message: 'boom', route: '/history' })).toEqual({ code: 'E-60' });
+    expect(sanitize('fault', { code: 'boom at line 4' })).toEqual({});
   });
   it('drops unknown events', () => {
     const { a, calls } = rig(true);
