@@ -101,6 +101,25 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   expect((await calls(page)).filter((c) => c === 'requestPermission')).toHaveLength(1);
 });
 
+test('at 428 the module sits inside the glass, clear of the keys, and no sentence is clipped', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'android-428x926', '428 check');
+  await start(page, '&notify=granted');
+  await backFromACase(page);
+  const mod = page.getByTestId('relay-module');
+  await expect(mod).toBeVisible();
+  await page.waitForTimeout(300);
+  const glass = (await page.getByTestId('screen-viewfinder').last().getByTestId('screen-viewfinder-glass').boundingBox())!;
+  const m = (await mod.boundingBox())!;
+  const fit = (await page.getByTestId('relay-fit').boundingBox())!;
+  const not = (await page.getByTestId('relay-notnow').boundingBox())!;
+  expect(m.x).toBeGreaterThanOrEqual(glass.x);
+  expect(m.x + m.width).toBeLessThanOrEqual(glass.x + glass.width + 0.5);
+  expect(m.y + m.height).toBeLessThan(Math.min(fit.y, not.y));
+  const clipped = await page.getByTestId('relay-body').evaluate((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1);
+  expect(clipped).toBe(false);
+  expect(Math.round(fit.width)).toBe(Math.round(not.width));
+});
+
 test('a system denial reports it, and the Settings row opens system settings without asking again', async ({ page }) => {
   await start(page, '&notify=denied');
   await backFromACase(page);

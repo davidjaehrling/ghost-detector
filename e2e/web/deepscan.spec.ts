@@ -73,6 +73,21 @@ test('locked: the key is live with the sponsored sublabel', async ({ page }, tes
   check();
 });
 
+test('armed: key 4 lit, the sponsored line printed directly above it', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'android-390x844', 'armed golden at 390 only');
+  const check = watch(page);
+  await page.goto(DEMO);
+  await live(page);
+  await settle(page);
+  await page.waitForTimeout(700);
+  await page.getByTestId('deepscan-key').click();
+  await expect(page.getByTestId('deepscan-line')).toHaveText(ARM);
+  await settle(page);
+  await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-deepscan-armed.png` });
+  await expect(page).toHaveScreenshot('result-deepscan-armed.png', { maxDiffPixels: 150 });
+  check();
+});
+
 test('offline: no ad loads, the key is disabled and says why, the sublabel stays', async ({ page }, testInfo) => {
   const check = watch(page);
   await page.goto(`${DEMO}&adReady=0`);

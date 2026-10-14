@@ -263,6 +263,39 @@ for (const { lang, project, suffix } of CASES) {
       });
     }
 
+    // The share format choice prints its keys in the locale (A-49, A-50); goldens at 390 only.
+    test('result-share-format', async ({ page }, testInfo) => {
+      test.skip(suffix !== '', 'share format goldens at 390 only');
+      const done = watch(page);
+      await page.goto(`/result/demo?static=1&fixture=cellar&demo=active&share=format&lang=${lang}`);
+      await expect(page.getByTestId('share-panel')).toBeVisible();
+      await settleResult(page);
+      await check(page, `result-share-format-${lang}${suffix}`, testInfo);
+      await expect(page.getByTestId('share-916')).not.toHaveText('');
+      await expect(page.getByTestId('share-11')).not.toHaveText('');
+      await shot(page, 'result-share-format');
+      done();
+    });
+
+    // The armed DEEP SCAN line reflows to two lines in German at 360 and is never clipped (D-045 1).
+    test('result-deepscan-armed', async ({ page }, testInfo) => {
+      test.skip(!(lang === 'de' && suffix === '-360'), 'armed golden in de at 360 only');
+      const done = watch(page);
+      await page.goto(`/result/demo?static=1&fixture=cellar&demo=strong&lang=${lang}`);
+      await expect(page.getByTestId('screen-result')).toBeVisible();
+      await settleResult(page);
+      await page.waitForTimeout(700);
+      await page.getByTestId('deepscan-key').click();
+      const line = page.getByTestId('deepscan-line');
+      await expect(line).toBeVisible();
+      await settleResult(page);
+      await check(page, `result-deepscan-armed-${lang}${suffix}`, testInfo);
+      const clipped = await line.evaluate((e) => e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1);
+      expect(clipped, 'armed line clipped').toBe(false);
+      await shot(page, 'result-deepscan-armed');
+      done();
+    });
+
     test('history with three tags', async ({ page }, testInfo) => {
       const done = watch(page);
       await page.goto(`/history?static=1&log=demo3&lang=${lang}`);

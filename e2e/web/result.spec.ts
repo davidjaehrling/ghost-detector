@@ -56,7 +56,9 @@ for (const { demo, tier } of DEMOS) {
       await expect(page.getByTestId('deepscan-key')).toHaveCount(0);
       await expect(page.getByTestId('key-log')).toHaveText('LOG');
       await expect(page.getByTestId('result-profile').getByText('NO SIGNATURE')).toBeVisible();
-      await expect(page.getByTestId('composite')).toHaveCount(0);
+      // The composite runs disabled on QUIET (no figure) so the auto-gain and tint still show (A-45).
+      await expect(page.getByTestId('composite')).toHaveCount(1);
+      await expect(page.getByTestId('ghost-v0')).toHaveCount(0);
     } else {
       await expect(page.getByTestId('deepscan-key')).toBeVisible();
       // Nothing prints above key 4 until the first press arms it (D-045 1).
@@ -304,3 +306,23 @@ for (const { demo } of DEMOS) {
     await expect(page.getByTestId('result-stamp')).toHaveCount(0);
   });
 }
+
+test('QUIET over a black photo prints the auto-gain on the strip, SIMULATED last', async ({ page }) => {
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=black&demo=quiet');
+  await expect(page.getByTestId('screen-result')).toBeVisible();
+  await settle(page);
+  const label = (await page.getByTestId('result-stamp').getAttribute('aria-label')) ?? '';
+  expect(label).toMatch(/GAIN \+(6|12|18|24) dB/);
+  expect(label.endsWith('SIMULATED')).toBe(true);
+  check();
+});
+
+test('QUIET over a lit photo prints no GAIN', async ({ page }) => {
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=bright&demo=quiet');
+  await expect(page.getByTestId('screen-result')).toBeVisible();
+  await settle(page);
+  expect((await page.getByTestId('result-stamp').getAttribute('aria-label')) ?? '').not.toContain('GAIN');
+  check();
+});

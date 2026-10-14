@@ -180,5 +180,7 @@ test('one priming transient lands on the trace after the warm-up and is logged',
   // Logged once: it stays at 1 and nothing else repeats it.
   await page.waitForTimeout(1500);
   await expect(line).toHaveCSS('opacity', '1');
-  await expect(page.getByText('TRANSIENT 1 · LOGGED')).toHaveCount(1);
+  // A live boot varies per launch (A-11): the record says 1 or 0 events, and a harness boot (static) always 1.
+  await expect(line).toHaveText(/^TRANSIENT [01] · LOGGED$/);
+  await expect(page.getByText(/^TRANSIENT [01] · LOGGED$/)).toHaveCount(1);
 });
