@@ -18,6 +18,8 @@ Email: <CONTACT EMAIL>
 - **Camera frames and photos.** When you scan, the app reads the camera image to build the simulated reading and the apparition. This happens on your device. The image is not uploaded, not sent to us and not sent to any ad or analytics service.
 - **Sensor values.** The app reads motion and magnetic field sensors to drive the on-screen instrument. These values are used on the device only.
 - **Scan history.** Your past scans (time, score, entity profile, and whether you unlocked a Deep Scan) are stored locally on your device. We cannot see them. Removing the app or clearing its data deletes them.
+- **Location tags and notes.** Labels you type for a case (for example a room name) are stored locally on your device. They are not sent to us or to anyone else, and they are not part of analytics events or shared cards.
+- **Field cards.** When you share a field card, the app renders an image on your device and hands it to the share sheet. You choose the app that receives it. We do not receive it.
 - **Settings.** Your choices (for example intensity) are stored locally.
 
 ## 3. Ads
@@ -59,6 +61,7 @@ No photo, image data, scan result text or location is part of these events. Fire
 - **Vibration:** haptic feedback during a scan. No data is read or sent.
 - **Motion and magnetic sensors:** to drive the on-screen instrument. No data is sent. On some devices high sampling rate sensor access is requested for smoother readings.
 - **Advertising ID (Google Play services):** declared because the ads SDK can read it. You can reset or delete it in Android settings.
+- **Notifications (Android 13 and later):** only if you turn on the field log relay. Notifications are scheduled on your device from the moon phase, the clock and your local log. There is no push service and no push token, and nothing is sent to us. You can turn the relay off in the app settings or in Android settings.
 - **Internet:** needed to load ads and to send analytics after consent.
 
 The app does not use the microphone, contacts, files or precise location.
