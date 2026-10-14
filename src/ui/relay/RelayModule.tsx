@@ -36,13 +36,15 @@ export function useRelayModule(
   const quick = still || reduce;
   const total = relayLineCount(relayCopy.body);
   const [n, setN] = useState(0);
+  // The count restarts each time the offer closes (state adjusted during render, not in an effect).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) setN(0);
+  }
   // One printed line every LINE_MS while the offer is up; whole at once when still or reduced.
   useEffect(() => {
-    if (!open) {
-      setN(0);
-      return;
-    }
-    if (quick || n >= total) return;
+    if (!open || quick || n >= total) return;
     const id = setTimeout(() => setN((v) => v + 1), LINE_MS);
     return () => clearTimeout(id);
   }, [open, quick, n, total]);
