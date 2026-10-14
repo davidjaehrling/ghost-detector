@@ -26,7 +26,7 @@ so it runs before Skia lands. P3 swaps the internals; the props stay.
     is sized to `TIER_EXTENT` of the frame: ACTIVE 11%, STRONG 13%, CRITICAL 14.5% (the panel
     asked for about 11, 14 and 17%; plan section 6 caps the ghost at 15%, so STRONG and CRITICAL
     are scaled into the cap: a ruling for the Director). QUIET and TRACE keep the region size.
-  - `echo` (CRITICAL only): a second copy of the whole figure 8 to 12 px off (`ECHO_PX`, round 3,
+  - `echo` (CRITICAL only): a second copy of the whole figure 12 to 16 px off (`ECHO_PX`, A-47 in P8; 8 to 12 in round 3,
     D-022; 6 to 10 in round 2), mostly sideways, direction seeded, at 45% of the main figure's
     alpha (`ECHO_ALPHA`; 0.15 in round 2, which vanished under the blur and smear). It takes
     `ECHO_SHARE` 0.15 out of the copies' `COPY_ALPHA_SUM` budget, so the stacked alpha is at most

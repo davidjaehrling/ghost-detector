@@ -133,7 +133,7 @@ describe('buildThermalField', () => {
     }
   });
 
-  it('shapes the cold spot as a body-height smudge (about 1.6:1 upright) from STRONG up (D-017)', { timeout: 30000 }, () => {
+  it('shapes the cold spot as a figure-height column from STRONG up (D-017, A-46)', { timeout: 30000 }, () => {
     // Second moments of the dip (this field minus the same room on QUIET) around the spot centre.
     const extent = (tier: 'active' | 'strong' | 'critical', seed: number) => {
       const { grid, region } = room(seed + 300);
@@ -152,13 +152,14 @@ describe('buildThermalField', () => {
           vx += d * (x + 0.5 - cx) ** 2;
           vy += d * (y + 0.5 - cy) ** 2;
         }
-      return { w: Math.sqrt(vx / sw), h: Math.sqrt(vy / sw) };
+      return { w: Math.sqrt(vx / sw), h: Math.sqrt(vy / sw), fh: f.height };
     };
     for (let s = 1; s < 30; s++) {
       for (const tier of ['strong', 'critical'] as const) {
         const e = extent(tier, s);
-        expect(e.h / e.w, `${tier} seed ${s}`).toBeGreaterThan(1.3);
-        expect(e.h / e.w, `${tier} seed ${s}`).toBeLessThan(1.9);
+        // Upright column: clearly taller than wide, its 2-sigma height at least about 30% of the frame.
+        expect(e.h / e.w, `${tier} seed ${s}`).toBeGreaterThan(1.6);
+        expect((4 * e.h) / e.fh, `${tier} seed ${s}`).toBeGreaterThan(0.3);
       }
       const a = extent('active', s);
       expect(a.h / a.w).toBeLessThan(1.15);
