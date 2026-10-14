@@ -187,7 +187,7 @@
   "viewfinder.geoLabel": "GEO",
   "viewfinder.glassLabel": "{mode}. {flux}. Índice de actividad {index} de 5. Lugar {tag}.",
   "relay.header": "RELÉ DE REGISTRO",
-  "relay.body": "¿Instalar el relé? Como máximo, una línea de registro por noche: índice, luna, un caso abierto o el catálogo. De 18:00 a 22:00. Sin sonido. Los registros son simulados.",
+  "relay.body": "¿Instalar el relé? Como máximo, una línea de registro por noche: índice, luna, un caso abierto o el catálogo. De 18:00 a 22:00, sin sonido. Los registros son simulados.",
   "relay.fit": "INSTALAR",
   "relay.notNow": "AHORA NO",
   "relay.fitted": "Relé instalado. Modificable en Ajustes.",

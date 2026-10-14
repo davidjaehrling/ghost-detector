@@ -2,9 +2,10 @@ import { gzipSync } from 'node:zlib';
 import { expect, test, type Page } from '@playwright/test';
 
 // P8-03, the Builder A half of the performance budget (D-046).
-// - Boot: a cold load of /viewfinder at CPU x2 until the CAPTURE key is on the page and enabled,
-//   measured in the page from navigation start (performance.now() at the moment a MutationObserver
-//   sees the key). Budget: under 2.5 s. The cache is cold: every test gets a fresh browser context.
+// - Boot: a cold load of the boot route at CPU x2, ACK pressed once the key is live (a stored belief answer
+//   goes straight on), until the viewfinder's CAPTURE key is on the page and enabled, measured in the page
+//   from navigation start (performance.now() at the moment a MutationObserver sees the key). Budget: under
+//   2.5 s. The route a player takes, not a direct load of /viewfinder. The cache is cold: every test gets a fresh browser context.
 // - Bundle: the cold-start JS is the scripts index.html loads. The web export writes no
 //   metadata.json (that file exists for native exports only), so index.html is the export's metadata:
 //   its script tags name the files, and the sizes are read from the served bytes. Guard: raw size
@@ -47,11 +48,20 @@ test(`cold boot to an enabled CAPTURE key under ${BOOT_MS_MAX} ms at CPU x${BOOT
       check();
     });
   });
-  await page.goto('/viewfinder?fixture=cellar', { waitUntil: 'commit' });
+  // The calibration question is asked once; with an answer stored the ACK press goes straight on.
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('fs4.belief.v1', 'unsure');
+    } catch {
+      /* storage blocked: the run reports a longer boot */
+    }
+  });
+  await page.goto('/?fixture=cellar', { waitUntil: 'commit' });
+  await page.getByTestId('key-acknowledge').click({ timeout: 30_000 });
   await expect(page.getByTestId('key-capture')).toBeEnabled({ timeout: 30_000 });
   const ms = await page.waitForFunction(() => (window as unknown as { __uiInteractive?: number }).__uiInteractive).then((h) => h.jsonValue());
   const boot = Math.round(ms as number);
-  console.log(`[perf-ui] boot ${JSON.stringify({ cpu: BOOT_RATE, route: 'viewfinder', interactiveMs: boot, budgetMs: BOOT_MS_MAX })}`);
+  console.log(`[perf-ui] boot ${JSON.stringify({ cpu: BOOT_RATE, route: 'boot+ack', interactiveMs: boot, budgetMs: BOOT_MS_MAX })}`);
   expect(boot).toBeLessThan(BOOT_MS_MAX);
   expect(errors).toEqual([]);
 });

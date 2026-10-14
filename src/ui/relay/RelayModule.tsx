@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fitRelay, relayCopy, relayStore } from '../../state/relay';
 import { notifyBackend } from '../../state/notifyBackend';
 import type { KeySlot } from '../boot/parts';
-import { stripScrimAlpha } from '../result/stripScrim';
+import { RELAY_SCRIM } from './scrim';
 import { color, type } from '../tokens';
 import { useReduceMotion } from '../useReduceMotion';
 
@@ -77,7 +77,7 @@ export function useRelayModule(
   return { line, keys, printed, total };
 }
 
-const SCRIM = stripScrimAlpha(color.p3);
+const SCRIM = RELAY_SCRIM;
 
 export function RelayModule({ bottom, line, printed, onDone }: { bottom: number; line: string | null; printed: number; onDone: () => void }) {
   const sentences = bodyLines(relayCopy.body);

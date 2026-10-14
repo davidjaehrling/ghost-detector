@@ -1,11 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
+import { RELAY_SCRIM } from '../../src/ui/relay/scrim';
 import { startClockAtEvening, waitPrinted } from './relay';
 
 // P6-05 part 1. The FIELD LOG RELAY opt-in on the viewfinder and the Settings RELAY row.
 // The log demo seeds six cases (session=1 lifts the first-session rule), so the first return from a
 // result is eligible. The web stub records every call in window.__notifyLog.
 
-const BODY = 'Fit the relay? At most one field-log line a night. Index, moon, an open case or the catalogue. 18:00 to 22:00. No sound. Lines are simulated.';
+const BODY = 'Fit the relay? At most one field-log line a night. Index, moon, an open case or the catalogue. 18:00 to 22:00, no sound. Lines are simulated.';
 
 // `getPermission` is the silent re-read of the stored permission on app open; it never asks. The
 // opt-in assertions are about what is asked and created, so it is left out of the list.
@@ -80,6 +81,22 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
       return [cs.color, cs.fontSize, cs.fontWeight, cs.fontFamily, bs.backgroundColor, bs.borderColor];
     });
   expect(await style('relay-fit')).toEqual(await style('relay-notnow'));
+  // Both are lit keys: the one lit treatment (p5 legend, 1 px p3 rim).
+  const rim = (id: string) => page.getByTestId(id).evaluate((e) => `${getComputedStyle(e).outlineWidth} ${getComputedStyle(e).outlineStyle} ${getComputedStyle(e).outlineColor}`);
+  expect(await rim('relay-fit')).toBe('1px solid rgb(79, 180, 106)');
+  expect(await rim('relay-notnow')).toBe('1px solid rgb(79, 180, 106)');
+  expect((await style('relay-fit'))[0]).toBe('rgb(212, 255, 220)');
+  // The band fill is the strip scrim alpha (p3 body text stays at 4.5:1, asserted in scrim.test.ts).
+  const fill = await mod.evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(Number(/rgba\(10, 15, 11, ([\d.]+)\)/.exec(fill)![1])).toBeCloseTo(RELAY_SCRIM, 2);
+  // The band is short enough that the feed's reticle stays whole: the crosshair is above its top rule and the
+  // lower corner brackets (22 px arms) are below its bottom edge, in the gap above the HUD band.
+  const reticle = (await page.getByTestId('screen-viewfinder').last().getByTestId('hud-reticle').boundingBox())!;
+  expect(mbox.y).toBeGreaterThanOrEqual(reticle.y + reticle.height / 2 + 9);
+  expect(mbox.y + mbox.height).toBeLessThanOrEqual(reticle.y + reticle.height - 22);
+  // The two-sentence merge: the window and the quiet promise are one printed line.
+  await expect(page.getByTestId('relay-body')).toContainText('18:00 to 22:00, no sound.');
+  expect(await page.getByTestId('relay-body').evaluate((e) => e.children.length)).toBe(5);
   // CAPTURE stays live in its usual slot (last, right of the relay keys, same row).
   const cap = (await page.getByTestId('key-capture').boundingBox())!;
   expect(cap.x).toBeGreaterThan(slots[1]!.x);

@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdBanner } from '../src/ads/Banner';
+import { formatWindowShort } from '../src/ui/boot/activity';
 import {
   bestOnFile,
   casesLabel,
@@ -75,7 +76,7 @@ export default function History() {
   useEffect(() => sound.stop(), []);
   // The scroll viewport is a whole number of 22 dp rows tall, so no row is cut at the foot of the glass.
   const [boxH, setBoxH] = useState(0);
-  const headRows = (best ? 1 : 0) + (nights > 0 ? 1 : 0);
+  const headRows = (best ? 1 : 0) + (best ? 1 : 0) + (nights > 0 ? 1 : 0);
   const scrollH = boxH > 0 ? Math.max(PITCH * 2, Math.floor((boxH - headRows * PITCH) / PITCH) * PITCH) : undefined;
   // The one banner in the app sits in a fixed slot between the window and the key row, 32 dp or more
   // clear of every row and key. The window gives up the height.
@@ -109,6 +110,7 @@ export default function History() {
                   <Text style={tierStyle(best)}>{tierWord(best)}</Text>
                 </Text>
               ) : null}
+              {best ? <Text style={s.nights} testID="history-catalogue-line">{t('history.catalogueHead', { count: cat.count, total: cat.total })}</Text> : null}
               {nights > 0 ? <Text style={s.nights} testID="history-nights">{t('history.nightsLine', { n: nights })}</Text> : null}
             </View>
           ) : null}
@@ -185,6 +187,7 @@ export default function History() {
                   <Text style={n.date === nextMoon ? s.catOn : s.catOff}>{`${n.moonPct}%`}</Text>
                 </View>
               ))}
+              {empty ? <Text style={s.moons} testID="history-window">{formatWindowShort(new Date(nowMs))}</Text> : null}
               {moons > 0 ? <Text style={s.moons} testID="history-moons">{t('history.moonsLine', { n: moons })}</Text> : null}
             </View>
             <Pressable

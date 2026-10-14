@@ -25,6 +25,7 @@ import { DEMO_CASES, SCARE_CASE, demoRecord, isDemoName } from '../../src/ui/res
 import { bestSoFar, noPrior } from '../../src/ui/result/best';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
+import { formatWindowShort } from '../../src/ui/boot/activity';
 import { PINNED_TIERS, gainLabel, screenStampLines, thermalDelta } from '../../src/ui/result/stamp';
 import { stripScrimAlpha } from '../../src/ui/result/stripScrim';
 import { deepPress, deepTier } from '../../src/ui/result/deepKey';
@@ -453,6 +454,11 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
   const pct = unlocked ? 100 : profile.signatureDecodedPct;
   const innerW = size.w - 24;
   const best = useMemo(() => (quiet ? bestSoFar(listScans(), record.id) : null), [quiet, record.id]);
+  // QUIET fills the lower glass with the unit's own state: tonight's window, and the auto-gain the probe
+  // front end applied (only over a photo dark enough to need it).
+  const [gainDb, setGainDb] = useState(0);
+  const [openedAt] = useState(() => Date.now());
+  const windowLine = formatWindowShort(new Date(isStatic ? record.createdAt : openedAt));
 
   // Hidden strings for the redaction bars: the real name, the first trait line
   // and an EVP line of seeded length. Bars match their width, never a block glyph.
@@ -476,6 +482,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
         stamp={stamp}
         hires={unlocked}
         onPhotoLoaded={onPhotoLoaded}
+        onGain={setGainDb}
       />
       <View style={s.body}>
         <View style={s.revealRow}>
@@ -503,19 +510,21 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
         </View>
-        {sharePanel ? (
-          <SharePanel mode={share.mode} height={BODY.gap + BODY.line * lineCount + BODY.gap + BODY.readings} still={isStatic} />
-        ) : (
-          <>
         <View style={s.lines}>
-          <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
-            {resultLine}
-          </Text>
-          {PINNED_TIERS.includes(tier) ? (
-            <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
-              {coldSpot(fmtFixed(deltaC, 1, locale), fmtFixed(reading.driftKhz, 1, locale))}
-            </Text>
-          ) : null}
+          {sharePanel ? (
+            <SharePanel mode={share.mode} height={BODY.line * lineCount} still={isStatic} />
+          ) : (
+            <>
+              <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
+                {resultLine}
+              </Text>
+              {PINNED_TIERS.includes(tier) ? (
+                <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
+                  {coldSpot(fmtFixed(deltaC, 1, locale), fmtFixed(reading.driftKhz, 1, locale))}
+                </Text>
+              ) : null}
+            </>
+          )}
         </View>
         <View style={s.readings}>
           <Readout
@@ -536,8 +545,6 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           />
           <Readout size="rdXS" label={copy.acoustic} value={String(reading.levelDb)} unit="dBFS" labelCh={8} />
         </View>
-          </>
-        )}
         <View style={s.profile} testID="result-profile">
           <Text style={s.profileHead}>{copy.profile}</Text>
           {quiet ? (
@@ -548,7 +555,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
               <ProfileRow label={copy.eraLabel} value={eraValue(profile.era)} valueTestID="profile-era" />
               {hiddenLabels().map((l, i) =>
                 unlocked ? (
-                  <ProfileRow key={l} label={l} value={unlockedValues[i]} valueTestID={`profile-${PROFILE_IDS[i]}`} />
+                  <ProfileRow key={l} label={l} value={unlockedValues[i]} valueTestID={`profile-${PROFILE_IDS[i]}`} peak={PROFILE_IDS[i] === 'evp'} />
                 ) : (
                   <ProfileRow key={l} label={l} maskW={Math.min(maskMax, Math.round(hiddenLen[i]! * CHAR_XS))} />
                 ),
@@ -563,7 +570,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           </View>
         )}
         {quiet ? null : <View style={s.spacer} />}
-        {wide ? <View style={s.deepZone}>{shareMoment ? null : <DeepLine state={deep.state} armed={armed} />}</View> : null}
+        {wide ? <View style={[s.deepZone, unlocked && s.deepZoneDone]}>{shareMoment ? null : <DeepLine state={deep.state} armed={armed} />}</View> : null}
         {quiet ? (
           <View style={s.best} testID="result-best">
             {best ? (
@@ -574,6 +581,12 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
             ) : (
               <Text style={[s.bestText, { color: color.p3 }]}>{noPrior()}</Text>
             )}
+          </View>
+        ) : null}
+        {quiet ? (
+          <View style={s.quietState}>
+            <Text style={s.quietWindow} testID="result-window">{windowLine}</Text>
+            {gainDb > 0 ? <Text style={s.quietGain} testID="result-gain">{gainLabel(gainDb)}</Text> : null}
           </View>
         ) : null}
       </View>
@@ -587,25 +600,28 @@ const PROFILE_IDS = ['name', 'behaviour', 'evp'] as const;
 const SPI_PAD = 12; // canvas margin around the digit so the bloom is not clipped
 const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
-function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value?: string; maskW?: number; valueTestID?: string }) {
+function ProfileRow({ label, value, maskW, valueTestID, peak = false }: { label: string; value?: string; maskW?: number; valueTestID?: string; peak?: boolean }) {
   // A value longer than its box (a narrow phone) tightens its tracking to fit instead of cutting the end.
   // The room is measured on the row (minus the label column), never on the text itself: a text's own
   // width is its content width, which sits a sub-pixel under len * CHAR_XS and would tighten every row.
   const [rowW, setRowW] = useState(0);
-  const boxW = rowW - LABEL_W;
-  const need = (value?.length ?? 0) * CHAR_XS;
-  const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(-0.8, Math.floor((boxW / (value?.length ?? 1) - (CHAR_XS - 0.5)) * 10) / 10) } : null;
+  // 8 px of air to the glass edge on the right (A-52): a long value tightens before it reaches the window.
+  const boxW = rowW - LABEL_W - 8;
+  // The unlocked EVP fragment is the one peak on the profile: rdM in p5 (28 px VT323, 0.4 em advance).
+  const charW = peak ? 11.2 : CHAR_XS;
+  const need = (value?.length ?? 0) * charW;
+  const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(peak ? -2 : -0.8, Math.floor((boxW / (value?.length ?? 1) - (charW - (peak ? 0 : 0.5))) * 10) / 10) } : null;
   return (
-    <View style={s.profRow} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
+    <View style={[s.profRow, peak && s.profRowPeak]} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
       <Text style={s.profLabel}>{label}</Text>
-      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, tight]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, peak && s.profilePeak, tight]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
     </View>
   );
 }
 
-// The format choice, in place of the result lines and readings: one line; the formats are hardware
-// keys (D-045 5). While the card renders the same box holds the printing line with a blinking block.
-// The box keeps the height of what it replaces, so nothing above or below moves.
+// The format choice, in place of the result lines only: one line; the formats are hardware keys
+// (D-045 5) and the reading rows stay. While the card renders the same box holds the printing line with
+// a blinking block. The box keeps the height of what it replaces, so nothing above or below moves.
 function SharePanel({ mode, height, still }: { mode: ShareMode; height: number; still: boolean }) {
   const blink = useBlink(still);
   const printing = mode === 'printing';
@@ -706,6 +722,7 @@ function PhotoPanel({
   stamp,
   hires,
   onPhotoLoaded,
+  onGain,
 }: {
   size: GlassSize;
   height: number;
@@ -718,6 +735,7 @@ function PhotoPanel({
   stamp: [string, string];
   hires: boolean;
   onPhotoLoaded: (loaded: boolean) => void;
+  onGain: (db: number) => void;
 }) {
   const { outcome, photoUri, seed, id } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
@@ -808,6 +826,9 @@ function PhotoPanel({
   // strip names the gain the probe front end applied.
   const quietPanel = !wantsFigure && read.done;
   const gainDb = v1 && quietPanel ? autoGain(read.result?.grid).db : 0;
+  useEffect(() => {
+    onGain(gainDb);
+  }, [gainDb, onGain]);
   const lines = useMemo<[string, string]>(() => (gainDb > 0 ? [`${stamp[0]}  ${gainLabel(gainDb)}`, stamp[1]] : stamp), [stamp, gainDb]);
 
   return (
@@ -927,11 +948,14 @@ const s = StyleSheet.create({
   lines: { marginTop: BODY.gap },
   resultLine: { ...type.rdXS, height: BODY.line, color: color.p4 },
   readings: { marginTop: BODY.gap, width: 19 * CHAR_XS + 2 },
-  profile: { borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 4, marginTop: BODY.gap },
+  // 6 px under the rule: the umlaut of ENTITÄTSPROFIL clears it (A-52). 1 + 6 + 12 + 5 x 16 stays inside BODY.profile.
+  profile: { borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 6, marginTop: BODY.gap },
   profileHead: { ...type.lbXS, color: color.p3, height: 12 },
   profRow: { flexDirection: 'row', alignItems: 'center', height: 16 },
   profLabel: { ...type.lbXS, width: LABEL_W, color: color.p3 },
   profileValue: { ...type.rdXS, color: color.p4 },
+  profRowPeak: { height: 28 },
+  profilePeak: { ...type.rdM, color: color.p5 },
   profileFit: { flexShrink: 1 },
   mask: { height: 8, backgroundColor: color.p2 },
   decodedBlock: { marginTop: BODY.gap, gap: 2 },
@@ -939,17 +963,22 @@ const s = StyleSheet.create({
   // The line over key 4: two lines of rdXS at legend size, tracking 0 so the longest locale line wraps to two at 360,
   // right-aligned so its right edge sits over key 4, p4. The zone keeps its height whether or not a line prints.
   deepZone: { height: BODY.offer, marginHorizontal: -4, justifyContent: 'flex-end', marginBottom: -8 },
+  // Unlocked prints one line, and the EVP row has grown by 12 (rdM): the zone gives that height back.
+  deepZoneDone: { height: BODY.offer - 12 },
   deepLine: { ...type.rdXS, letterSpacing: 0, color: color.p4, textAlign: 'right' },
   deepDone: { ...type.rdXS, color: color.p4, textAlign: 'right' },
-  sharePanel: { marginTop: BODY.gap },
+  sharePanel: {},
   shareLineRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   shareBlock: { width: 8, height: 12, backgroundColor: color.p4 },
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },
   // Glass text under a p1 rule, left aligned: no box, no card.
-  best: { flex: 1, borderTopWidth: 1, borderTopColor: color.p1, marginTop: BODY.gap, paddingTop: 6 },
+  best: { borderTopWidth: 1, borderTopColor: color.p1, marginTop: BODY.gap, paddingTop: 6 },
   bestText: { ...type.rdXS, color: color.p4 },
+  quietState: { flex: 1, justifyContent: 'flex-end' },
+  quietWindow: { ...type.rdM, color: color.p3 },
+  quietGain: { ...type.rdM, color: color.p4 },
 });
 
 export { RouteFault as ErrorBoundary } from '../../src/ui/screens/FaultScreen';

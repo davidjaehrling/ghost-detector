@@ -3,7 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { type RefObject, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { fault } from '../src/state/faults';
-import { windowCountdown } from '../src/ui/boot/activity';
+import { formatWindowShort } from '../src/ui/boot/activity';
 import { cadenceStore } from '../src/state/cadence';
 import { syncRelay } from '../src/state/notifyRuntime';
 import { relayDue, relayStore } from '../src/state/relay';
@@ -53,7 +53,6 @@ const copy = copyOf({
   hudLogLabel: 'viewfinder.hud.logLabel',
   hudCapture: 'viewfinder.hud.capture',
   hudCaptureLabel: 'viewfinder.hud.captureLabel',
-  windowOpen: 'viewfinder.window.open',
 });
 
 // Harness: a fixed capture time so the scan seed, and the result golden, repeat.
@@ -88,11 +87,7 @@ function NativeViewfinder({ harness }: { harness: Harness }) {
 type Source = 'loading' | 'camera' | 'ask' | 'fixture' | 'denied';
 
 // `03:00 IN 4 H 12 MIN`, or `03:00 OPEN` inside the 03:00 hour; under an hour the hours part drops.
-function windowText(now: Date): string {
-  const c = windowCountdown(now);
-  if (c.open) return copy.windowOpen;
-  return c.hours > 0 ? t('viewfinder.window.inHours', { h: c.hours, m: c.minutes }) : t('viewfinder.window.inMinutes', { m: c.minutes });
-}
+const windowText = formatWindowShort;
 
 function sourceFor(permission: PermissionResponse | null | undefined, web: boolean, webDenied = false): Source {
   if (web) return webDenied ? 'denied' : 'fixture';
@@ -303,7 +298,7 @@ function Viewfinder({
               </View>
             ) : null}
 
-            {relayOpen ? <RelayModule bottom={bandH + 12} line={relayModule.line} printed={relayModule.printed} onDone={closeRelay} /> : null}
+            {relayOpen ? <RelayModule bottom={bandH + 12 + ARM + 2} line={relayModule.line} printed={relayModule.printed} onDone={closeRelay} /> : null}
 
             <View style={[s.band, { height: bandH }]} testID="hud-band">
               <View style={s.tagRow} accessibilityRole="tablist">

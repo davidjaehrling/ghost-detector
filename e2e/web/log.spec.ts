@@ -202,3 +202,30 @@ test('FULL MOONS LOGGED is a stored count: shows from 1, never falls with the re
   await expect(page.getByTestId('history-moons')).toHaveText('FULL MOONS LOGGED 2');
   await expect(page.getByTestId('history-nights')).toHaveCount(0);
 });
+
+// D-049: the catalogue count prints under BEST ON FILE in the head, without scrolling; the empty log prints
+// tonight's window line (the viewfinder's own text) under the moon table.
+test('three tags: CATALOGUE n/24 sits directly under BEST ON FILE, above the scroll', async ({ page }) => {
+  await page.goto(DEMO);
+  const line = page.getByTestId('history-catalogue-line');
+  await expect(line).toHaveText(/^CATALOGUE \d+\/24$/);
+  const best = (await page.getByTestId('history-best').boundingBox())!;
+  const cat = (await line.boundingBox())!;
+  const nights = (await page.getByTestId('history-nights').boundingBox())!;
+  const list = (await page.getByTestId('history-list').boundingBox())!;
+  expect(cat.y).toBeGreaterThanOrEqual(best.y + best.height - 1);
+  expect(cat.y).toBeLessThan(nights.y);
+  expect(cat.y + cat.height).toBeLessThanOrEqual(list.y + 1);
+});
+
+test('empty log: tonight\'s window line sits under the moon table', async ({ page }) => {
+  await page.goto('/history?static=1');
+  const win = page.getByTestId('history-window');
+  await expect(win).toHaveText('03:00 IN 15 H 0 MIN');
+  const last = (await page.locator('[data-testid^="history-moon-2"]').last().boundingBox())!;
+  const w = (await win.boundingBox())!;
+  expect(w.y).toBeGreaterThanOrEqual(last.y + last.height - 1);
+  // Not on a log with cases.
+  await page.goto(DEMO);
+  await expect(page.getByTestId('history-window')).toHaveCount(0);
+});

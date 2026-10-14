@@ -114,6 +114,19 @@ test('unlocked: designation, behaviour and EVP are printed and the signature is 
   await expect(page.getByTestId('profile-behaviour')).toHaveText(/\S/);
   await expect(page.getByTestId('profile-evp')).toHaveText(/^".+"$/);
   await expect(page.getByTestId('result-decoded')).toHaveText('SIGNATURE DECODED: 100%');
+  // The EVP fragment is the one peak on the profile: rdM (28 px) in p5; every other profile value is smaller and p4.
+  const look = (id: string) => page.getByTestId(id).evaluate((e) => ({ size: getComputedStyle(e).fontSize, color: getComputedStyle(e).color }));
+  expect(await look('profile-evp')).toEqual({ size: '28px', color: 'rgb(212, 255, 220)' });
+  for (const id of ['profile-name', 'profile-behaviour', 'profile-era']) {
+    const v = await look(id);
+    expect(v.size, id).toBe('16px');
+    expect(v.color, id).toBe('rgb(124, 232, 149)');
+  }
+  // It is whole inside its row (never cut) and the profile block stays inside the glass body.
+  const evp = (await page.getByTestId('profile-evp').boundingBox())!;
+  const prof = (await page.getByTestId('result-profile').boundingBox())!;
+  expect(evp.y + evp.height).toBeLessThanOrEqual(prof.y + prof.height + 1);
+  expect(await page.getByTestId('profile-evp').evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   // No ad is requested for a scan that is already unlocked.
   expect(await adsLog(page)).not.toContain('rewardedLoad');
   await settle(page);

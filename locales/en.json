@@ -187,7 +187,7 @@
   "viewfinder.geoLabel": "GEO",
   "viewfinder.glassLabel": "{mode}. {flux}. Activity index {index} of 5. Location {tag}.",
   "relay.header": "FIELD LOG RELAY",
-  "relay.body": "Fit the relay? At most one field-log line a night. Index, moon, an open case or the catalogue. 18:00 to 22:00. No sound. Lines are simulated.",
+  "relay.body": "Fit the relay? At most one field-log line a night. Index, moon, an open case or the catalogue. 18:00 to 22:00, no sound. Lines are simulated.",
   "relay.fit": "FIT RELAY",
   "relay.notNow": "NOT NOW",
   "relay.fitted": "Relay fitted. Change in Settings.",

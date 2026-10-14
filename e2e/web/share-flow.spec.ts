@@ -303,6 +303,12 @@ test('no ad-starting key shares the glass with the share moment', async ({ page 
   await page.goto(`${ACTIVE}&share=format`);
   await expect(page.getByTestId('share-panel')).toBeVisible();
   await expect(page.getByTestId('share-line')).toHaveText('Print field card. Format?');
+  // Only the key row changes: the reading rows stay on the glass, and no band opens under the format line.
+  await expect(page.getByText('FLUX', { exact: true })).toBeVisible();
+  await expect(page.getByText('ACOUST', { exact: true })).toBeVisible();
+  const lineBox = (await page.getByTestId('share-panel').boundingBox())!;
+  const fluxBox = (await page.getByText('FLUX', { exact: true }).boundingBox())!;
+  expect(fluxBox.y - (lineBox.y + lineBox.height)).toBeLessThan(12);
   expect(await shareLog(page)).toEqual([]);
   await expect(page.getByTestId('share-916')).toContainText('STORY');
   await expect(page.getByTestId('share-11')).toContainText('SQUARE');

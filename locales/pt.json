@@ -187,7 +187,7 @@
   "viewfinder.geoLabel": "GEO",
   "viewfinder.glassLabel": "{mode}. {flux}. Índice de atividade {index} de 5. Local {tag}.",
   "relay.header": "RELÉ DO REGISTO DE CAMPO",
-  "relay.body": "Instalar o relé? O utilizador recebe, no máximo, uma linha de registo por noite: índice, lua, um caso aberto ou o catálogo. Das 18:00 às 22:00. Sem som. Os registos são simulados.",
+  "relay.body": "Instalar o relé? O utilizador recebe, no máximo, uma linha de registo por noite: índice, lua, um caso aberto ou o catálogo. Das 18:00 às 22:00, sem som. Os registos são simulados.",
   "relay.fit": "INSTALAR",
   "relay.notNow": "AGORA NÃO",
   "relay.fitted": "Relé instalado. Alterar nas Definições.",

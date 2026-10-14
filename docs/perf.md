@@ -35,7 +35,7 @@ Scan, viewfinder and result specs at 390 against the new export: 42 passed, 11 f
 
 ### Guards (`perf-ui.spec.ts`)
 - Boot: cold load of `/viewfinder?fixture=cellar` at x2; interactive is the CAPTURE key present and enabled, timestamped in the page from navigation start. Budget under 2500 ms. Measured 1168 ms.
-- Bundle: the web export writes no `metadata.json`, so the script tags in `index.html` name the cold-start JS and the sizes are read from the served bytes. Baseline 2 986 773 bytes raw (727 082 gzip); the guard fails above 1.1x, 3 284 970 bytes. Head 082aa80 was 2 986 301.
+- Bundle: the web export writes no `metadata.json`, so the script tags in `index.html` name the cold-start JS and the sizes are read from the served bytes. Baseline 2 986 773 bytes raw (727 082 gzip); the guard fails above 1.1x, 3 285 450 bytes. Head 082aa80 was 2 986 301.
 
 ### Phone check 3 (from Part 1, three items)
 1. Scan theatre on the phone: p50 at 55 fps or better, no visible stutter on the sweep.

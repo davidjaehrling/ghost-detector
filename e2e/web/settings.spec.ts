@@ -25,6 +25,32 @@ test('Settings states that readings are simulated', async ({ page }) => {
   await expect(page).toHaveScreenshot('settings.png', { maxDiffPixels: 150 });
 });
 
+// Legal rows are in the Settings row style (B612 label, VT323 state, 48 dp), the UNIT block sits under the
+// ABOUT line, and the simulated line is whole inside the glass without scrolling.
+for (const lang of ['en', 'de']) {
+  test(`legal: Settings row style, UNIT block below the list, ABOUT in view (${lang})`, async ({ page }) => {
+    await page.goto(`/legal?static=1&lang=${lang}`);
+    await expect(page.getByTestId('legal-impressum')).toBeVisible();
+    const fam = (id: string, sel: string) => page.getByTestId(id).locator(sel).first().evaluate((e) => getComputedStyle(e).fontFamily);
+    expect(await fam('legal-impressum', 'div')).toContain('B612');
+    await page.goto('/settings?static=1');
+    expect(await fam('setting-sound', 'div')).toContain('B612');
+    await page.goto(`/legal?static=1&lang=${lang}`);
+    const row = (await page.getByTestId('legal-impressum').boundingBox())!;
+    expect(row.height).toBeGreaterThanOrEqual(48);
+    const about = (await page.getByTestId('legal-about').boundingBox())!;
+    const unit = (await page.getByTestId('legal-unit').boundingBox())!;
+    const glass = (await page.getByTestId('legal-list').locator('xpath=..').boundingBox())!;
+    expect(unit.y).toBeGreaterThanOrEqual(about.y + about.height);
+    expect(about.y + about.height).toBeLessThanOrEqual(glass.y + glass.height);
+    expect(unit.y + unit.height).toBeLessThanOrEqual(glass.y + glass.height);
+    const text = (await page.getByTestId('legal-unit').innerText()).replace(/\s+/g, ' ');
+    expect(text).toContain('VELDEN FS-4/87-P');
+    expect(text).toContain('FS4-8711-00417-9');
+    expect(text).toContain('FW 3.1.7');
+  });
+}
+
 // A-70: the unit's plate data fills the lower glass: model, serial, firmware, CAL, DUE, PRÜF. The same
 // serial as the nameplate, and the ABOUT line stays above it.
 test('the UNIT block prints the plate data under the ABOUT line', async ({ page }) => {

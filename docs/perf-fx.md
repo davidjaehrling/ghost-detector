@@ -3,7 +3,7 @@
 Owner: FX Engineer. For Builder A to fold into `docs/perf.md`.
 
 ## Method
-- Guard: `e2e/web/perf-fx.spec.ts`, 390 x 844 only, CPU throttle via CDP `Emulation.setCPUThrottlingRate` (x4 default, `FX_CPU_RATE=1` for the reference run). Numbers print as `[perf-fx] ...` lines in the CI log.
+- Guard: `e2e/web/perf-fx.spec.ts`, 390 x 844 only, CPU throttle via CDP `Emulation.setCPUThrottlingRate` (x2 default, `FX_CPU_RATE=1` for the reference run). Numbers print as `[perf-fx] ...` lines in the CI log.
 - Scan theatre: the FX frame counter `src/fx/perf` (`window.__fxFrames`, installed on web by `Glass`, idle until started). The spec opens `/viewfinder?fixture=cellar`, settles 2.5 s, presses CAPTURE, starts the counter when the scan bar shows and stops it in a MutationObserver the moment the result screen attaches (the route change is excluded). Budget: p50 at or above 55 fps (p50 frame time at or under 18.2 ms); p95 recorded.
 - Print: `/share-probe?static=1&format=story&case=critical-deep&fixture=cellar`; `renderShareCard` now returns `ms: { load, draw, encode, save, total }`, the probe exposes them as `data-ms-*`. Budget: draw plus encode under 1500 ms.
 - Profile: CanvasKit in Node (the share card unit-test harness), each canvas call timed.

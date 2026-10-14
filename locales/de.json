@@ -187,7 +187,7 @@
   "viewfinder.geoLabel": "GEO",
   "viewfinder.glassLabel": "{mode}. {flux}. Aktivitätsindex {index} von 5. Ort {tag}.",
   "relay.header": "FELDPROTOKOLL-RELAIS",
-  "relay.body": "Relais einbauen? Höchstens ein Eintrag pro Nacht: Index, Mond, ein offener Fall oder der Katalog. Zwischen 18:00 und 22:00. Kein Ton. Die Einträge sind simuliert.",
+  "relay.body": "Relais einbauen? Höchstens ein Eintrag pro Nacht: Index, Mond, ein offener Fall oder der Katalog. Zwischen 18:00 und 22:00, kein Ton. Die Einträge sind simuliert.",
   "relay.fit": "EINBAUEN",
   "relay.notNow": "SPÄTER",
   "relay.fitted": "Relais eingebaut. Änderung in den Einstellungen.",

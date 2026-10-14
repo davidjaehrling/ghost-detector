@@ -344,6 +344,39 @@ test('QUIET over a black photo prints the auto-gain on the strip, SIMULATED last
   check();
 });
 
+// D-049: QUIET fills the lower third of the glass with the unit's state. Over the black fixture that is tonight's window
+// and the GAIN readout (the golden); over a lit photo only the window line.
+test('result-quiet-gain: QUIET over the black fixture fills the lower glass with the window and GAIN', async ({ page }, testInfo) => {
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=black&demo=quiet');
+  await expect(page.getByTestId('screen-result')).toBeVisible();
+  await settle(page);
+  await expect(page.getByTestId('result-gain')).toHaveText(/^GAIN \+(6|12|18|24) dB$/);
+  await expect(page.getByTestId('result-window')).toHaveText(/^03:00 IN \d+ H \d+ MIN$/);
+  const gain = (await page.getByTestId('result-gain').boundingBox())!;
+  const win = (await page.getByTestId('result-window').boundingBox())!;
+  const best = (await page.getByTestId('result-best').boundingBox())!;
+  const glass = (await page.getByTestId('screen-result-glass').boundingBox())!;
+  // Both sit in the lower third of the glass, under the best-case line, whole inside the glass.
+  expect(win.y).toBeGreaterThanOrEqual(glass.y + (glass.height * 2) / 3 - 4);
+  expect(win.y).toBeGreaterThanOrEqual(best.y + best.height);
+  expect(gain.y).toBeGreaterThanOrEqual(win.y + win.height - 1);
+  expect(gain.y + gain.height).toBeLessThanOrEqual(glass.y + glass.height);
+  await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-quiet-gain.png` });
+  if (testInfo.project.name === 'android-390x844') await expect(page).toHaveScreenshot('result-quiet-gain.png', { maxDiffPixels: 150 });
+  check();
+});
+
+test('QUIET over a lit photo prints the window line and no GAIN', async ({ page }) => {
+  const check = watch(page);
+  await page.goto('/result/demo?static=1&fixture=bright&demo=quiet');
+  await expect(page.getByTestId('screen-result')).toBeVisible();
+  await settle(page);
+  await expect(page.getByTestId('result-window')).toBeVisible();
+  await expect(page.getByTestId('result-gain')).toHaveCount(0);
+  check();
+});
+
 test('QUIET over a lit photo prints no GAIN', async ({ page }) => {
   const check = watch(page);
   await page.goto('/result/demo?static=1&fixture=bright&demo=quiet');

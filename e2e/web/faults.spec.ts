@@ -65,6 +65,10 @@ test('storage-write: a scan completes and the result opens with nothing persiste
   await page.getByTestId('screen-result').last().getByTestId('key-back').click();
   await expect(page.getByTestId('screen-viewfinder').last()).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('fs4.scans.v1'))).toBeNull();
+  // The failure is observable, not only the absence of data: the refused scan write is in the storage log.
+  const log = await page.evaluate(() => (window as unknown as { __storageLog?: { op: string; key: string; ok: boolean }[] }).__storageLog ?? []);
+  expect(log.filter((e) => e.op === 'set' && e.key === 'fs4.scans.v1' && !e.ok).length).toBeGreaterThan(0);
+  expect(log.some((e) => e.ok)).toBe(false);
   await page.getByTestId('key-log').last().click();
   await expect(page.getByTestId('screen-history').last()).toBeVisible();
   await page.getByTestId('key-forward').last().click();
