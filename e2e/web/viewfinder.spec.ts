@@ -64,7 +64,6 @@ test('the tag row is controlled by the glass row only, with 44 dp hits and 12 px
     expect(texts[i]!.x - (texts[i - 1]!.x + texts[i - 1]!.width)).toBeGreaterThanOrEqual(12);
     expect(hits[i]!.x - (hits[i - 1]!.x + hits[i - 1]!.width)).toBeGreaterThanOrEqual(12 - 0.1);
   }
-  const vw = page.viewportSize()!.width;
   await expect(page.getByTestId('tag-text-hallway')).toHaveText('HALL');
   await expect(page.getByTestId('tag-text-outdoors')).toHaveText('OUTSIDE');
   await page.getByTestId('tag-attic').click();
@@ -152,7 +151,6 @@ test('the 03:00 window countdown sits right-aligned in the top strip and does no
   await expect(win).toHaveText(/^03:00 IN \d+ H \d+ MIN$/);
   expect(await win.innerText()).not.toMatch(/\d:\d\d:\d\d|\bS\b/);
   const [w, top, idx] = await Promise.all([win.boundingBox(), page.getByTestId('hud-top').boundingBox(), page.getByTestId('hud-top').boundingBox()]);
-  const vw = page.viewportSize()!.width;
   expect(w!.y).toBeLessThan(top!.y + 30);
   expect(w!.x).toBeGreaterThan(idx!.x + idx!.width);
   expect(w!.x + w!.width).toBeGreaterThan(vw / 2);
@@ -176,7 +174,6 @@ test('the live ΔT sits with FLUX, frozen under static and moving live', async (
   const geo = (await page.getByTestId('hud-geo').boundingBox())!;
   const box = (await dt.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(flux.y + flux.height - 2);
-  const vw = page.viewportSize()!.width;
   if (vw < 380) {
     // A narrow window: ΔT takes its own line under GEO, with the spaces of the unit format intact (A-26).
     expect(box.y).toBeGreaterThanOrEqual(geo.y + geo.height - 2);
