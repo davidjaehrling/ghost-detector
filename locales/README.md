@@ -223,6 +223,10 @@ Choices:
 - A-84: template 4 DE opens `Protokolliert` (was drafted `Erfasst`, which says captured). `{tag}` stays lowercase as the engine passes it. German nouns need a capital, so DE needs `{Tag}`; see the open item in the commit report.
 - Register: fault, window, temperature, strip and key keys are impersonal; the deep arm line and relay copy need no pronoun, so none was added.
 
+- Settings legends (QA golden review): `settings.on` and `settings.off` are printed switch legends, so each market keeps the legend its hardware prints: EN `ON` / `OFF`, DE `EIN` / `AUS` (German switch plates and `FELDPROTOKOLL: EIN`), ES and PT `ON` / `OFF` (as on Spanish and Portuguese devices; `SÍ/NO` reads as a quiz answer, `ACT./DESACT.` is 5 and 8 against 2 and 3). De differs on purpose and stays internally consistent with `history.relayOn`. `settings.language.system` (the language row's device-default value) is a word, not a legend: EN and DE `SYSTEM` (a German word), ES and PT `SISTEMA` (7 against 6, +1). The EN, DE, ES, PT codes in the language row stay as codes.
+- Fault cause (Compliance diff review): `fault.unit.cause` drops "process", which sounds like an OS dialog. EN `SCREEN STOPPED.` (was `SCREEN PROCESS STOPPED.`), DE `ANZEIGE GESTOPPT.` (was `ANZEIGEPROZESS GESTOPPT.`), ES `PANTALLA DETENIDA.` (was `PROCESO DE PANTALLA DETENIDO.`), PT `ECRÃ PARADO.` (was `PROCESSO DO ECRÃ PARADO.`). All shorter than before.
+- `boot.transient` is parameterised: `{count}` replaces the literal `1` in all four languages (`TRANSIENT {count} · LOGGED`, `TRANSIENTE {count} · PROTOKOLLIERT`, `TRANSITORIO {count} · REGISTRADO`, `TRANSITÓRIO {count} · REGISTADO`). Call `t('boot.transient', { count })`.
+
 Width: DE `deep.arm` (80 characters) and all others fit two lines at an estimated 43 characters a line at 360 (VT323 16 px, 6.4 px advance); the bounding-box test decides.
 
 ## Checks
