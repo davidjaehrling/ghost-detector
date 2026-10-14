@@ -14,6 +14,8 @@ export type ScanRecord = {
   seed: number;
   outcome: Outcome;
   profile: EntityProfile;
+  /** Set when a rewarded DEEP SCAN finished for this scan (P5-04): full profile, high-resolution apparition, EVP line. */
+  deepScanAt?: number;
 };
 
 export type KeyValueStore = { getItem(k: string): string | null; setItem(k: string, v: string): void };
@@ -21,6 +23,8 @@ export type KeyValueStore = { getItem(k: string): string | null; setItem(k: stri
 export type ScanStore = {
   saveScan(record: Omit<ScanRecord, 'id'> | ScanRecord): string;
   getScan(id: string): ScanRecord | undefined;
+  /** Marks the scan as deep-scanned and persists it. False when the case does not exist. Idempotent. */
+  unlockDeepScan(id: string, atMs?: number): boolean;
   listScans(): ScanRecord[];
   getHistory(nowMs?: number): OutcomeHistory;
   getRecentNames(): string[];
@@ -84,6 +88,15 @@ export function createScanStore(opts: { storage?: KeyValueStore | null; sessionS
       return id;
     },
     getScan: (id) => load().find((r) => r.id === id),
+    unlockDeepScan(id, atMs = Date.now()) {
+      const rec = load().find((r) => r.id === id);
+      if (!rec) return false;
+      if (rec.deepScanAt === undefined) {
+        rec.deepScanAt = atMs;
+        persist();
+      }
+      return true;
+    },
     listScans: () => [...load()],
     getRecentNames: () => load().map((r) => r.profile.name).slice(-20),
     getRecentLines: () => load().slice(-20).flatMap((r) => r.profile.traits ?? []),
@@ -147,6 +160,7 @@ function isRecord(v: unknown): v is ScanRecord {
 const store = createScanStore();
 export const saveScan = store.saveScan;
 export const getScan = store.getScan;
+export const unlockDeepScan = store.unlockDeepScan;
 export const listScans = store.listScans;
 export const getHistory = store.getHistory;
 export const getRecentNames = store.getRecentNames;

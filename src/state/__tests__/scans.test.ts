@@ -107,3 +107,37 @@ describe('scan store', () => {
     expect(t.getIntensity()).toBe('calm');
   });
 });
+
+describe('deep scan unlock (P5-04)', () => {
+  it('starts locked, unlocks one scan and leaves the others alone', () => {
+    const s = createScanStore({ storage: null });
+    const a = s.saveScan(rec('active', 1));
+    const b = s.saveScan(rec('strong', 2));
+    expect(s.getScan(a)?.deepScanAt).toBeUndefined();
+    expect(s.unlockDeepScan(a, 1234)).toBe(true);
+    expect(s.getScan(a)?.deepScanAt).toBe(1234);
+    expect(s.getScan(b)?.deepScanAt).toBeUndefined();
+  });
+
+  it('is idempotent and keeps the first time', () => {
+    const s = createScanStore({ storage: null });
+    const id = s.saveScan(rec('active', 1));
+    s.unlockDeepScan(id, 10);
+    s.unlockDeepScan(id, 99);
+    expect(s.getScan(id)?.deepScanAt).toBe(10);
+  });
+
+  it('returns false for a case that is not on file', () => {
+    expect(createScanStore({ storage: null }).unlockDeepScan('0042')).toBe(false);
+  });
+
+  it('survives a reload: a second store on the same storage reads the unlocked state', () => {
+    const storage = mem();
+    const first = createScanStore({ storage });
+    const id = first.saveScan(rec('critical', 5));
+    first.unlockDeepScan(id, 777);
+    const second = createScanStore({ storage });
+    expect(second.getScan(id)?.deepScanAt).toBe(777);
+    expect(second.listScans().filter((r) => r.deepScanAt !== undefined)).toHaveLength(1);
+  });
+});
