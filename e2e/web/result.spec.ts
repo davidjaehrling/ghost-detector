@@ -166,13 +166,15 @@ test('result-therm-critical: the thermal view', async ({ page }, testInfo) => {
   check();
 });
 
-test('SHARE is not fitted, and the only ad surface on the result is the DEEP SCAN key', async ({ page }) => {
+test('SHARE opens the format choice, and the only ad surface on the result is the DEEP SCAN key', async ({ page }) => {
   const check = watch(page);
   await page.goto('/result/demo?static=1&fixture=cellar&demo=active');
   await settle(page);
   await expect(page.getByTestId('result-line')).toHaveText('Activity logged.');
   await page.getByTestId('key-share').click();
-  await expect(page.getByTestId('result-line')).toHaveText('NOT FITTED IN THIS UNIT');
+  await expect(page.getByTestId('share-line')).toHaveText('Print field card. Format?');
+  // While the flow is open the DEEP SCAN key is not live: no ad is on offer.
+  await expect(page.getByTestId('deepscan-key')).toBeDisabled();
   // No banner or interstitial surface; the one sponsor line is the DEEP SCAN sublabel.
   const ids = await page.locator('[data-testid]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
   expect(ids.length).toBeGreaterThan(10);

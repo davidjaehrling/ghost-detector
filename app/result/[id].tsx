@@ -5,6 +5,7 @@ import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { track } from '../../src/analytics';
 import { onBackToViewfinder, onFreshResult } from '../../src/ui/interstitial';
+import type { CardFormat } from '../../src/fx/share/constants';
 import type { Tier } from '../../src/engine';
 import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
 import { PhosphorText, SnapshotCanvas, useVT323 } from '../../src/fx/glass';
@@ -16,7 +17,7 @@ import { getIntensity, getScan, listScans, type ScanRecord } from '../../src/sta
 import { consumeReveal } from '../../src/state/session';
 import { useSettings } from '../../src/state/useSettings';
 import { mulberry32 } from '../../src/ui/boot/seed';
-import type { KeySlot } from '../../src/ui/boot/parts';
+import { type KeySlot, useBlink } from '../../src/ui/boot/parts';
 import { DEFAULT_FIXTURE } from '../../src/ui/fixtureNames';
 import { fixtureUri } from '../../src/ui/fixtures';
 import { type Harness, readHarness } from '../../src/ui/harness';
@@ -29,6 +30,8 @@ import { Readout } from '../../src/ui/Readout';
 import { scareEligible } from '../../src/ui/result/scare';
 import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../../src/ui/result/deepCopy';
 import { type DeepState, useDeepScan } from '../../src/ui/result/deepScan';
+import { FAULT_LIFE_MS, type OfferKind, type ShareMode, shareCopy, useShareOffer } from '../../src/ui/result/share';
+import { runShare } from '../../src/ui/result/shareRun';
 import { type ScareMode, useScare } from '../../src/ui/result/useScare';
 import { useReduceMotion } from '../../src/ui/useReduceMotion';
 import { SpiDial } from '../../src/ui/result/SpiDial';
@@ -58,9 +61,6 @@ const copy = {
   classLabel: 'CLASS',
   eraLabel: 'ERA',
   hidden: ['DESIGNATION', 'BEHAVIOUR', deepCopy.evpHead],
-  notFitted: 'NOT FITTED IN THIS UNIT',
-  share: 'SHARE',
-  shareLabel: 'Share result',
   thermKeyLabel: 'Thermal view',
   photoKey: 'PHOTO',
   photoKeyLabel: 'Photo view',
@@ -74,7 +74,6 @@ const copy = {
 // canvas reads back blank). `?static=1&warp=0` turns it off for the harness.
 const WARP_RESULT = true;
 
-const NOT_FITTED_MS = 1500;
 const FADE_MS = 1500;
 const PHOTO_MIN = 0.3; // least share of the glass the photo keeps on a short screen
 const CHAR_XS = 6.9; // VT323 16 px: 0.4 em advance plus 0.5 tracking
@@ -103,12 +102,12 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string; share?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string; share?: string } }) {
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
   const record = useMemo<ScanRecord | undefined>(() => {
@@ -158,15 +157,49 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     unlockedAt: isDemo && params.deepscan === 'unlocked' ? 1 : record?.deepScanAt,
     persist: !isDemo,
   });
-  const [notice, setNotice] = useState(false);
-  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => void (noticeTimer.current && clearTimeout(noticeTimer.current)), []);
-  // Share is not wired yet. A press shows one line; under static it stays up.
-  const inert = () => {
-    setNotice(true);
-    if (harness.isStatic) return;
-    if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(false), NOT_FITTED_MS);
+  // Share flow (docs/p6-brief.md 1.5 and 1.6). Harness: `?static=1&share=offer|updated|format|timer`.
+  // Under static the proactive timers are frozen unless share=timer, so the goldens do not move.
+  const shareParam = harness.isStatic ? params.share : undefined;
+  const [digitLanded, setDigitLanded] = useState(harness.isStatic);
+  const [shareMode, setShareMode] = useState<ShareMode>(shareParam === 'format' ? 'format' : 'idle');
+  const offer = useShareOffer({
+    tier: record?.outcome.tier ?? 'quiet',
+    stable: stable && digitLanded,
+    deep: deep.state,
+    adClosedAt: deep.closedAt,
+    frozen: harness.isStatic && shareParam !== 'timer',
+    initial: shareParam === 'offer' ? 'ready' : shareParam === 'updated' ? 'updated' : null,
+  });
+  const alive = useRef(true);
+  const faultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (faultTimer.current) clearTimeout(faultTimer.current);
+    };
+  }, []);
+  const shareOpen = shareMode === 'format' || shareMode === 'printing';
+  const openFormat = () => {
+    if (!digitLanded || shareOpen) return;
+    if (faultTimer.current) clearTimeout(faultTimer.current);
+    offer.dismiss();
+    setShareMode('format');
+  };
+  const pickFormat = (format: CardFormat) => {
+    if (!record || shareMode !== 'format') return;
+    setShareMode('printing');
+    const belief = getBelief();
+    // Harness: ?static=1&share=fail makes the printer fault.
+    const run = shareParam === 'fail' ? Promise.reject(new Error('harness printer fault')) : runShare(record, format, belief ? BELIEF_PROFILE[belief].opacityRange : undefined);
+    run.then(
+      () => alive.current && setShareMode('idle'),
+      () => {
+        if (!alive.current) return;
+        setShareMode('fault');
+        if (!harness.isStatic) faultTimer.current = setTimeout(() => setShareMode('idle'), FAULT_LIFE_MS);
+      },
+    );
   };
 
   if (!record) {
@@ -192,8 +225,10 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
   // Fixed four-slot row: BACK, SHARE, THERM (PHOTO while it shows), then a dummy cap. DEEP SCAN is
   // the key on the glass under the decoded signature (it leads into it), not a hardware slot.
   const keySlots: (KeySlot | null)[] = [
-    { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder },
-    { testID: 'key-share', label: copy.shareLabel, legend: copy.share, onPress: inert },
+    shareMode === 'format'
+      ? { testID: 'key-back', label: shareCopy.cancelLabel, legend: shareCopy.cancel, onPress: () => setShareMode('idle') }
+      : { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder, inert: shareMode === 'printing' },
+    { testID: 'key-share', label: shareCopy.keyLabel, legend: shareCopy.key, onPress: openFormat, inert: !digitLanded || shareOpen, backlit: offer.line !== null || shareMode === 'format' },
     therm
       ? { testID: 'key-therm', label: copy.photoKeyLabel, legend: copy.photoKey, onPress: () => setTherm(false), backlit: true }
       : { testID: 'key-therm', label: copy.thermKeyLabel, legend: copy.thermal, onPress: () => setTherm(true) },
@@ -207,7 +242,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       fixedIdentity={harness.isStatic}
       glassLabel={copy.glass}
       keys={keySlots}
-      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}-${deep.state}` }}
+      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}-${deep.state}-${shareMode}-${offer.line}` }}
     >
       {(size) => (
         <ResultGlass
@@ -215,7 +250,9 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
           record={record}
           isStatic={harness.isStatic}
           speed={harness.speed}
-          notice={notice}
+          share={{ mode: shareMode, line: offer.line, onPick: pickFormat }}
+          shareOpen={shareOpen}
+          onLanded={setDigitLanded}
           scare={scareMode}
           therm={therm}
           deep={deep}
@@ -250,15 +287,17 @@ type GlassProps = {
   record: ScanRecord;
   isStatic: boolean;
   speed: number;
-  notice: boolean;
+  share: { mode: ShareMode; line: OfferKind | null; onPick: (f: CardFormat) => void };
+  shareOpen: boolean;
+  onLanded: (landed: boolean) => void;
   scare: ScareMode;
   therm: boolean;
-  deep: { state: DeepState; press: () => void };
+  deep: { state: DeepState; press: () => void; closedAt: number | null };
   onPhotoLoaded: (loaded: boolean) => void;
   onStable: (stable: boolean) => void;
 };
 
-function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, deep, onPhotoLoaded, onStable }: GlassProps) {
+function ResultGlass({ size, record, isStatic, speed, share, shareOpen, onLanded, scare, therm, deep, onPhotoLoaded, onStable }: GlassProps) {
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const tint = TIER_COLOR[tier];
@@ -319,6 +358,10 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, deep
     };
   }, [isStatic, speed, outcome.spi, value]);
 
+  useEffect(() => {
+    onLanded(landed);
+  }, [landed, onLanded]);
+
   const reduceMotion = useReduceMotion();
   const scareView = useScare(scare, landed);
 
@@ -341,7 +384,9 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, deep
 
   const mainLine =
     tier === 'critical' ? copy.line.critical(reading.evpHz) : copy.line[tier];
-  const resultLine = notice ? copy.notFitted : mainLine;
+  const resultLine = share.mode === 'fault' ? shareCopy.fault : share.line === 'ready' ? shareCopy.ready(record.id) : share.line === 'updated' ? shareCopy.updated : mainLine;
+  const lineCount = PINNED_TIERS.includes(tier) ? 2 : 1;
+  const sharePanel = share.mode === 'format' || share.mode === 'printing';
   const unlocked = deep.state === 'unlocked';
   const pct = unlocked ? 100 : profile.signatureDecodedPct;
   const innerW = size.w - 24;
@@ -396,6 +441,10 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, deep
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
         </View>
+        {sharePanel ? (
+          <SharePanel mode={share.mode} height={BODY.gap + BODY.line * lineCount + BODY.gap + BODY.readings} still={isStatic} onPick={share.onPick} />
+        ) : (
+          <>
         <View style={s.lines}>
           <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
             {resultLine}
@@ -425,6 +474,8 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, deep
           />
           <Readout size="rdXS" label={copy.acoustic} value={String(reading.levelDb)} unit="dBFS" labelCh={6} />
         </View>
+          </>
+        )}
         <View style={s.profile} testID="result-profile">
           <Text style={s.profileHead}>{copy.profile}</Text>
           {quiet ? (
@@ -450,7 +501,7 @@ function ResultGlass({ size, record, isStatic, speed, notice, scare, therm, deep
           </View>
         )}
         {quiet ? null : <View style={s.spacer} />}
-        {wide ? <DeepKey state={deep.state} onPress={deep.press} /> : null}
+        {wide ? <DeepKey state={deep.state} onPress={deep.press} shareOpen={shareOpen} /> : null}
         {quiet ? (
           <View style={s.best} testID="result-best">
             {best ? (
@@ -483,6 +534,34 @@ function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value
   );
 }
 
+// The format choice, in place of the result lines and readings: one line and two keys. While the card
+// renders the same box holds the printing line with a blinking block. The box keeps the height of what
+// it replaces, so nothing above or below moves.
+function SharePanel({ mode, height, still, onPick }: { mode: ShareMode; height: number; still: boolean; onPick: (f: CardFormat) => void }) {
+  const blink = useBlink(still);
+  const printing = mode === 'printing';
+  return (
+    <View style={[s.sharePanel, { height }]} testID="share-panel">
+      <View style={s.shareLineRow}>
+        <Text style={s.resultLine} testID="share-line" numberOfLines={1}>
+          {printing ? shareCopy.printing : shareCopy.format}
+        </Text>
+        {printing ? <View style={[s.shareBlock, { opacity: blink ? 1 : 0 }]} testID="share-block" /> : null}
+      </View>
+      {printing ? null : (
+        <View style={s.shareKeys}>
+          <Pressable testID="share-916" accessibilityRole="button" accessibilityLabel={shareCopy.storyLabel} onPress={() => onPick('story')} style={s.shareKey}>
+            <Text style={s.shareKeyText}>{shareCopy.story}</Text>
+          </Pressable>
+          <Pressable testID="share-11" accessibilityRole="button" accessibilityLabel={shareCopy.squareLabel} onPress={() => onPick('square')} style={s.shareKey}>
+            <Text style={s.shareKeyText}>{shareCopy.square}</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
 // The DEEP SCAN key on the glass, directly under the decoded signature it leads into. The sublabel
 // is always drawn while the key is offered. Disabled states print their reason in the key itself.
 const DEEP_LEGEND: Record<Exclude<DeepState, 'unlocked'>, string> = {
@@ -492,7 +571,7 @@ const DEEP_LEGEND: Record<Exclude<DeepState, 'unlocked'>, string> = {
   running: deepCopy.running,
 };
 
-function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) {
+function DeepKey({ state, onPress, shareOpen }: { state: DeepState; onPress: () => void; shareOpen: boolean }) {
   if (state === 'unlocked') {
     return (
       <Text style={s.deepDone} testID="deepscan-done">
@@ -500,7 +579,8 @@ function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) 
       </Text>
     );
   }
-  const live = state === 'ready';
+  // No ad is offered while the share flow is open.
+  const live = state === 'ready' && !shareOpen;
   return (
     <View style={s.deepWrap}>
       <Pressable
@@ -811,6 +891,12 @@ const s = StyleSheet.create({
   deepLegend: { ...type.rdXS },
   deepSub: { ...type.lbXS, color: color.p3, height: 12, textAlign: 'center' },
   deepDone: { ...type.rdXS, color: color.p4, height: BODY.offer - 4, marginBottom: BODY.gap },
+  sharePanel: { marginTop: BODY.gap },
+  shareLineRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shareBlock: { width: 8, height: 12, backgroundColor: color.p4 },
+  shareKeys: { flexDirection: 'row', gap: 12, marginTop: BODY.gap },
+  shareKey: { width: 96, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: color.p3 },
+  shareKeyText: { ...type.rdS, color: color.p5 },
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },

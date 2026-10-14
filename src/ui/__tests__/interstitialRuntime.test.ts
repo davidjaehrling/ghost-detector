@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_GAP_MS, cadenceStore } from '../../state/cadence';
-import { SHOW_DELAY_MS, TAP_EXPIRY_MS, onBackToViewfinder, onFreshResult, resetInterstitialRuntime, setGate, startCadence, takeReturnNote } from '../interstitial';
+import { SHOW_DELAY_MS, TAP_EXPIRY_MS, onBackToViewfinder, onCardShared, onFreshResult, resetInterstitialRuntime, setGate, startCadence, takeReturnNote } from '../interstitial';
 
 const load = vi.fn(async () => true);
 const show = vi.fn(async () => ({ shown: true, earned: false }));
@@ -52,6 +52,28 @@ describe('return note for the relay opt-in', () => {
     expect(takeReturnNote()).toBeNull();
     onBackToViewfinder();
     expect(takeReturnNote()).toEqual({ interstitial: false });
+  });
+});
+
+describe('mid-share', () => {
+  it('skips the interstitial on the return after a share', async () => {
+    sessionOne();
+    onFreshResult();
+    onCardShared();
+    onBackToViewfinder();
+    expect(takeReturnNote()).toEqual({ interstitial: false });
+    setGate(true);
+    await vi.advanceTimersByTimeAsync(SHOW_DELAY_MS + 100);
+    expect(show).not.toHaveBeenCalled();
+  });
+
+  it('a new fresh result clears the flag', () => {
+    sessionOne();
+    onFreshResult();
+    onCardShared();
+    onFreshResult();
+    onBackToViewfinder();
+    expect(takeReturnNote()).toEqual({ interstitial: true });
   });
 });
 
