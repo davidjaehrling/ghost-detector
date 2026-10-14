@@ -156,10 +156,14 @@ export function ignoredInARow(sent: SentItem[], nowMs: number): number {
   return n;
 }
 
-/** True when every 7 day window over the times holds at most `cap` of them. */
-export function withinWeeklyCap(times: number[], cap: number): boolean {
+/**
+ * True when every 7 day window over the times holds at most `cap` of them. With `at`, only windows
+ * that contain `at` count, so lines older than 7 days before `at` can never block it.
+ */
+export function withinWeeklyCap(times: number[], cap: number, at?: number): boolean {
   const t = [...times].sort((a, b) => a - b);
   for (let i = 0; i < t.length; i++) {
+    if (at !== undefined && (t[i]! > at || t[i]! + WEEK_MS <= at)) continue;
     let n = 0;
     for (let j = i; j < t.length && t[j]! < t[i]! + WEEK_MS; j++) n++;
     if (n > cap) return false;
@@ -313,7 +317,7 @@ export function nextNotificationWith(s: NotifyState, _seed: number, strings: Eng
     const t = dayStart + minute * 60_000; // same local minute every night for this install
     if (t < earliest) continue;
     if (t - s.lastAppOpenMs >= STALE_AFTER_MS) break;
-    if (!withinWeeklyCap([...sentTimes, t], cap)) continue;
+    if (!withinWeeklyCap([...sentTimes, t], cap, t)) continue;
     const at = (hour: number, plusDays: number) => dayStart + plusDays * DAY_MS + hour * HOUR_MS;
     const ctx: Ctx = {
       s, t, moonPct: forecastIndex(t, s.utcOffsetMin).moonPct,
@@ -349,7 +353,7 @@ export function applyIntensityChange(
   const kept = next.sent.filter((x) => x.sentAtMs <= next.nowMs).map((x) => x.sentAtMs);
   const cancelIds: string[] = [];
   for (const p of [...pending].sort((a, b) => a.fireAtMs - b.fireAtMs)) {
-    if (allowed.includes(p.templateId) && withinWeeklyCap([...kept, p.fireAtMs], cap)) kept.push(p.fireAtMs);
+    if (allowed.includes(p.templateId) && withinWeeklyCap([...kept, p.fireAtMs], cap, p.fireAtMs)) kept.push(p.fireAtMs);
     else cancelIds.push(p.id);
   }
   return { cancelIds, reschedule: cancelIds.length > 0 };

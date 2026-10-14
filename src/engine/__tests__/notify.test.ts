@@ -121,9 +121,20 @@ describe('rules over 10000 random states', () => {
       expect(s.sent.some((x) => localDayNumber(x.sentAtMs, s.utcOffsetMin) === day - 1)).toBe(false);
     }
   });
-  it('weekly caps hold over every 7 day window', () => {
+  it('a state with no line within 7 days of t is never blocked by the cap', () => {
+    let checked = 0;
+    for (let seed = 0; seed < 10000; seed++) {
+      const s = randomState(seed);
+      const t = s.nowMs + DAY_MS;
+      if (s.sent.some((x) => Math.abs(x.sentAtMs - t) < WEEK_MS)) continue;
+      expect(withinWeeklyCap([...s.sent.map((x) => x.sentAtMs), t], effectiveCap(s), t)).toBe(true);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(1000);
+  });
+  it('weekly caps hold over every 7 day window containing the line', () => {
     for (const { s, n } of fired) {
-      expect(withinWeeklyCap([...s.sent.map((x) => x.sentAtMs), n.fireAtMs], effectiveCap(s))).toBe(true);
+      expect(withinWeeklyCap([...s.sent.map((x) => x.sentAtMs), n.fireAtMs], effectiveCap(s), n.fireAtMs)).toBe(true);
       expect(effectiveCap(s)).toBeLessThanOrEqual(CAP_PER_WEEK[s.intensity]);
     }
   });
@@ -447,14 +458,28 @@ describe('Calm sends fewer lines than Standard over a seeded year (A-71)', () =>
       for (let seed = 1; seed <= 30; seed++) {
         const c = year(seed, 'calm', openRate), st = year(seed, 'standard', openRate), b = year(seed, 'brave', openRate);
         tot.calm += c; tot.standard += st; tot.brave += b;
-        if (openRate === 1) { expect(c).toBeLessThan(st); expect(st).toBeLessThanOrEqual(b); }
+        expect(c).toBeLessThan(st); expect(st).toBeLessThan(b);
       }
       console.log(`lines over 30 simulated years, open rate ${openRate}:`, JSON.stringify(tot));
-      if (openRate === 1) expect(tot.calm).toBeLessThan(tot.standard * 0.8);
+      expect(tot.calm).toBeLessThan(tot.standard * 0.8);
     });
   }
   it('switching to Calm cancels pending lines and the new state sends no template 1, 3 or 4', () => {
     const pending = [{ id: 'a', templateId: 1 as TemplateId, fireAtMs: T0 + DAY_MS }, { id: 'b', templateId: 4 as TemplateId, fireAtMs: T0 + 3 * DAY_MS }];
     expect(applyIntensityChange({ intensity: 'standard' }, base({ intensity: 'calm' }), pending).cancelIds).toEqual(['a', 'b']);
+  });
+});
+
+describe('weekly cap ignores old history', () => {
+  it('Standard with two unopened lines 75 and 72 days ago still schedules (repro)', () => {
+    const st = base({
+      intensity: 'standard', installMs: T0 - 100 * DAY_MS, catalogueCount: 12,
+      scans: [96, 97, 98].map((caseId) => scan({ caseId, atMs: T0 - 3 * DAY_MS, decodedPct: 60 })),
+      sent: [{ templateId: 5, sentAtMs: T0 - 75 * DAY_MS, opened: false }, { templateId: 5, sentAtMs: T0 - 72 * DAY_MS, opened: false }],
+    });
+    expect(effectiveCap(st)).toBe(1);
+    expect(nextNotification(st, 1)?.templateId).toBe(4);
+    expect(withinWeeklyCap([1, 2, 3 * DAY_MS], 1, 3 * DAY_MS)).toBe(false);
+    expect(withinWeeklyCap([0, 3 * DAY_MS, 20 * DAY_MS], 1, 20 * DAY_MS)).toBe(true);
   });
 });
