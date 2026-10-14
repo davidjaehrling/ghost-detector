@@ -26,6 +26,7 @@ export default function Legal() {
   return (
     <Placeholder
       testID="screen-legal"
+      graticule={false}
       code={copy.code}
       keys={[{ testID: 'key-forward', label: copy.nextLabel, legend: copy.next, onPress: () => router.back() }]}
     >
