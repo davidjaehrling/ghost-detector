@@ -65,7 +65,7 @@ The app does not use the microphone, contacts, files or precise location.
 
 ## 7. Children
 
-The app is intended for people aged 13 and over and is not directed at children. If you are under the age at which you may consent to data processing in your country (16 in Germany), please ask a parent or guardian before using the consent options. If you believe a child has given us personal data, contact us and we will delete it.
+The app is intended for people aged 16 and over and is not directed at children. If you believe a child has given us personal data, contact us and we will delete it.
 
 ## 8. Your rights
 

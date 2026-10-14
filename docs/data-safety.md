@@ -15,7 +15,7 @@ Maps every shipped SDK to the answers in Play Console, Data safety form. Status:
 | Privacy policy URL | <POLICY URL> (must be live and public before submission) |
 | Contains ads | Yes |
 | Advertising ID declaration | Yes, used for advertising (the ads SDK declares `com.google.android.gms.permission.AD_ID`) |
-| Target audience | 13+ (recommend 16+; see report). Not a Families app. |
+| Target audience | 16+ (working default, D-026; owner confirms at Gate 2). Play age bands 16-17 and 18+ only. Not a Families app. |
 
 ## SDK by SDK
 
@@ -47,3 +47,12 @@ Not collected by any shipped SDK: name, email, address, phone, precise location,
 2. If the Firebase backend is not shipped in a release (no `google-services.json`), delete the Firebase rows from the Play form for that release.
 3. Photos count as "not collected" only while no code path uploads an image or derived pixels. Keep it so; the share card is created on device and shared by the user through the system share sheet, which is a user action and not collection by us.
 4. The form must match the privacy policy sections 3, 5 and 6.
+
+## Before launch
+
+1. Host the privacy policy and the Impressum at live public URLs, then replace the placeholders in `src/ui/legal.ts` and the policy URL above.
+2. Release switch for ad unit IDs: `src/ads/backend.ts` uses `TestIds` unless `EXPO_PUBLIC_RELEASE === '1'`, and returns real unit IDs only in the release branch, so a dev or preview build can never carry a live ID.
+3. Extend `scripts/check-ad-ids.mjs` so release mode also fails on the placeholder live IDs. Register test devices in AdMob.
+4. Banner height at phone check 3: record the SDK `onSizeChange` height at 360, 390 and 428 dp and confirm the slot height is at least that (`src/ads/Banner.tsx` clips with `overflow: hidden`).
+5. Firebase install: after prebuild, run `aapt dump xmltree` on the built APK and confirm the merged manifest shows `google_analytics_default_allow_analytics_storage`, `_ad_storage`, `_ad_user_data` and `_ad_personalization_signals` all `false`. The `firebase.json` keys that drive them are `analytics_default_allow_*`.
+6. Re-read the Data safety form against the lockfile and Google's SDK disclosure pages (items marked [U]).
