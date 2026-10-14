@@ -7,10 +7,28 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "plugins": ["expo-router", ["expo-camera", { "cameraPermission": "Camera access required for capture. Frames stay on this device.", "recordAudioAndroid": false }]],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Camera access required for capture. Frames stay on this device.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "delayAppMeasurementInit": true
+        }
+      ]
+    ],
     "android": {
       "package": "com.ghostdetector.app",
-      "permissions": ["android.permission.HIGH_SAMPLING_RATE_SENSORS"]
+      "permissions": [
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS"
+      ]
     },
     "web": {
       "output": "static",
