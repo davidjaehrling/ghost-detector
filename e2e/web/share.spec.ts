@@ -13,7 +13,7 @@ const CASES: { name: string; format: 'story' | 'square'; kase: string; lang?: st
   { name: 'share-story', format: 'story', kase: 'critical-deep' },
   { name: 'share-square', format: 'square', kase: 'critical-deep' },
   { name: 'share-story-undecoded', format: 'story', kase: 'strong-undecoded' },
-  ...(['de'] as const).filter(hasLocale).map((lang) => ({ name: `share-story-${lang}`, format: 'story' as const, kase: 'critical-deep', lang })),
+  ...(['de', 'es', 'pt'] as const).filter(hasLocale).map((lang) => ({ name: `share-story-${lang}`, format: 'story' as const, kase: 'critical-deep', lang })),
 ];
 for (const { name, format, kase, lang } of CASES) {
   test(`share card ${name}`, async ({ page }, testInfo) => {
