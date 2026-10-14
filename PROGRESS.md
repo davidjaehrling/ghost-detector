@@ -3,11 +3,12 @@
 Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what is next, what blocks.
 
 ## Current phase
-**P6 Retention & share** on branch `claude/p6-retention` (from `main` at c4e8954, the P5 squash merge). P7 localisation follows; P8 carries the design-loop leftovers and the believability loop on real photographs. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
+**P7 Localisation** on branch `claude/p7-localisation` (from `main` at 8df1e12, the P6 squash merge). P8 carries the design-loop leftovers (D-022, D-029, D-034, D-035) and the believability loop on real photographs; P9 launch. **Gate 1 is still open** (name, icon, package ID). P2-10 (first AAB), P2-11 (identity) and P4-07 (phone check 2) wait on the owner.
 
-P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4, P5 as PR #5 (2026-10-14). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
+P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4, P5 as PR #5, P6 as PR #6 (2026-10-14). Web preview: GitHub Pages workflow on main (owner enables Pages once). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
 
 ## Last thing done
+- P6 merged as PR #6 (8df1e12) with the GitHub Pages web-preview workflow. P7 contract P7-01 to P7-08 written (D-037); wave 1 launching.
 - P6 verified: panel rounds (D-034, D-035; five of six surfaces at 8+), Compliance diff review (FCM veto fixed by a config plugin, lifted pending device check), Refuter sweep and re-check (D-035, D-036). P6-01..08 flipped; P6-05 device clauses owner-blocked. Merge PR #6 on CI green after the test hardening commit.
 - P5 merged as PR #5 (c4e8954). P6 contract P6-01 to P6-08 written from docs/p6-brief.md (D-031); wave 1 launched: Compliance pre-review, share card renderer, notification scheduler, investigation log and opt-in module.
 - P5 verified: Compliance diff review (D-028, veto fixed), Refuter sweep and re-check (D-029, D-030), boot flake fixed with readiness signals and a spec wait verified at CPU throttle x12 (D-027). P5-01..06, 08, 09, 11 flipped; P5-07 facade built, native backend owner-blocked; P5-10 owner-blocked. PR #5 ready; merge on CI green at 9f08f1a. Dr. Hollow's P6 brief in docs/p6-brief.md.
@@ -29,7 +30,7 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. Merge PR #6; open `claude/p7-localisation` with the P7 contract (DE/ES/PT written per culture, `locales/`, key parity, layout at the longest strings, L2 in four locales, second-model check).
+1. P7 wave 1: Compliance pre-ruling on the SIMULATED mark per language, Builder A i18n layer and extraction, Builder B engine resources; then Copy writes DE/ES/PT, second-model review, layout goldens, Compliance diff review, Refuter, merge.
 2. P6 share card, notifications and investigation log (parallel with P5 once wave 1 lands); P7 localisation after.
 3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase; plus 5 to 8 real dark-room photos for `e2e/fixtures/real/` (D-023).
 
@@ -37,6 +38,7 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 - **Gate 1**: name (panel recommends option 1 "Velden FS-4 Field Probe", alternative option 5), icon (panel recommends concept 3 nameplate), Android package ID (permanent; must not contain "detector" if option 2 is chosen).
 - `expo.dev` and `*.expo.dev` are blocked by the environment network policy. Needed for EAS (L3). Flagged to David.
 - `EXPO_TOKEN` is not set as an environment secret.
+- GitHub Pages: enable once in repository Settings → Pages → Source: GitHub Actions (then `https://davidjaehrling.github.io/ghost-detector/`).
 - Play Console account, AdMob and Firebase not yet created (needed by end of P2 and by P5). P5 builds on Google's test IDs; the Firebase native backend waits on `google-services.json`.
 - Real photographs for the believability loop: 5 to 8 phone photos of dark rooms (cellar, attic, hallway, bedroom at night, outdoors at dusk) into `e2e/fixtures/real/`, licensed to the project.
 
@@ -49,4 +51,5 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 | P3 | ~4.3M | Subagents: Skia 106k, glass 208k, apparition/compositor 343k, thermal 167k, Builder A integration 376k + 274k, round 2 FX 531k + 94k + Builder A 385k, round 3 FX 361k + defects, scoring 167k + 182k (void) + 168k + 135k, Refuter 167k + 141k; Director context ~0.3M |
 | P4 | ~0.25M (engine 133k, test fix 61k; the screen wiring is counted under P3) | P4-07 phone check waits on the owner |
 | P5 | ~2.3M | Subagents: compliance 76k+147k+151k, cadence 76k, Builder A 140k+286k+79k+85k+84k, release 60k, QA diagnosis 126k + fix 102k, FX 84k, Refuter 148k+69k, Hollow P6 brief 106k; Director context ~0.15M |
-| P6 | ~3.3M | Subagents: Hollow brief 110k, Compliance 84k+149k+155k, FX 248k+165k, Builder B 106k+79k+71k, Builder A 186k+214k+171k+200k+143k+162k, panel 220k+265k, Refuter 137k+83k, Release 68k; Director context ~0.2M |
+| P6 | ~3.6M | Subagents: Hollow brief 110k, Compliance 84k+149k+155k, FX 248k+165k, Builder B 106k+79k+71k, Builder A 186k+214k+171k+200k+143k+162k, panel 220k+265k, Refuter 137k+83k, Release 68k+72k, FX wasm fix 60k, Refuter re-check 83k, Builder B tests 65k; Director context ~0.25M |
+| P7 | (running) | |
