@@ -102,10 +102,59 @@ async function legendLines(page: Page): Promise<Record<string, number>> {
   });
 }
 
+/** Words that render across two lines (`COMPORTAMEN / TO`), on any visible text of the screen. */
+async function brokenWords(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement;
+      if (!el) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
+      const txt = n.textContent ?? '';
+      for (const m of txt.matchAll(/\S+/g)) {
+        const w = document.createRange();
+        w.setStart(n, m.index ?? 0);
+        w.setEnd(n, (m.index ?? 0) + m[0].length);
+        const tops = new Set(Array.from(w.getClientRects()).filter((q) => q.width > 0).map((q) => Math.round(q.top / 4)));
+        if (tops.size > 1) out.push(`${el.closest('[data-testid]')?.getAttribute('data-testid') ?? el.tagName}: ${m[0]}`);
+      }
+    }
+    return [...new Set(out)];
+  });
+}
+
+/** The entity card: one label column, every value or bar starts at the same x, no label runs into it. */
+async function profileColumns(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const card = document.querySelector('[data-testid="result-profile"]');
+    if (!card) return [];
+    const out: string[] = [];
+    const rows = Array.from(card.children).filter((c) => c.children.length === 2);
+    const starts: number[] = [];
+    for (const row of rows) {
+      const label = row.children[0]!;
+      const value = row.children[1]!;
+      const r = document.createRange();
+      r.selectNodeContents(label);
+      const ink = r.getBoundingClientRect();
+      const v = value.getBoundingClientRect();
+      starts.push(v.left);
+      if (ink.right > v.left + 0.5) out.push(`label ${(label.textContent ?? '').trim()} ends at ${Math.round(ink.right)}, value starts at ${Math.round(v.left)}`);
+      if (new Set(Array.from(r.getClientRects()).filter((q) => q.width > 0).map((q) => Math.round(q.top / 4))).size > 1) out.push(`label ${(label.textContent ?? '').trim()} wraps`);
+    }
+    if (starts.length > 0 && Math.max(...starts) - Math.min(...starts) > 0.5) out.push(`value column not aligned: ${starts.map(Math.round).join(', ')}`);
+    return out;
+  });
+}
+
 async function check(page: Page, name: string, testInfo: TestInfo) {
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/i18n-${name}.png` });
   expect(await overflows(page)).toEqual([]);
+  expect(await brokenWords(page), 'a word is split across two lines').toEqual([]);
+  expect(await profileColumns(page), 'entity card label column').toEqual([]);
   // Location tags: each legend inside its 44 dp hit area, 12 px between neighbouring hit areas.
   const tags = await page.evaluate(() =>
     Array.from(document.querySelectorAll('[data-testid="tag-cellar"],[data-testid="tag-attic"],[data-testid="tag-bedroom"],[data-testid="tag-hallway"],[data-testid="tag-outdoors"]')).filter((e) => e.getBoundingClientRect().width > 0).map((e) => {

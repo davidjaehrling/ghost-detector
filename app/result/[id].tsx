@@ -537,7 +537,7 @@ function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value
   const [rowW, setRowW] = useState(0);
   const boxW = rowW - LABEL_W;
   const need = (value?.length ?? 0) * CHAR_XS;
-  const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(-0.6, Math.floor((boxW / (value?.length ?? 1) - (CHAR_XS - 0.5)) * 10) / 10) } : null;
+  const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(-0.8, Math.floor((boxW / (value?.length ?? 1) - (CHAR_XS - 0.5)) * 10) / 10) } : null;
   return (
     <View style={s.profRow} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
       <Text style={s.profLabel}>{label}</Text>
