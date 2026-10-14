@@ -72,7 +72,8 @@ test('scan runs to the end, saves one record and opens the result', async ({ pag
   const check = watch(page);
   await page.goto(`/scan?static=1&speed=40&seed=${SEED}`);
   await expect(page.getByTestId('screen-result')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('CASE 0001')).toBeVisible();
+  // The case id lives in the data strip since A-42 dropped the top-left CASE band.
+  await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-label', /CASE 0001/);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('fs4.scans.v1') ?? '[]'));
   expect(saved).toHaveLength(1);
   expect(saved[0].id).toBe('0001');
