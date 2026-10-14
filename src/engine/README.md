@@ -64,3 +64,24 @@ Invariants (each covered by a 10,000-sequence property test in `__tests__/adCade
   (1 h, the AdMob expiry); a decision never has `preload` and `show` both true.
 A backwards clock on `appLaunch` (reboot) clamps the last show and rewarded times to the new now,
 so gaps can only grow. `show` also resets the counters itself; `interstitialShown` re-syncs them.
+
+## Notification scheduler (`notify.ts`, docs/p6-brief.md section 2 and 4, D-032)
+Pure and seeded (mulberry32). No clock: the caller passes `nowMs` and `utcOffsetMin` (local offset from UTC at `nowMs`).
+
+- `nextNotification(state: NotifyState, seed) -> Notification | null` where
+  `Notification = { templateId: 1..5, title, body, fireAtMs, caseId? }`. Returns the next single item to schedule.
+  After scheduling, append it to `state.sent` (`sentAtMs = fireAtMs`, `opened: false`) and call again for the one after.
+  `sent` items with `sentAtMs > nowMs` count as pending for the night and weekly rules. Update `opened` when a tap lands.
+  Use a fresh seed per call (for example `seedFrom(installId, nowMs)`).
+- `applyIntensityChange(prev, next: NotifyState, pending: PendingItem[]) -> { cancelIds, reschedule }`. A switch to Calm cancels all pending;
+  otherwise items the new template set or cap no longer allow are cancelled (earliest kept first). Call it whenever intensity or the jump-scare toggle changes, then call `nextNotification` if `reschedule`.
+- `NotifyState`: `intensity`, `belief` ('yes' | 'unsure' | 'no'), `jumpScaresOff`, `sessionCount` (sessions started, current included), `optedIn`,
+  `installMs`, `lastAppOpenMs`, `scans: ScanSummary[]` (`caseId, atMs, tier, spi, decodedPct, decoded, declined, newClass, tags`),
+  `loggedTags` (one entry per logged case), `catalogueCount` (of 24), `sent: SentItem[]`, `nowMs`, `utcOffsetMin`.
+- Rules: opt-in and `sessionCount >= 2`; first delivery on a later calendar day and 20 h after install; fire time 18:00 to 21:59 local;
+  one per local night; caps Brave 3, Standard 2, Calm 1 over every 7 day window; jump-scares off and two ignored in a row each drop one level (floor 1);
+  no scheduling once `nowMs - lastAppOpenMs >= 7 days`, and nothing lands past that mark. Calm sends templates 2 and 5 only.
+  Template 4: unresolved (41..73% decoded, not deep-scanned, not declined), case under 7 days old, once per case, not on Calm.
+  Priority 2, 3, 1, 5, 4. Believers get one lore line on template 3; sceptics and "not sure" get numbers only.
+- Sky: `moonIllumination(ms)`, `forecastIndex(localDay, illumination)` (1..5). The viewfinder index should call the same function so the notification and the screen agree.
+- Copy: titles open with `FIELD LOG`; no EVP text; no claim words (`CLAIM_WORDS`); tags are sanitised and dropped if they contain a banned or claim word.

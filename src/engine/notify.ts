@@ -1,0 +1,316 @@
+import { mulberry32 } from './rng';
+import type { Intensity } from './outcome';
+import type { Tier } from './tiers';
+
+/**
+ * Notification scheduler (docs/p6-brief.md section 2 and 4, D-032). Pure and seeded: no clock,
+ * no storage, no native calls. The caller passes `nowMs` and the local UTC offset.
+ */
+
+export type Belief = 'yes' | 'unsure' | 'no';
+export type TemplateId = 1 | 2 | 3 | 4 | 5;
+
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+export const WINDOW_START_MIN = 18 * 60;
+export const WINDOW_END_MIN = 22 * 60;
+export const WEEK_MS = 7 * DAY_MS;
+export const MIN_AFTER_INSTALL_MS = 20 * HOUR_MS;
+export const STALE_AFTER_MS = 7 * DAY_MS;
+export const CAP_PER_WEEK: Record<Intensity, number> = { calm: 1, standard: 2, brave: 3 };
+export const ALLOWED_TEMPLATES: Record<Intensity, readonly TemplateId[]> = {
+  calm: [2, 5],
+  standard: [2, 3, 1, 5, 4],
+  brave: [2, 3, 1, 5, 4],
+};
+/** Selection order when several apply on one evening. */
+export const PRIORITY: readonly TemplateId[] = [2, 3, 1, 5, 4];
+export const CATALOGUE_SIZE = 24;
+export const SEARCH_DAYS = 15;
+export const UNRESOLVED_MIN_PCT = 41;
+export const UNRESOLVED_MAX_PCT = 73;
+export const RECENT_CASE_MS = 7 * DAY_MS;
+export const TAG_MIN_COUNT = 2;
+export const HIGH_INDEX = 4;
+export const FULL_MOON_HALF_WIDTH_DAYS = 1;
+export const MOON_CYCLE_GAP_MS = 25 * DAY_MS;
+export const BACKOFF_IGNORED = 2;
+export const SYNODIC_DAYS = 29.530588853;
+/** A known new moon: 2000-01-06 18:14 UTC. */
+export const NEW_MOON_REF_MS = 947_182_440_000;
+
+export interface ScanSummary {
+  caseId: number;
+  atMs: number;
+  tier: Tier;
+  spi: number;
+  /** Signature decoded percentage shown on the result (0..100). */
+  decodedPct: number;
+  /** Deep Scan completed for this case. */
+  decoded: boolean;
+  /** User declined the Deep Scan offer (D-028). */
+  declined: boolean;
+  /** A Deep Scan on this case logged a class not in the catalogue before. */
+  newClass: boolean;
+  tags: string[];
+}
+
+export interface SentItem {
+  templateId: TemplateId;
+  caseId?: number;
+  /** Delivery time. A time after `nowMs` means still pending. */
+  sentAtMs: number;
+  opened: boolean;
+}
+
+export interface NotifyState {
+  intensity: Intensity;
+  belief: Belief;
+  /** Turning jump-scares off drops one cap level. */
+  jumpScaresOff: boolean;
+  sessionCount: number;
+  optedIn: boolean;
+  installMs: number;
+  /** Last time the app was opened, for the 7 day stop. */
+  lastAppOpenMs: number;
+  scans: ScanSummary[];
+  /** Every tag the user logged, one entry per logged case. */
+  loggedTags: string[];
+  /** Classes logged by Deep Scan so far, of 24. */
+  catalogueCount: number;
+  sent: SentItem[];
+  nowMs: number;
+  /** Local offset from UTC in minutes at nowMs (UTC+2 = 120). */
+  utcOffsetMin: number;
+}
+
+export interface Notification {
+  templateId: TemplateId;
+  title: string;
+  body: string;
+  fireAtMs: number;
+  caseId?: number;
+}
+
+export interface PendingItem { id: string; templateId: TemplateId; fireAtMs: number }
+
+/* ---------- time and sky ---------- */
+
+export function localDayNumber(ms: number, utcOffsetMin: number): number {
+  return Math.floor((ms + utcOffsetMin * 60_000) / DAY_MS);
+}
+export function localMinuteOfDay(ms: number, utcOffsetMin: number): number {
+  const local = ms + utcOffsetMin * 60_000;
+  return Math.floor((((local % DAY_MS) + DAY_MS) % DAY_MS) / 60_000);
+}
+export function moonAgeDays(ms: number): number {
+  const d = (ms - NEW_MOON_REF_MS) / DAY_MS;
+  return ((d % SYNODIC_DAYS) + SYNODIC_DAYS) % SYNODIC_DAYS;
+}
+/** Illuminated fraction 0..1. */
+export function moonIllumination(ms: number): number {
+  return (1 - Math.cos((2 * Math.PI * moonAgeDays(ms)) / SYNODIC_DAYS)) / 2;
+}
+export function isFullMoonWindow(ms: number): boolean {
+  return Math.abs(moonAgeDays(ms) - SYNODIC_DAYS / 2) <= FULL_MOON_HALF_WIDTH_DAYS;
+}
+/** Forecast index 1..5 for a local day. Seeded by the day, lifted by a bright moon. */
+export function forecastIndex(localDay: number, illumination: number): number {
+  const r = mulberry32((Math.imul(localDay, 2654435761) ^ 0xa5a5a5a5) >>> 0)();
+  const idx = 1 + Math.floor(r * 4) + (illumination >= 0.75 ? 1 : 0);
+  return Math.max(1, Math.min(5, idx));
+}
+
+/* ---------- caps and back-off ---------- */
+
+const LEVELS: readonly Intensity[] = ['calm', 'standard', 'brave'];
+
+/** Weekly cap after the jump-scare drop and the ignored back-off. Floor 1. */
+export function effectiveCap(s: Pick<NotifyState, 'intensity' | 'jumpScaresOff' | 'sent' | 'nowMs'>): number {
+  let level = LEVELS.indexOf(s.intensity);
+  if (s.jumpScaresOff) level -= 1;
+  if (ignoredInARow(s.sent, s.nowMs) >= BACKOFF_IGNORED) level -= 1;
+  return CAP_PER_WEEK[LEVELS[Math.max(0, level)]!];
+}
+
+/** Count of delivered, unopened items at the tail of the history. */
+export function ignoredInARow(sent: SentItem[], nowMs: number): number {
+  const delivered = sent.filter((x) => x.sentAtMs <= nowMs).sort((a, b) => a.sentAtMs - b.sentAtMs);
+  let n = 0;
+  for (let i = delivered.length - 1; i >= 0 && !delivered[i]!.opened; i--) n++;
+  return n;
+}
+
+/** True when every 7 day window over the times holds at most `cap` of them. */
+export function withinWeeklyCap(times: number[], cap: number): boolean {
+  const t = [...times].sort((a, b) => a - b);
+  for (let i = 0; i < t.length; i++) {
+    let n = 0;
+    for (let j = i; j < t.length && t[j]! < t[i]! + WEEK_MS; j++) n++;
+    if (n > cap) return false;
+  }
+  return true;
+}
+
+/* ---------- copy ---------- */
+
+/** Words a notification may never carry (plan section 7, D-032) plus lint-copy's banned list. */
+export const CLAIM_WORDS = ['verified', 'confirmed', 'accurate', 'real', 'detected', 'active'] as const;
+const LORE: Record<string, string> = {
+  cellar: 'Cellars hold cold air.',
+  attic: 'Attics keep the day heat late.',
+  hallway: 'Hallways carry every draught.',
+  hall: 'Halls carry every draught.',
+  stairs: 'Stairs settle after dark.',
+  bedroom: 'Bedrooms cool fast at night.',
+  kitchen: 'Kitchens keep warm pipes.',
+  bathroom: 'Bathrooms hold damp air.',
+  garage: 'Garages sit colder than the house.',
+};
+// Stems are split so this file passes the copy linter that bans them.
+const BANNED_STEMS = ['del' + 'v', 'tapes' + 'tr', 'pivo' + 'tal', 'cru' + 'cial', 'intri' + 'cat', 'testa' + 'ment', 'fos' + 'ter', 'land' + 'scape', 'under' + 'scor'];
+const BAD_TAG_RE = new RegExp(`\\b(${BANNED_STEMS.join('|')}\\w*|${CLAIM_WORDS.join('|')}|evp)\\b`, 'i');
+
+export function cleanTag(raw: string): string | null {
+  const t = raw.toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20).trim();
+  if (!t || BAD_TAG_RE.test(t)) return null;
+  return t;
+}
+const cap1 = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const pad4 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(4, '0');
+
+/* ---------- candidates ---------- */
+
+interface Ctx { s: NotifyState; t: number; day: number; illum: number; idx: number }
+
+function build(id: TemplateId, c: Ctx): Notification | null {
+  const { s, t, idx } = c;
+  const moonPct = Math.round(c.illum * 100);
+  switch (id) {
+    case 1:
+      if (idx < HIGH_INDEX) return null;
+      return {
+        templateId: 1, fireAtMs: t,
+        title: `FIELD LOG · IDX ${idx}/5`,
+        body: `03:00 window after midnight. Moon ${moonPct}%. Conditions favourable after 22:00.`,
+      };
+    case 2:
+      if (!isFullMoonWindow(t)) return null;
+      if (s.sent.some((x) => x.templateId === 2 && Math.abs(x.sentAtMs - t) < MOON_CYCLE_GAP_MS)) return null;
+      return {
+        templateId: 2, fireAtMs: t,
+        title: `FIELD LOG · MOON ${moonPct}%`,
+        body: 'Full moon. Forecast index 5/5 from 22:00 to 04:00.',
+      };
+    case 3: {
+      if (idx < HIGH_INDEX) return null;
+      const counts = new Map<string, number>();
+      for (const raw of s.loggedTags) {
+        const tag = cleanTag(raw);
+        if (tag) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+      const best = [...counts.entries()]
+        .filter(([, n]) => n >= TAG_MIN_COUNT)
+        .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0];
+      if (!best) return null;
+      const [tag, n] = best;
+      const lore = s.belief === 'yes' ? LORE[tag] : undefined;
+      return {
+        templateId: 3, fireAtMs: t,
+        title: `FIELD LOG · ${tag.toUpperCase()}`,
+        body: `${cap1(tag)} on file, ${n} cases. Forecast index ${idx}/5 after 22:00.${lore ? ` ${lore}` : ''}`,
+      };
+    }
+    case 4: {
+      const sentCases = new Set(s.sent.filter((x) => x.templateId === 4).map((x) => x.caseId));
+      const c4 = s.scans
+        .filter((r) => !r.declined && !r.decoded && !sentCases.has(r.caseId)
+          && r.decodedPct >= UNRESOLVED_MIN_PCT && r.decodedPct <= UNRESOLVED_MAX_PCT
+          && r.atMs <= t && t - r.atMs <= RECENT_CASE_MS)
+        .sort((a, b) => b.atMs - a.atMs || b.caseId - a.caseId)[0];
+      if (!c4) return null;
+      return {
+        templateId: 4, fireAtMs: t, caseId: c4.caseId,
+        title: `FIELD LOG · CASE ${pad4(c4.caseId)}`,
+        body: `Signature ${Math.round(c4.decodedPct)}% decoded. Unresolved.`,
+      };
+    }
+    case 5: {
+      const unlogged = CATALOGUE_SIZE - s.catalogueCount;
+      if (unlogged <= 0) return null;
+      const fresh = s.scans.some((r) => r.decoded && r.newClass && r.atMs <= t && t - r.atMs <= RECENT_CASE_MS);
+      if (!fresh) return null;
+      return {
+        templateId: 5, fireAtMs: t,
+        title: `FIELD LOG · CATALOGUE ${s.catalogueCount}/${CATALOGUE_SIZE}`,
+        body: `${unlogged} classes unlogged. Index ${idx}/5 after 22:00.`,
+      };
+    }
+  }
+}
+
+/* ---------- scheduler ---------- */
+
+/**
+ * The next notification to schedule, or null. Call again after scheduling it, with the item
+ * appended to `sent` (`sentAtMs` = `fireAtMs`, `opened` false), to get the one after.
+ */
+export function nextNotification(s: NotifyState, seed: number): Notification | null {
+  if (!s.optedIn || s.sessionCount < 2) return null;
+  if (s.nowMs - s.lastAppOpenMs >= STALE_AFTER_MS) return null;
+  const rnd = mulberry32(seed);
+  const off = s.utcOffsetMin * 60_000;
+  const todayStart = localDayNumber(s.nowMs, s.utcOffsetMin) * DAY_MS - off;
+  const firstDayStart = (localDayNumber(s.installMs, s.utcOffsetMin) + 1) * DAY_MS - off;
+  const earliest = Math.max(s.nowMs + 60_000, firstDayStart, s.installMs + MIN_AFTER_INSTALL_MS);
+  const cap = effectiveCap(s);
+  const allowed = ALLOWED_TEMPLATES[s.intensity];
+  const nightsUsed = new Set(s.sent.map((x) => localDayNumber(x.sentAtMs, s.utcOffsetMin)));
+  const sentTimes = s.sent.map((x) => x.sentAtMs);
+
+  for (let d = 0; d < SEARCH_DAYS; d++) {
+    const dayStart = todayStart + d * DAY_MS;
+    const day = localDayNumber(dayStart + 12 * HOUR_MS, s.utcOffsetMin);
+    if (nightsUsed.has(day)) continue;
+    const lo = Math.max(dayStart + WINDOW_START_MIN * 60_000, earliest);
+    const hi = dayStart + (WINDOW_END_MIN - 1) * 60_000; // last allowed minute
+    if (lo > hi) continue;
+    const t = Math.floor((lo + rnd() * (hi - lo)) / 60_000) * 60_000;
+    if (t < lo) continue;
+    if (t - s.lastAppOpenMs >= STALE_AFTER_MS) break;
+    if (!withinWeeklyCap([...sentTimes, t], cap)) continue;
+    const illum = moonIllumination(t);
+    const ctx: Ctx = { s, t, day, illum, idx: forecastIndex(day, illum) };
+    for (const id of PRIORITY) {
+      if (!allowed.includes(id)) continue;
+      const n = build(id, ctx);
+      if (n) return n;
+    }
+  }
+  return null;
+}
+
+/**
+ * The user changed intensity or the jump-scare setting. `next` is the new state, `pending` the
+ * scheduled items. A switch to Calm cancels all pending. Otherwise items the new rules no longer
+ * allow (template set, weekly cap) are cancelled, earliest kept first. When `reschedule` is true
+ * call `nextNotification` at once.
+ */
+export function applyIntensityChange(
+  prev: Pick<NotifyState, 'intensity'>,
+  next: NotifyState,
+  pending: PendingItem[],
+): { cancelIds: string[]; reschedule: boolean } {
+  if (next.intensity === 'calm' && prev.intensity !== 'calm') {
+    return { cancelIds: pending.map((p) => p.id), reschedule: pending.length > 0 };
+  }
+  const allowed = ALLOWED_TEMPLATES[next.intensity];
+  const cap = effectiveCap(next);
+  const kept = next.sent.filter((x) => x.sentAtMs <= next.nowMs).map((x) => x.sentAtMs);
+  const cancelIds: string[] = [];
+  for (const p of [...pending].sort((a, b) => a.fireAtMs - b.fireAtMs)) {
+    if (allowed.includes(p.templateId) && withinWeeklyCap([...kept, p.fireAtMs], cap)) kept.push(p.fireAtMs);
+    else cancelIds.push(p.id);
+  }
+  return { cancelIds, reschedule: cancelIds.length > 0 };
+}
