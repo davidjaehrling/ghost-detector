@@ -11,8 +11,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "lint:copy": "node scripts/lint-copy.mjs",
+    "check:ad-ids": "node scripts/check-ad-ids.mjs",
     "test": "vitest run",
-    "smoke": "pnpm typecheck && pnpm lint && pnpm lint:copy && pnpm test",
+    "smoke": "pnpm typecheck && pnpm lint && pnpm lint:copy && pnpm check:ad-ids && pnpm test",
     "e2e:web": "pnpm web:export && playwright test",
     "e2e:web:update": "pnpm web:export && playwright test --update-snapshots"
   },

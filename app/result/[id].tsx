@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { Rect as SkRect, Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
+import { track } from '../../src/analytics';
 import type { Tier } from '../../src/engine';
 import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
 import { PhosphorText, SnapshotCanvas, useVT323 } from '../../src/fx/glass';
@@ -10,7 +11,7 @@ import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
 import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
 import { useSkiaReady } from '../../src/fx/useSkiaReady';
 import { BELIEF_PROFILE, getBelief } from '../../src/state/belief';
-import { getScan, listScans, type ScanRecord } from '../../src/state/scans';
+import { getIntensity, getScan, listScans, type ScanRecord } from '../../src/state/scans';
 import { consumeReveal } from '../../src/state/session';
 import { useSettings } from '../../src/state/useSettings';
 import { mulberry32 } from '../../src/ui/boot/seed';
@@ -121,6 +122,11 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
   const settings = useSettings();
   const reduceMotion = useReduceMotion();
   const [fresh] = useState(() => (record ? consumeReveal(record.id) : false));
+  // The result is shown for the first time right after a scan; reopening a case from the log is not a scan.
+  useEffect(() => {
+    if (record && fresh) track('scan_complete', { tier: record.outcome.tier, intensity: getIntensity() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const scareMode: ScareMode =
     harness.isStatic && params.scare === '1'
       ? 'peak'
