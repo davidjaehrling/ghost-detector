@@ -17,6 +17,7 @@ export function Placeholder({
   readout,
   sub,
   keys,
+  graticule = true,
   children,
 }: {
   testID: string;
@@ -24,6 +25,8 @@ export function Placeholder({
   readout?: string;
   sub?: string;
   keys: KeySpec[];
+  /** List screens draw none: the grid's outer columns would show at the glass edges beside the list. */
+  graticule?: boolean;
   children?: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -37,7 +40,7 @@ export function Placeholder({
       <View style={s.windowWrap}>
         <View style={s.glass}>
           <View style={StyleSheet.absoluteFill} onLayout={onLayout} pointerEvents="none" />
-          <Graticule w={size.w} h={size.h} />
+          {graticule ? <Graticule w={size.w} h={size.h} /> : null}
           <View style={s.readoutBlock}>
             <Text style={s.sub}>{code}</Text>
             {sub ? <Text style={s.sub}>{sub}</Text> : null}

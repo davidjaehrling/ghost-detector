@@ -4,8 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 // The log demo seeds six cases (session=1 lifts the first-session rule), so the first return from a
 // result is eligible. The web stub records every call in window.__notifyLog.
 
-const BODY =
-  'Fit the relay? The unit posts at most one field-log line a night: the index, the moon or an open case. 18:00 to 22:00 only. Lines are simulated, like every reading.';
+const BODY = 'Fit the relay? At most one field-log line a night. Index, moon or an open case. 18:00 to 22:00. No sound. Lines are simulated.';
 
 const calls = (page: Page) => page.evaluate(() => (window.__notifyLog ?? []).map((e) => e.call));
 
@@ -37,6 +36,15 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   await expect(page.getByTestId('relay-body')).toHaveText(BODY);
   // Nothing has been requested yet: the dialog follows the tap.
   expect(await calls(page)).toEqual([]);
+  // The keys sit on the hardware row, slots 1 and 4, inside the key band and outside the module.
+  await expect(mod.getByTestId('relay-fit')).toHaveCount(0);
+  await expect(mod.getByTestId('relay-notnow')).toHaveCount(0);
+  const slots = await Promise.all(['relay-fit', 'relay-notnow'].map((id) => page.getByTestId(id).boundingBox()));
+  const modBox = (await mod.boundingBox())!;
+  expect(slots[0]!.y).toBeGreaterThan(modBox.y + modBox.height);
+  expect(slots[0]!.x).toBeLessThan(slots[1]!.x);
+  expect(Math.round(slots[0]!.y)).toBe(Math.round(slots[1]!.y));
+  expect(await page.getByTestId('key-dummy').count()).toBeGreaterThanOrEqual(2);
   // Equal keys: same box, same type.
   const [a, b] = await Promise.all(['relay-fit', 'relay-notnow'].map((id) => page.getByTestId(id).boundingBox()));
   expect(Math.round(a!.width)).toBe(Math.round(b!.width));
@@ -171,12 +179,26 @@ test('switching to CALM cancels the pending lines, then schedules the full-moon 
   await start(page, fit(FULL_MOON));
   await backFromACase(page);
   await expect.poll(async () => (await sched(page)).length).toBeGreaterThan(0);
+  // Calm through the real control: STANDARD, BRAVE, CALM on the INTENSITY row.
+  await toSettings(page);
+  await expect(page.getByTestId('setting-intensity-state')).toHaveText('STANDARD');
+  await page.getByTestId('setting-intensity').click();
+  await expect(page.getByTestId('setting-intensity-state')).toHaveText('BRAVE');
+  await page.waitForTimeout(500);
+  // The lines pending now: scheduled and not cancelled since.
   const before = await log(page);
-  const first = before.filter((e) => e.call === 'schedule').map((e) => e.id);
-  await page.evaluate(() => (window as unknown as { __setIntensity: (i: string) => Promise<void> }).__setIntensity('calm'));
+  const live = new Set<string>();
+  for (const e of before) {
+    if (e.call === 'schedule') live.add(e.id!);
+    if (e.call === 'cancel') live.delete(e.id!);
+  }
+  expect(live.size).toBeGreaterThan(0);
+  await page.getByTestId('setting-intensity').click();
+  await expect(page.getByTestId('setting-intensity-state')).toHaveText('CALM');
+  await expect.poll(async () => (await log(page)).slice(before.length).some((e) => e.call === 'schedule')).toBe(true);
   const after = (await log(page)).slice(before.length);
   const calls = after.map((e) => e.call);
-  expect(after.filter((e) => e.call === 'cancel').map((e) => e.id).sort()).toEqual([...first].sort());
+  expect(after.filter((e) => e.call === 'cancel').map((e) => e.id).sort()).toEqual([...live].sort());
   expect(calls.indexOf('cancel')).toBe(0);
   expect(calls).toContain('schedule');
   expect(calls.indexOf('schedule')).toBeGreaterThan(calls.lastIndexOf('cancel'));

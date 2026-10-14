@@ -1,11 +1,10 @@
-import type { Intensity } from '../engine';
 import { readInstallSeed } from '../ui/boot/install';
 import { getBelief } from './belief';
 import { cadenceStore } from './cadence';
 import { notifyBackend } from './notifyBackend';
 import { type Deps, type PlanStore, type Reason, type TapRoute, createPlanStore, handleTap, reconcileNow } from './notifySchedule';
 import { type ScheduleBackend, relayStore } from './relay';
-import { type ScanRecord, getIntensity, listScans, setIntensity } from './scans';
+import { type ScanRecord, getIntensity, listScans } from './scans';
 import { getSettings } from './settings';
 import { platformStorage } from './storage';
 
@@ -63,12 +62,4 @@ if (typeof window !== 'undefined') {
     relayStore.setSystem(answer);
     relayStore.setEnabled(true);
   }
-}
-
-// Web harness: a hook to change the intensity the way a Settings control will, then reconcile.
-if (typeof window !== 'undefined' && new URLSearchParams(window.location?.search ?? '').has('notify')) {
-  (window as unknown as { __setIntensity?: (i: Intensity) => Promise<void> }).__setIntensity = async (i) => {
-    setIntensity(i);
-    await syncRelay('settings');
-  };
 }

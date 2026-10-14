@@ -20,12 +20,13 @@ export type RelayState = {
 
 export const relayCopy = {
   header: 'FIELD LOG RELAY',
-  body: 'Fit the relay? The unit posts at most one field-log line a night: the index, the moon or an open case. 18:00 to 22:00 only. Lines are simulated, like every reading.',
+  body: 'Fit the relay? At most one field-log line a night. Index, moon or an open case. 18:00 to 22:00. No sound. Lines are simulated.',
   fit: 'FIT RELAY',
   notNow: 'NOT NOW',
   fitted: 'Relay fitted. Change in Settings.',
   notFitted: 'Relay not fitted. Change in Settings.',
-  settingsLabel: 'RELAY',
+  settingsLabel: 'FIELD LOG RELAY',
+  settingsHelp: 'Max 1 line a night. 18:00 to 22:00.',
   blocked: 'RELAY BLOCKED BY SYSTEM. OPEN SYSTEM SETTINGS.',
 } as const;
 

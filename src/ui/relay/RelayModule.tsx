@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fitRelay, relayCopy, relayStore } from '../../state/relay';
 import { notifyBackend } from '../../state/notifyBackend';
+import type { KeySlot } from '../boot/parts';
 import { color, radius, type } from '../tokens';
 
 // The FIELD LOG RELAY opt-in (brief section 2.2): a module on the viewfinder glass, in the unit's
-// voice, before any system dialog. FIT RELAY and NOT NOW are the same key in size, weight and
-// contrast. The system permission is requested only from the FIT RELAY tap.
+// voice, before any system dialog. Header and body stay on the glass; FIT RELAY and NOT NOW sit on
+// the hardware key row (slots 1 and 4), the same key in size, weight and contrast. The system
+// permission is requested only from the FIT RELAY press.
 const RESULT_MS = 2400;
 
-export function RelayModule({ bottom, still, onDone }: { bottom: number; still: boolean; onDone: () => void }) {
+/** The module's state and its two keys. `keys` is null once the result line replaces the question. */
+export function useRelayModule(still: boolean, onDone: () => void): { line: string | null; keys: readonly (KeySlot | null)[] | null } {
   const [line, setLine] = useState<string | null>(null);
 
   useEffect(() => {
@@ -18,28 +21,35 @@ export function RelayModule({ bottom, still, onDone }: { bottom: number; still: 
     return () => clearTimeout(id);
   }, [line, still, onDone]);
 
-  const fit = () => {
+  const fit = useCallback(() => {
     void fitRelay(relayStore, notifyBackend)
       .then((fitted) => (fitted ? relayCopy.fitted : relayCopy.notFitted))
       .catch(() => relayCopy.notFitted)
       .then(setLine);
-  };
+  }, []);
 
+  const keys: readonly (KeySlot | null)[] | null =
+    line === null
+      ? [
+          { testID: 'relay-fit', label: relayCopy.fit, legend: relayCopy.fit, onPress: fit, primary: true },
+          null,
+          null,
+          { testID: 'relay-notnow', label: relayCopy.notNow, legend: relayCopy.notNow, onPress: onDone, primary: true },
+        ]
+      : null;
+  return { line, keys };
+}
+
+export function RelayModule({ bottom, line, onDone }: { bottom: number; line: string | null; onDone: () => void }) {
   return (
     <View style={[s.module, { bottom }]} testID="relay-module" accessibilityViewIsModal={false}>
       <Text style={s.header} accessibilityRole="header">
         {relayCopy.header}
       </Text>
       {line === null ? (
-        <>
-          <Text style={s.body} testID="relay-body">
-            {relayCopy.body}
-          </Text>
-          <View style={s.keys}>
-            <RelayKey testID="relay-fit" legend={relayCopy.fit} onPress={fit} />
-            <RelayKey testID="relay-notnow" legend={relayCopy.notNow} onPress={onDone} />
-          </View>
-        </>
+        <Text style={s.body} testID="relay-body">
+          {relayCopy.body}
+        </Text>
       ) : (
         <Pressable onPress={onDone} testID="relay-result-box" accessibilityRole="button" accessibilityLabel={line}>
           <Text style={s.result} testID="relay-result">
@@ -48,20 +58,6 @@ export function RelayModule({ bottom, still, onDone }: { bottom: number; still: 
         </Pressable>
       )}
     </View>
-  );
-}
-
-function RelayKey({ testID, legend, onPress }: { testID: string; legend: string; onPress: () => void }) {
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={legend}
-      onPress={onPress}
-      style={({ pressed }) => [s.key, pressed && s.keyDown]}
-    >
-      <Text style={s.keyLegend}>{legend}</Text>
-    </Pressable>
   );
 }
 
@@ -80,17 +76,4 @@ const s = StyleSheet.create({
   header: { ...type.lbM, color: color.p5 },
   body: { ...type.rdXS, color: color.p4 },
   result: { ...type.rdS, color: color.p5 },
-  keys: { flexDirection: 'row', gap: 12, marginTop: 2 },
-  key: {
-    flex: 1,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: color.n2,
-    borderWidth: 1,
-    borderColor: color.p3,
-    borderRadius: radius.key,
-  },
-  keyDown: { backgroundColor: color.n1 },
-  keyLegend: { ...type.lbM, color: color.p4 },
 });

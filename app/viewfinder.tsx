@@ -24,7 +24,7 @@ import { color, radius, type } from '../src/ui/tokens';
 import { DIAL_H, DIAL_W, EmfDial } from '../src/ui/viewfinder/EmfDial';
 import { takeReturnNote } from '../src/ui/interstitial';
 import { gateOpenFor } from '../src/ui/interstitialParams';
-import { RelayModule } from '../src/ui/relay/RelayModule';
+import { RelayModule, useRelayModule } from '../src/ui/relay/RelayModule';
 import { useInterstitialGate } from '../src/ui/useInterstitialGate';
 import { Sweep } from '../src/ui/viewfinder/Sweep';
 import { formatFlux, formatGeo, formatThermal, jitteredAngle, liveLeds, liveTier } from '../src/ui/viewfinder/flux';
@@ -134,6 +134,7 @@ function Viewfinder({
     }, []),
   );
   const closeRelay = useCallback(() => setRelayOpen(false), []);
+  const relayModule = useRelayModule(isStatic, closeRelay);
 
   const reduceMotion = useReduceMotion();
   const active = useActive();
@@ -213,7 +214,7 @@ function Viewfinder({
       leds={liveLeds(sample.mg)}
       fixedIdentity={isStatic}
       glassLabel={`${copy['hud.mode']}. ${flux}. Activity index ${index} of 5. Location ${TAG_LABEL[tag]}.`}
-      keys={keySlots}
+      keys={relayOpen && relayModule.keys ? relayModule.keys : keySlots}
     >
       {({ w, h }) => {
         const bandH = Math.max(Math.round(h * BAND), BAND_MIN);
@@ -258,7 +259,7 @@ function Viewfinder({
               </View>
             ) : null}
 
-            {relayOpen ? <RelayModule bottom={bandH + 12} still={isStatic} onDone={closeRelay} /> : null}
+            {relayOpen ? <RelayModule bottom={bandH + 12} line={relayModule.line} onDone={closeRelay} /> : null}
 
             <View style={[s.band, { height: bandH }]} testID="hud-band">
               <View style={s.tagRow} accessibilityRole="tablist">

@@ -76,3 +76,26 @@ test('the privacy policy and impressum are reachable within two taps of the view
   await page.getByTestId('setting-legal').click();
   await expect(page.getByTestId('legal-privacy-policy')).toBeVisible();
 });
+
+test('INTENSITY cycles CALM, STANDARD, BRAVE, persists, and Calm turns the scare circuit off', async ({ page }) => {
+  await page.goto('/settings?static=1');
+  const state = page.getByTestId('setting-intensity-state');
+  await expect(page.getByText('INTENSITY', { exact: true })).toBeVisible();
+  await expect(state).toHaveText('STANDARD');
+  await page.getByTestId('setting-intensity').click();
+  await expect(state).toHaveText('BRAVE');
+  expect(await page.evaluate(() => localStorage.getItem('fs4.intensity.v1'))).toBe('brave');
+  await page.getByTestId('setting-intensity').click();
+  await expect(state).toHaveText('CALM');
+  await expect(page.getByTestId('setting-jumpscares-state')).toHaveText('OFF');
+  await page.reload();
+  await expect(page.getByTestId('setting-intensity-state')).toHaveText('CALM');
+  await page.getByTestId('setting-intensity').click();
+  await expect(page.getByTestId('setting-intensity-state')).toHaveText('STANDARD');
+});
+
+test('the relay row reads FIELD LOG RELAY with one help line', async ({ page }) => {
+  await page.goto('/settings?static=1');
+  await expect(page.getByTestId('setting-relay')).toContainText('FIELD LOG RELAY');
+  await expect(page.getByTestId('setting-relay-help')).toHaveText('Max 1 line a night. 18:00 to 22:00.');
+});
