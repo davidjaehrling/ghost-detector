@@ -14,6 +14,7 @@ import {
 import './resources';
 
 export { hasKey, LANGS, LANG_SETTINGS, ENGINE_PREFIX, tableFor as tableForLocale, type Lang, type LangSetting, type Params } from './core';
+export { eraValue, profileFor } from './profile';
 export * from './format';
 
 const KEY = 'fs4.lang.v1';

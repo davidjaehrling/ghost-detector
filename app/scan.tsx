@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { drawOutcome, generateProfile, seedFrom } from '../src/engine';
+import { drawOutcome, seedFrom } from '../src/engine';
 import { markReveal } from '../src/state/session';
 import { getHistory, getIntensity, getRecentLines, getRecentNames, saveScan } from '../src/state/scans';
 import { DEFAULT_FIXTURE } from '../src/ui/fixtureNames';
@@ -13,7 +13,7 @@ import { TheatreGlass } from '../src/ui/scan/Theatre';
 import { RATE_CAP, elapsedForPhase, faultFor, frameAt, scanLeds } from '../src/ui/scan/timeline';
 import { color } from '../src/ui/tokens';
 import { useReduceMotion } from '../src/ui/useReduceMotion';
-import { copyOf, useLocale } from '../src/i18n';
+import { copyOf, profileFor, useLocale } from '../src/i18n';
 
 const copy = copyOf({
   cancel: 'scan.cancel',
@@ -50,7 +50,7 @@ function Scan({ params }: { params: ScanParams }) {
     const given = Number(params.seed);
     const seed = Number.isInteger(given) && given >= 0 ? given >>> 0 : isStatic ? STATIC_SEED : seedFrom('direct', Date.now());
     const outcome = drawOutcome(seed, getIntensity(), getHistory());
-    const profile = generateProfile((seed ^ 0x9e3779b9) >>> 0, outcome.tier, { names: getRecentNames(), lines: getRecentLines() });
+    const profile = profileFor((seed ^ 0x9e3779b9) >>> 0, outcome.tier, { names: getRecentNames(), lines: getRecentLines() });
     const photoUri = params.photo || fixtureUri(harness.fixture ?? DEFAULT_FIXTURE);
     return { seed, outcome, profile, photoUri, fault: phase === 'fault' || faultFor(seed) };
   });

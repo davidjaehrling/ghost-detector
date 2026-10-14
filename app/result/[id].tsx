@@ -28,7 +28,7 @@ import { readingsFor } from '../../src/ui/result/readings';
 import { PINNED_TIERS, screenStampText, thermalDelta } from '../../src/ui/result/stamp';
 import { Readout } from '../../src/ui/Readout';
 import { tierWord } from '../../src/state/tierWord';
-import { copyOf, fmtFixed, t, useLocale } from '../../src/i18n';
+import { copyOf, eraValue, fmtFixed, t, useLocale } from '../../src/i18n';
 import { scareEligible } from '../../src/ui/result/scare';
 import { HIRES_SCALE, deepCopy, evpLine, scalePlacement } from '../../src/ui/result/deepCopy';
 import { type DeepState, useDeepScan } from '../../src/ui/result/deepScan';
@@ -488,7 +488,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           ) : (
             <>
               <ProfileRow label={copy.classLabel} value={profile.class} />
-              <ProfileRow label={copy.eraLabel} value={profile.era.replace(/^Era /, '').toUpperCase()} valueTestID="profile-era" />
+              <ProfileRow label={copy.eraLabel} value={eraValue(profile.era)} valueTestID="profile-era" />
               {hiddenLabels().map((l, i) =>
                 unlocked ? (
                   <ProfileRow key={l} label={l} value={unlockedValues[i]} valueTestID={`profile-${PROFILE_IDS[i]}`} />
