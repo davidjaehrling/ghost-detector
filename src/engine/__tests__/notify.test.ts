@@ -2,12 +2,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   ALLOWED_TEMPLATES, BACKOFF_IGNORED, CAP_PER_WEEK, CATALOGUE_SIZE, CLAIM_WORDS,
-  MIN_AFTER_INSTALL_MS, PRIORITY, STALE_AFTER_MS, SYNODIC_DAYS, WEEK_MS, WINDOW_END_MIN, WINDOW_START_MIN,
-  applyIntensityChange, effectiveCap, forecastIndex, localDayNumber, localMinuteOfDay, moonIllumination,
+  MIN_AFTER_INSTALL_MS, PRIORITY, STALE_AFTER_MS, WEEK_MS, WINDOW_END_MIN, WINDOW_START_MIN,
+  applyIntensityChange, effectiveCap, forecastIndex, localDayNumber, localMinuteOfDay,
   nextNotification, withinWeeklyCap,
   type Notification, type NotifyState, type ScanSummary, type SentItem, type TemplateId,
 } from '../notify';
 import type { Intensity } from '../outcome';
+import { activityIndex } from '../../ui/boot/activity';
 import { mulberry32 } from '../rng';
 import { TIERS } from '../tiers';
 
@@ -196,7 +197,7 @@ describe('templates', () => {
     const n = firstOf(2, mk([]));
     expect(n.title).toMatch(/^FIELD LOG · MOON (9[7-9]|100)%$/);
     expect(n.body).toBe('Full moon. Forecast index 5/5 from 22:00 to 04:00.');
-    expect(moonIllumination(n.fireAtMs)).toBeGreaterThan(0.97);
+    expect(forecastIndex(n.fireAtMs, 0).moonPct).toBeGreaterThan(96);
     const again = nextNotification(base({ nowMs: n.fireAtMs - 5 * HOUR_MS, lastAppOpenMs: n.fireAtMs - 6 * HOUR_MS, intensity: 'brave', sent: [{ templateId: 2, sentAtMs: n.fireAtMs - 2 * DAY_MS, opened: true }] }), 1);
     expect(again?.templateId).not.toBe(2);
   });
@@ -231,15 +232,21 @@ describe('templates', () => {
   });
 });
 
-describe('sky helpers', () => {
-  it('moon is new at the reference and full half a cycle later', () => {
-    expect(moonIllumination(947_182_440_000)).toBeLessThan(0.001);
-    expect(moonIllumination(947_182_440_000 + (SYNODIC_DAYS / 2) * DAY_MS)).toBeGreaterThan(0.999);
-  });
-  it('forecast index stays 1..5 and varies', () => {
-    const seen = new Set<number>();
-    for (let d = 0; d < 400; d++) seen.add(forecastIndex(20000 + d, (d % 10) / 10));
-    expect([...seen].sort()).toEqual([1, 2, 3, 4, 5]);
+describe('forecastIndex matches the viewfinder activityIndex', () => {
+  it('equal over 1000 timestamps and offsets', () => {
+    const r = mulberry32(2026);
+    let hits4 = 0;
+    for (let i = 0; i < 1000; i++) {
+      const ms = T0 + Math.floor((r() - 0.3) * 800 * DAY_MS);
+      const d = new Date(ms);
+      // Device zone offset at that instant, in the engine's sign (UTC+2 = 120).
+      const off = -d.getTimezoneOffset();
+      const a = activityIndex(d);
+      const b = forecastIndex(ms, off);
+      expect(b).toEqual(a);
+      if (a.index >= 4) hits4++;
+    }
+    expect(hits4).toBeGreaterThan(20);
   });
 });
 

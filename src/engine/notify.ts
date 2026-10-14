@@ -103,22 +103,30 @@ export function localMinuteOfDay(ms: number, utcOffsetMin: number): number {
   const local = ms + utcOffsetMin * 60_000;
   return Math.floor((((local % DAY_MS) + DAY_MS) % DAY_MS) / 60_000);
 }
-export function moonAgeDays(ms: number): number {
-  const d = (ms - NEW_MOON_REF_MS) / DAY_MS;
-  return ((d % SYNODIC_DAYS) + SYNODIC_DAYS) % SYNODIC_DAYS;
+/**
+ * Port of `activityIndex` in src/ui/boot/activity.ts (the screens' index): base 2, +1 within 2 days of
+ * a full moon, +1 from 22:00 to 04:00, +2 from 03:00 to 03:59. Moon age comes from the local wall clock
+ * truncated to the minute. `utcOffsetMin` stands in for the device time zone.
+ */
+function wallMs(ms: number, utcOffsetMin: number): number {
+  return Math.floor((ms + utcOffsetMin * 60_000) / 60_000) * 60_000;
 }
-/** Illuminated fraction 0..1. */
-export function moonIllumination(ms: number): number {
-  return (1 - Math.cos((2 * Math.PI * moonAgeDays(ms)) / SYNODIC_DAYS)) / 2;
+export function moonAgeDays(ms: number, utcOffsetMin = 0): number {
+  const days = (wallMs(ms, utcOffsetMin) - NEW_MOON_REF_MS) / DAY_MS;
+  return ((days % SYNODIC_DAYS) + SYNODIC_DAYS) % SYNODIC_DAYS;
 }
-export function isFullMoonWindow(ms: number): boolean {
-  return Math.abs(moonAgeDays(ms) - SYNODIC_DAYS / 2) <= FULL_MOON_HALF_WIDTH_DAYS;
+export function forecastIndex(ms: number, utcOffsetMin: number): { index: 1 | 2 | 3 | 4 | 5; moonPct: number } {
+  const age = moonAgeDays(ms, utcOffsetMin);
+  const moonPct = Math.round(((1 - Math.cos(2 * Math.PI * (age / SYNODIC_DAYS))) / 2) * 100);
+  let score = 2;
+  if (Math.abs(age - SYNODIC_DAYS / 2) <= 2) score += 1;
+  const h = new Date(wallMs(ms, utcOffsetMin)).getUTCHours();
+  if (h === 3) score += 2;
+  else if (h >= 22 || h < 4) score += 1;
+  return { index: Math.max(1, Math.min(5, score)) as 1 | 2 | 3 | 4 | 5, moonPct };
 }
-/** Forecast index 1..5 for a local day. Seeded by the day, lifted by a bright moon. */
-export function forecastIndex(localDay: number, illumination: number): number {
-  const r = mulberry32((Math.imul(localDay, 2654435761) ^ 0xa5a5a5a5) >>> 0)();
-  const idx = 1 + Math.floor(r * 4) + (illumination >= 0.75 ? 1 : 0);
-  return Math.max(1, Math.min(5, idx));
+export function isFullMoonWindow(ms: number, utcOffsetMin = 0): boolean {
+  return Math.abs(moonAgeDays(ms, utcOffsetMin) - SYNODIC_DAYS / 2) <= FULL_MOON_HALF_WIDTH_DAYS;
 }
 
 /* ---------- caps and back-off ---------- */
@@ -181,21 +189,21 @@ const pad4 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(4, '0');
 
 /* ---------- candidates ---------- */
 
-interface Ctx { s: NotifyState; t: number; day: number; illum: number; idx: number }
+interface Ctx { s: NotifyState; t: number; moonPct: number; idx: number; idx03: number }
 
 function build(id: TemplateId, c: Ctx): Notification | null {
-  const { s, t, idx } = c;
-  const moonPct = Math.round(c.illum * 100);
+  const { s, t, idx, idx03, moonPct } = c;
   switch (id) {
     case 1:
-      if (idx < HIGH_INDEX) return null;
+      // The 03:00 index is 4 on every night, so the moon lift (night index 4) is the gate.
+      if (idx < HIGH_INDEX || idx03 < HIGH_INDEX) return null;
       return {
         templateId: 1, fireAtMs: t,
-        title: `FIELD LOG · IDX ${idx}/5`,
+        title: `FIELD LOG · IDX ${idx03}/5`,
         body: `03:00 window after midnight. Moon ${moonPct}%. Conditions favourable after 22:00.`,
       };
     case 2:
-      if (!isFullMoonWindow(t)) return null;
+      if (!isFullMoonWindow(t, s.utcOffsetMin)) return null;
       if (s.sent.some((x) => x.templateId === 2 && Math.abs(x.sentAtMs - t) < MOON_CYCLE_GAP_MS)) return null;
       return {
         templateId: 2, fireAtMs: t,
@@ -279,8 +287,12 @@ export function nextNotification(s: NotifyState, seed: number): Notification | n
     if (t < lo) continue;
     if (t - s.lastAppOpenMs >= STALE_AFTER_MS) break;
     if (!withinWeeklyCap([...sentTimes, t], cap)) continue;
-    const illum = moonIllumination(t);
-    const ctx: Ctx = { s, t, day, illum, idx: forecastIndex(day, illum) };
+    const at = (hour: number, plusDays: number) => dayStart + plusDays * DAY_MS + hour * HOUR_MS;
+    const ctx: Ctx = {
+      s, t, moonPct: forecastIndex(t, s.utcOffsetMin).moonPct,
+      idx: forecastIndex(at(22, 0), s.utcOffsetMin).index, // "after 22:00" that night
+      idx03: forecastIndex(at(3, 1), s.utcOffsetMin).index, // the 03:00 window after midnight
+    };
     for (const id of PRIORITY) {
       if (!allowed.includes(id)) continue;
       const n = build(id, ctx);

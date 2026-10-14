@@ -83,5 +83,5 @@ Pure and seeded (mulberry32). No clock: the caller passes `nowMs` and `utcOffset
   no scheduling once `nowMs - lastAppOpenMs >= 7 days`, and nothing lands past that mark. Calm sends templates 2 and 5 only.
   Template 4: unresolved (41..73% decoded, not deep-scanned, not declined), case under 7 days old, once per case, not on Calm.
   Priority 2, 3, 1, 5, 4. Believers get one lore line on template 3; sceptics and "not sure" get numbers only.
-- Sky: `moonIllumination(ms)`, `forecastIndex(localDay, illumination)` (1..5). The viewfinder index should call the same function so the notification and the screen agree.
+- Sky: `forecastIndex(ms, utcOffsetMin)` is a port of `activityIndex` in `src/ui/boot/activity.ts` (tested equal over 1,000 timestamps) and returns `{ index, moonPct }`. Templates quote the 22:00 index of the night ("after 22:00") and, for template 1, the 03:00 index. Template 1 needs the 22:00 index at 4 (moon lift), because the 03:00 index alone is 4 on every night.
 - Copy: titles open with `FIELD LOG`; no EVP text; no claim words (`CLAIM_WORDS`); tags are sanitised and dropped if they contain a banned or claim word.
