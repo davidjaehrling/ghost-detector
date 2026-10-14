@@ -1,17 +1,40 @@
 import type { Tier } from '../../engine';
+import { copyOf, fmtFixed, getLocale, t, type Lang, type Params } from '../../i18n';
+import { translate } from '../../i18n/core';
 import type { ScanRecord } from '../../state/scans';
-import { evpLine } from '../../ui/result/deepCopy';
 import { readingsFor } from '../../ui/result/readings';
-import { stampText, thermalDelta } from '../../ui/result/stamp';
-import { footerText, NAMEPLATE, SIMULATED, STORE_NAME } from './constants';
+import { clock, thermalDelta } from '../../ui/result/stamp';
+import { NAMEPLATE, STORE_NAME } from './constants';
 
-// Every string the share card draws, built from the scan record alone (pure). The renderer draws
-// these and nothing else (it may break the strip and the footer into lines at ` · `); `cardTexts`
-// lists them so a test can assert the set.
+// Every string the share card draws, built from the scan record and the locale table (pure). The
+// renderer draws these and nothing else (it may break the strip and the footer into lines at ` · `);
+// `cardTexts` lists them so a test can assert the set.
+//
+// Strings come from `share.card.*` in locales/<lang>.json, read in the active locale (or the
+// `locale` override the probe and the tests pass). The case data run is `result.strip.data`, the
+// same key the result screen burns into its photo, so the two strips cannot drift. Tier words,
+// the nameplate, codes and units stay English in every locale (docs/localisation-rules.md 2e).
 
 export const TIER_WORD: Record<Tier, string> = { quiet: 'QUIET', trace: 'TRACE', active: 'ACTIVE', strong: 'STRONG', critical: 'CRITICAL' };
 
+/** The card's keys. `mark` and `footer` are disclosures (D-038): no fallback to `en` in a shipped locale. */
+export const CARD_KEYS = {
+  mark: 'share.card.mark',
+  footer: 'share.card.footer',
+  decoded: 'share.card.decoded',
+  none: 'share.card.none',
+  evp: 'share.card.evp',
+  detail: 'share.card.detail',
+} as const;
+
+/** The card's copy in the active locale (getters, so it follows a language change). */
+export const cardCopy = copyOf(CARD_KEYS);
+
+const EVP_LINE_COUNT = 12; // as src/ui/result/deepCopy.ts: locales keep exactly this many deep.evp.N keys
+
 export interface CardText {
+  /** The locale the strings were read in. */
+  locale: Lang;
   nameplate: string;
   /** Data strip: the case data (`CASE 0041 · SPI 84 · ΔT -6.3 °C · 23:41`) and the mark, one record. */
   strip: { data: string; mark: string };
@@ -22,25 +45,56 @@ export interface CardText {
   reading: { spi: string; tier: string; line: string; detail: string | null };
   /** `[STORE NAME] · READINGS ARE SIMULATED`, one run at one size. */
   footer: string;
+  /** The word in the footer the cap-height and contrast test measures (the footer's own mark word). */
+  footerMark: string;
 }
 
 export function isDeepScanned(record: Pick<ScanRecord, 'deepScanAt'>): boolean {
   return record.deepScanAt !== undefined && record.deepScanAt !== null;
 }
 
-export function cardText(record: ScanRecord, store: string = STORE_NAME): CardText {
+/** A reader for one locale: t() in the active locale, or the table of an explicit override. */
+function reader(locale?: Lang): { lang: Lang; tr: (key: string, params?: Params) => string } {
+  if (!locale || locale === getLocale()) return { lang: getLocale(), tr: t };
+  return { lang: locale, tr: (key, params) => translate(locale, key, params) };
+}
+
+/**
+ * The footer word that carries the mark: the mark itself where the sentence contains it (EN, DE),
+ * else the sentence's last word (ES `SIMULADAS`, PT `SIMULADAS` for the mark `SIMULADO`).
+ */
+export function footerMarkOf(footer: string, mark: string): string {
+  if (footer.lastIndexOf(mark) >= 0) return mark;
+  const words = footer.trim().split(/\s+/);
+  return words[words.length - 1] ?? mark;
+}
+
+export function cardText(record: ScanRecord, store: string = STORE_NAME, locale?: Lang): CardText {
+  const { lang, tr } = reader(locale);
   const { outcome, profile } = record;
   const tier = outcome.tier;
   const r = readingsFor(record.seed, tier);
-  const stamp = stampText({ id: record.id, spi: outcome.spi, deltaC: thermalDelta(tier, r), createdAt: record.createdAt });
+  const data = tr('result.strip.data', { id: record.id, spi: outcome.spi, dt: fmtFixed(thermalDelta(tier, r), 1, lang), time: clock(record.createdAt) });
   const deep = isDeepScanned(record) && tier !== 'quiet';
-  const era = profile.era.replace(/^Era /i, '').toUpperCase();
-  const line = deep ? `EVP ${evpLine(record.seed)}` : tier === 'quiet' ? 'NO SIGNATURE' : `SIGNATURE ${profile.signatureDecodedPct}% DECODED`;
+  // The record's era carries its own label (`Era est. 1880 to 1934`), in the language of the scan;
+  // the detail template prints the label itself, so the record's is dropped (this locale's or en's).
+  const eraUp = profile.era.toUpperCase();
+  const label = [tr('result.eraLabel'), translate('en', 'result.eraLabel')].map((l) => `${l.toUpperCase()} `).find((l) => eraUp.startsWith(l));
+  const era = label ? eraUp.slice(label.length) : eraUp;
+  const line = deep
+    ? tr(CARD_KEYS.evp, { line: tr(`deep.evp.${(record.seed >>> 0) % EVP_LINE_COUNT}`) })
+    : tier === 'quiet'
+      ? tr(CARD_KEYS.none)
+      : tr(CARD_KEYS.decoded, { pct: fmtFixed(profile.signatureDecodedPct, 0, lang) });
+  const mark = tr(CARD_KEYS.mark);
+  const footer = tr(CARD_KEYS.footer, { store });
   return {
+    locale: lang,
     nameplate: NAMEPLATE,
-    strip: { data: stamp, mark: SIMULATED },
-    reading: { spi: String(outcome.spi), tier: TIER_WORD[tier], line, detail: deep ? `CLASS: ${profile.class} · ERA ${era}` : null },
-    footer: footerText(store),
+    strip: { data, mark },
+    reading: { spi: String(outcome.spi), tier: TIER_WORD[tier], line, detail: deep ? tr(CARD_KEYS.detail, { cls: profile.class, era }) : null },
+    footer,
+    footerMark: footerMarkOf(footer, mark),
   };
 }
 

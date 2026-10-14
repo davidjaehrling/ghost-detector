@@ -1,5 +1,6 @@
 import { AlphaType, ClipOp, ColorType, ImageFormat, PaintStyle, processUniforms, Skia, TileMode, type SkCanvas, type SkImage, type SkRuntimeEffect, type SkTypeface } from '@shopify/react-native-skia';
 
+import type { Lang } from '../../i18n';
 import type { ScanRecord } from '../../state/scans';
 import { color } from '../../ui/tokens';
 import { mulberry32 } from '../../engine';
@@ -13,7 +14,6 @@ import {
   MARK_CAP_FRAC,
   MARK_CONTRAST_TARGET,
   MARK_SAFETY,
-  SIMULATED,
   STORE_NAME,
   STRIP_SCRIM_MIN,
   type Box,
@@ -51,6 +51,8 @@ export interface CardInput {
   /** BELIEF_PROFILE[belief].opacityRange, as the result screen passes it. */
   beliefBand?: [number, number];
   store?: string;
+  /** Locale override for the card's strings (probe and tests); default the locale in force. */
+  locale?: Lang;
 }
 
 /** Where a SIMULATED token was drawn, in card pixels. */
@@ -415,8 +417,12 @@ function breakRuns(parts: string[], fits: (s: string) => boolean): string[] {
   return parts;
 }
 
-/** Footer: `[STORE NAME] · READINGS ARE SIMULATED`, one run at the mark's size, centred; where it does not fit (story) it breaks at the dot. */
-function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: string): { mark: MarkBox; lines: string[]; x0: number; x1: number; bottom: number } {
+/**
+ * Footer: `[STORE NAME] · READINGS ARE SIMULATED` (localised), one run at the mark's size, centred;
+ * where it does not fit (story) it breaks at the dot. `markWord` is the localised mark word in the
+ * sentence (text.ts `footerMark`); its box is the one the cap-height and contrast test measures.
+ */
+function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: string, markWord: string): { mark: MarkBox; lines: string[]; x0: number; x1: number; bottom: number } {
   const size = markSize(L.height, CAP_EM.b612);
   const capPx = CAP_EM.b612 * size;
   const avail = L.width - 2 * 24;
@@ -433,9 +439,10 @@ function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: s
     x0 = Math.min(x0, x);
     x1 = Math.max(x1, x + w);
     if (i === lines.length - 1) {
-      const head = line.slice(0, line.lastIndexOf(SIMULATED));
-      const mx = x + width(head, fonts.b612, size);
-      mark = { kind: 'footer', x: mx, y: baseline - capPx, w: width(SIMULATED, fonts.b612, size), h: capPx, baseline, fontSize: size, capPx };
+      const at = line.lastIndexOf(markWord);
+      if (at < 0) throw new Error(`share card: footer mark "${markWord}" not on the footer's last line`);
+      const mx = x + width(line.slice(0, at), fonts.b612, size);
+      mark = { kind: 'footer', x: mx, y: baseline - capPx, w: width(markWord, fonts.b612, size), h: capPx, baseline, fontSize: size, capPx };
     }
   });
   return { mark: mark!, lines, x0, x1, bottom: mark!.baseline };
@@ -444,7 +451,7 @@ function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: s
 export function drawShareCard(i: CardInput): CardRender {
   const L = LAYOUTS[i.format];
   const { record, fonts } = i;
-  const t = cardText(record, i.store ?? STORE_NAME);
+  const t = cardText(record, i.store ?? STORE_NAME, i.locale);
   const P = L.photo;
   const panel = { w: P.w / CARD_HIRES, h: P.h / CARD_HIRES };
   const aspect = i.photo.height() / i.photo.width();
@@ -558,7 +565,7 @@ export function drawShareCard(i: CardInput): CardRender {
   canvas.drawRect(Skia.XYWHRect(0, 0, P.w, P.h), gp);
   canvas.restore();
   const reading = drawReading(canvas, L, fonts, t.reading, record.outcome.tier === 'critical');
-  const footer = drawFooter(canvas, L, fonts, t.footer);
+  const footer = drawFooter(canvas, L, fonts, t.footer, t.footerMark);
   drawHousingDetail(canvas, L, { top: L.footerTop, bottom: footer.bottom, x0: footer.x0, x1: footer.x1 }, record.seed >>> 0);
   surface.flush();
   const image = surface.makeImageSnapshot();

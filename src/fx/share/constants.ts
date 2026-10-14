@@ -6,11 +6,9 @@ export const STORE_NAME = '[STORE NAME]';
 /** The housing's nameplate text (docs/instrument-bible.md section 2). No serial on the card. */
 export const NAMEPLATE = 'VELDEN  FS-4/87-P';
 
-/** The SIMULATED mark (Compliance launch blocker, D-026, D-032). */
-export const SIMULATED = 'SIMULATED';
-
-/** Footer, one run at the mark's size: `[STORE NAME] · READINGS ARE SIMULATED`. */
-export const footerText = (store: string = STORE_NAME) => `${store} · READINGS ARE ${SIMULATED}`;
+// The SIMULATED mark (Compliance launch blocker, D-026, D-032) and the footer sentence are
+// localised (D-038): `share.card.mark` and `share.card.footer` in locales/<lang>.json, read in
+// text.ts. No English constant, so no locale can fall back to the English mark by accident.
 
 /** Least cap height of the SIMULATED mark, as a share of the card height (acceptance P6-01). */
 export const MARK_CAP_FRAC = 0.02;

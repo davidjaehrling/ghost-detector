@@ -236,5 +236,11 @@
   "scan.progressLabel": "Progress {pct} percent",
   "result.decodedLabel": "Decoded {pct} percent",
   "a11y.percent": "{n} percent",
-  "a11y.deg": "{n} deg"
+  "a11y.deg": "{n} deg",
+  "share.card.mark": "SIMULATED",
+  "share.card.footer": "{store} · READINGS ARE SIMULATED",
+  "share.card.decoded": "SIGNATURE {pct}% DECODED",
+  "share.card.none": "NO SIGNATURE",
+  "share.card.evp": "EVP {line}",
+  "share.card.detail": "CLASS: {cls} · ERA {era}"
 }

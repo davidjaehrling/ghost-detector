@@ -1,15 +1,16 @@
 import { Skia, type SkImage, type SkTypeface } from '@shopify/react-native-skia';
 import { Asset } from 'expo-asset';
 
+import type { Lang } from '../../i18n';
 import type { ScanRecord } from '../../state/scans';
 import { regionFromImage } from '../compositor/regionFromImage';
 import type { CardFormat } from './constants';
 import { drawShareCard, encodePng, type CardFonts, type CardRender } from './render';
 import { saveCard } from './save';
 
-export { STORE_NAME, NAMEPLATE, SIMULATED, LAYOUTS, cardFileName, MARK_CAP_FRAC, type CardFormat } from './constants';
+export { STORE_NAME, NAMEPLATE, LAYOUTS, cardFileName, MARK_CAP_FRAC, type CardFormat } from './constants';
 export { drawShareCard, encodePng, type CardFonts, type CardInput, type CardRender, type MarkBox } from './render';
-export { cardText, cardTexts, type CardText } from './text';
+export { cardText, cardTexts, cardCopy, CARD_KEYS, type CardText } from './text';
 export { figureLayout } from './figure';
 
 const TTF = {
@@ -42,6 +43,8 @@ export interface ShareCardOptions {
   beliefBand?: [number, number];
   /** Store name override (default STORE_NAME). */
   store?: string;
+  /** Locale override (the L2 probe's `?lang=`); default the locale in force. */
+  locale?: Lang;
 }
 
 export interface ShareCard extends CardRender {
@@ -63,7 +66,7 @@ async function loadPhoto(uri: string): Promise<SkImage> {
  */
 export async function renderShareCard(record: ScanRecord, opts: ShareCardOptions): Promise<ShareCard> {
   const [photo, stats, f] = await Promise.all([loadPhoto(record.photoUri), regionFromImage(record.photoUri).catch(() => null), loadCardFonts()]);
-  const card = drawShareCard({ record, format: opts.format, photo, stats, fonts: f, beliefBand: opts.beliefBand, store: opts.store });
+  const card = drawShareCard({ record, format: opts.format, photo, stats, fonts: f, beliefBand: opts.beliefBand, store: opts.store, locale: opts.locale });
   const png = encodePng(card.image);
   return { ...card, png, uri: saveCard(png, card.fileName) };
 }

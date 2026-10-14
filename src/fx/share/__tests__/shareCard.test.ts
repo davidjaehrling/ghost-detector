@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +8,16 @@ vi.mock('@shopify/react-native-skia', () => skiaModule());
 vi.mock('react-native', () => ({ Platform: { OS: 'web' }, PixelRatio: { get: () => 1 } }));
 
 // P6-01: the card rendered by the real renderer on CanvasKit in Node, measured from its pixels.
+// P7-06: per locale, over the locale files present (locales/<lang>.json); `en` must be there.
+type Lang = 'en' | 'de' | 'es' | 'pt';
+const LOCALES = (['en', 'de', 'es', 'pt'] as const).filter((l) => existsSync(join(__dirname, '..', '..', '..', '..', 'locales', `${l}.json`)));
+/** The mark and footer sentence per D-038 (docs/localisation-rules.md section 1). */
+const MARK_TABLE: Record<Lang, { mark: string; footer: string }> = {
+  en: { mark: 'SIMULATED', footer: 'READINGS ARE SIMULATED' },
+  de: { mark: 'SIMULIERT', footer: 'WERTE SIND SIMULIERT' },
+  es: { mark: 'SIMULADO', footer: 'LECTURAS SIMULADAS' },
+  pt: { mark: 'SIMULADO', footer: 'LEITURAS SIMULADAS' },
+};
 type Mod = typeof import('../render');
 let R: Mod;
 let Skia: any;
@@ -24,11 +34,11 @@ beforeAll(async () => {
   fonts = { vt323: tf(FONT_FILES.vt323), b612: tf(FONT_FILES.b612), b612Bold: tf(FONT_FILES.b612Bold) };
 }, 60000);
 
-function card(fixture: string, name: 'quiet' | 'active' | 'strong' | 'critical', format: 'story' | 'square', deep = false) {
+function card(fixture: string, name: 'quiet' | 'active' | 'strong' | 'critical', format: 'story' | 'square', deep = false, locale?: Lang) {
   const photo = Skia.Image.MakeImageFromEncoded(Skia.Data.fromBytes(readBytes(`e2e/fixtures/${fixture}.png`)));
   const record = demo.demoRecord(name, 'fixture', demo.DEMO_CASES[name]);
   if (deep) record.deepScanAt = record.createdAt;
-  return R.drawShareCard({ record, format, photo, stats: statsFromImage(photo), fonts });
+  return R.drawShareCard({ record, format, photo, stats: statsFromImage(photo), fonts, locale });
 }
 
 // Independent WCAG 2.x relative luminance (not the renderer's helper).
@@ -71,15 +81,16 @@ function measure(img: any, box: { x0: number; y0: number; x1: number; y1: number
   return { cap: bottom - top + 1, top: box.y0 + top, bottom: box.y0 + bottom, contrast: (lt + 0.05) / (lb + 0.05) };
 }
 
-// The window around each mark's own line: 0.3 cap above and below on the strip, 0.15 on the
-// footer (the brackets of `[STORE NAME]` reach under its baseline), so the measured rows are the
-// mark's glyphs alone and not the line above.
+// The window around each mark's own line: 0.1 cap above the strip mark (the line above can end in
+// a decimal comma, ΔT -9,9 in de/es/pt, whose tail reaches 0.3 cap down towards the mark) and 0.3
+// below; 0.15 above and below on the footer (the brackets of `[STORE NAME]` reach under its
+// baseline), so the measured rows are the mark's glyphs alone and not the line above.
 function marks(c: ReturnType<Mod['drawShareCard']>) {
   const [strip, footer] = c.marks;
   const sv = Math.round(strip!.h * 0.3);
   const s = measure(c.image, {
     x0: Math.round(strip!.x) - 4,
-    y0: Math.max(c.strip.y, Math.round(strip!.y) - sv),
+    y0: Math.max(c.strip.y, Math.round(strip!.y) - Math.round(strip!.h * 0.1)),
     x1: Math.min(c.strip.x + c.strip.w, Math.round(strip!.x + strip!.w) + 4),
     y1: Math.min(c.strip.y + c.strip.h, Math.round(strip!.baseline) + sv),
   });
@@ -96,18 +107,36 @@ const CASES = [
   ['black', 'quiet', false],
 ] as const;
 
-describe('SIMULATED mark, measured from the rendered pixels', () => {
+// Other locales run the longest strip (CRITICAL deep) and the brightest fixture; `en` runs all four.
+const casesFor = (lang: Lang) => (lang === 'en' ? CASES : CASES.slice(0, 2));
+
+it('measures at least en, plus every locale file present', () => {
+  expect(LOCALES).toContain('en');
+  console.log(`share card locales: ${LOCALES.join(', ')}`);
+});
+
+describe.each(LOCALES)('SIMULATED mark (%s), measured from the rendered pixels', (lang) => {
   for (const format of ['story', 'square'] as const)
-    for (const [fixture, name, deep] of CASES)
+    for (const [fixture, name, deep] of casesFor(lang))
       it(`${format} ${fixture} ${name}${deep ? ' deep' : ''}`, () => {
-        const c = card(fixture, name, format, deep);
+        const c = card(fixture, name, format, deep, lang);
+        // The measured boxes are the localised mark: last in the strip, and the footer's mark word.
+        expect(c.text.locale).toBe(lang);
+        expect(c.text.strip.mark).toBe(MARK_TABLE[lang].mark);
+        expect(c.texts.filter((t) => t === c.text.strip.mark)).toHaveLength(1);
+        expect(c.texts.indexOf(c.text.strip.mark)).toBe(c.texts.indexOf(`${c.text.reading.spi} `) - 1);
+        expect(c.text.footer.endsWith(MARK_TABLE[lang].footer)).toBe(true);
+        expect(MARK_TABLE[lang].footer.endsWith(c.text.footerMark)).toBe(true);
         expect([c.width, c.height]).toEqual(format === 'story' ? [1080, 1920] : [1080, 1080]);
         const { s, f } = marks(c);
         // D-034 (a): every strip run and the whole footer at the mark's size, nothing enlarged.
         expect(c.marks[0]!.fontSize).toBe(R.stripSize(c.layout));
         expect(c.marks[0]!.fontSize).toBeGreaterThanOrEqual(R.markSize(c.height, R.CAP_EM.vt323));
         expect(c.marks[1]!.fontSize).toBe(R.markSize(c.height, R.CAP_EM.b612));
-        console.log(`${format} ${fixture} ${name}: strip cap ${s.cap} px contrast ${s.contrast.toFixed(2)} (scrim ${c.strip.alpha}); footer cap ${f.cap} px contrast ${f.contrast.toFixed(2)}; strip y ${c.strip.y} to ${c.strip.y + c.strip.h}; floor ${(0.02 * c.height).toFixed(1)} px`);
+        console.log(`${lang} ${format} ${fixture} ${name}: strip cap ${s.cap} px contrast ${s.contrast.toFixed(2)} (scrim ${c.strip.alpha}); footer cap ${f.cap} px contrast ${f.contrast.toFixed(2)}; strip y ${c.strip.y} to ${c.strip.y + c.strip.h}; floor ${(0.02 * c.height).toFixed(1)} px`);
+        // The measured rows are the mark's own glyphs: no taller than the run's cap height plus antialiasing.
+        expect(s.cap).toBeLessThanOrEqual(Math.ceil(c.marks[0]!.capPx) + 3);
+        expect(f.cap).toBeLessThanOrEqual(Math.ceil(c.marks[1]!.capPx) + 3);
         for (const m of [s, f]) {
           expect(m.cap).toBeGreaterThanOrEqual(0.02 * c.height);
           expect(m.contrast).toBeGreaterThanOrEqual(4.5);
@@ -146,11 +175,43 @@ describe('reading row (D-034 b), measured from the rendered pixels', () => {
 });
 
 describe('card contents', () => {
-  it('is byte-identical for a fixed seed', () => {
-    const a = R.encodePng(card('cellar', 'active', 'story').image);
-    const b = R.encodePng(card('cellar', 'active', 'story').image);
+  it.each(LOCALES)('is byte-identical for a fixed seed (%s)', (lang) => {
+    const a = R.encodePng(card('cellar', 'active', 'story', false, lang).image);
+    const b = R.encodePng(card('cellar', 'active', 'story', false, lang).image);
     expect(a.length).toBeGreaterThan(1000);
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
+  }, 60000);
+
+  it('en: the default locale and the explicit en override draw the same bytes', () => {
+    const a = R.encodePng(card('cellar', 'critical', 'story', true).image);
+    const b = R.encodePng(card('cellar', 'critical', 'story', true, 'en').image);
+    expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
+  }, 60000);
+
+  it.each(LOCALES)('draws the localised set only (%s): mark per D-038, no English mark outside en', async (lang) => {
+    const { translate } = await import('../../../i18n/core');
+    const tr = (k: string, p?: Record<string, string | number>) => translate(lang, k, p);
+    // The card mark is the on-screen strip's mark, in every locale (one record, two surfaces).
+    expect(tr('share.card.mark')).toBe(tr('result.strip.mark'));
+    const dot = lang === 'en' ? '\\.' : ',';
+    for (const [fixture, name, format, deep] of [['cellar', 'critical', 'square', true], ['cellar', 'active', 'story', false], ['black', 'quiet', 'story', false]] as const) {
+      const c = card(fixture, name, format, deep, lang);
+      const t = c.text;
+      expect(t.strip.data).toMatch(new RegExp(`ΔT -?\\d+${dot}\\d °C`));
+      expect(t.footer).toBe(tr('share.card.footer', { store: '[STORE NAME]' }));
+      const rec = demo.demoRecord(name, 'x', demo.DEMO_CASES[name]);
+      const want = deep
+        ? tr('share.card.evp', { line: tr(`deep.evp.${(rec.seed >>> 0) % 12}`) })
+        : name === 'quiet'
+          ? tr('share.card.none')
+          : tr('share.card.decoded', { pct: rec.profile.signatureDecodedPct });
+      expect(t.reading.line).toBe(want);
+      // Every drawn run is a piece of the card's own strings (lines break only at ` · `).
+      const pieces = new Set([t.nameplate, t.strip.mark, t.reading.spi + ' ', t.reading.tier, t.reading.line, ...(t.reading.detail ? [t.reading.detail] : []), t.footer, ...t.footer.split(' · ')]);
+      for (const run of c.texts) expect(pieces.has(run) || t.strip.data.includes(run.replace(/ · $/, ''))).toBe(true);
+      expect(c.texts.at(-1)!.endsWith(MARK_TABLE[lang].footer)).toBe(true);
+      if (lang !== 'en') for (const run of c.texts) expect(run).not.toMatch(/SIMULATED|READINGS/);
+    }
   }, 60000);
 
   it('draws only the brief strings: no key, QR, arrow, link or claim word', () => {
