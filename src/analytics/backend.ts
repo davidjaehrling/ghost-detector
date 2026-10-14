@@ -9,10 +9,15 @@
 //   3. Add "@react-native-firebase/app" to the app.json plugins. Do not add the analytics plugin
 //      options that enable collection.
 //   4. firebase.json at the repo root already sets every automatic collection flag to false
-//      (analytics_auto_collection_enabled, google_analytics_default_allow_analytics_storage,
-//      _ad_storage, _ad_user_data, _ad_personalization, google_analytics_adid_collection_enabled,
+//      (analytics_auto_collection_enabled, analytics_default_allow_analytics_storage,
+//      analytics_default_allow_ad_storage, analytics_default_allow_ad_user_data,
+//      analytics_default_allow_ad_personalization_signals, google_analytics_adid_collection_enabled,
 //      google_analytics_ssaid_collection_enabled, google_analytics_automatic_screen_reporting_enabled).
 //      Do not change them; collection is switched on only by setEnabled(true) below.
+//      These are the key names the React Native Firebase Gradle plugin reads. After prebuild,
+//      check the built APK: `aapt dump xmltree app.apk AndroidManifest.xml` must show the four
+//      google_analytics_default_allow_* meta-data entries (analytics_storage, ad_storage,
+//      ad_user_data, ad_personalization) as false.
 //   5. Replace `backend` with a Firebase implementation, loaded the same way as src/ads/backend.ts
 //      (require on first use, never at import):
 //        setEnabled(on)       -> analytics().setAnalyticsCollectionEnabled(on)

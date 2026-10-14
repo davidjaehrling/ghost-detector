@@ -68,10 +68,10 @@ describe('firebase.json', () => {
     const flags = cfg['react-native'];
     for (const k of [
       'analytics_auto_collection_enabled',
-      'google_analytics_default_allow_analytics_storage',
-      'google_analytics_default_allow_ad_storage',
-      'google_analytics_default_allow_ad_user_data',
-      'google_analytics_default_allow_ad_personalization_signals',
+      'analytics_default_allow_analytics_storage',
+      'analytics_default_allow_ad_storage',
+      'analytics_default_allow_ad_user_data',
+      'analytics_default_allow_ad_personalization_signals',
       'google_analytics_adid_collection_enabled',
       'google_analytics_ssaid_collection_enabled',
       'google_analytics_automatic_screen_reporting_enabled',
