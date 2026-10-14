@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitPrinted } from './relay';
 
 // P6-05 part 1. The FIELD LOG RELAY opt-in on the viewfinder and the Settings RELAY row.
 // The log demo seeds six cases (session=1 lifts the first-session rule), so the first return from a
@@ -34,6 +35,7 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   await backFromACase(page);
   const mod = page.getByTestId('relay-module');
   await expect(mod).toBeVisible();
+  await waitPrinted(page);
   await expect(mod).toContainText('FIELD LOG RELAY');
   // The body prints one sentence per line; the text content is the whole body, in order.
   expect(((await page.getByTestId('relay-body').textContent()) ?? '').replace(/\s+/g, ' ').trim()).toBe(BODY);
@@ -107,7 +109,7 @@ test('at 428 the module sits inside the glass, clear of the keys, and no sentenc
   await backFromACase(page);
   const mod = page.getByTestId('relay-module');
   await expect(mod).toBeVisible();
-  await page.waitForTimeout(300);
+  await waitPrinted(page);
   const glass = (await page.getByTestId('screen-viewfinder').last().getByTestId('screen-viewfinder-glass').boundingBox())!;
   const m = (await mod.boundingBox())!;
   const fit = (await page.getByTestId('relay-fit').boundingBox())!;
@@ -123,6 +125,7 @@ test('at 428 the module sits inside the glass, clear of the keys, and no sentenc
 test('a system denial reports it, and the Settings row opens system settings without asking again', async ({ page }) => {
   await start(page, '&notify=denied');
   await backFromACase(page);
+  await waitPrinted(page);
   await page.getByTestId('relay-fit').click();
   await expect(page.getByTestId('relay-result')).toHaveText('Relay not fitted. Change in Settings.');
   await page.getByTestId('relay-result-box').click();
@@ -139,6 +142,7 @@ test('CAPTURE during the module counts as NOT NOW: no request, offered stays tru
   await start(page, '&notify=granted');
   await backFromACase(page);
   await expect(page.getByTestId('relay-module')).toBeVisible();
+  await waitPrinted(page);
   await page.getByTestId('key-capture').click();
   await expect(page.getByTestId('relay-module')).toHaveCount(0);
   expect(await calls(page)).toEqual([]);
@@ -152,6 +156,7 @@ test('CAPTURE during the module counts as NOT NOW: no request, offered stays tru
 test('NOT NOW is final: no request, no second module, a RELAY row in Settings', async ({ page }) => {
   await start(page, '&notify=granted');
   await backFromACase(page);
+  await waitPrinted(page);
   await page.getByTestId('relay-notnow').click();
   await expect(page.getByTestId('relay-module')).toHaveCount(0);
   expect(await calls(page)).toEqual([]);
@@ -312,10 +317,37 @@ test('the offer prints one line at a time and ends whole', async ({ page }) => {
   expect(new Set(seen).size).toBeGreaterThan(1);
 });
 
+// D-045 6, Compliance condition: FIT RELAY ignores presses until the simulated sentence has printed.
+test('FIT RELAY before the print completes asks nothing; a press after it does', async ({ page }) => {
+  const rec = (id: string, spi: number) => ({
+    id, createdAt: Date.now() - 1000 * Number(id), tag: 'hall', seed: 95 + Number(id),
+    photoUri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+    outcome: { tier: 'active', spi, figureShown: false, smudge: false, jumpScare: false, scanDurationMs: 7000 },
+    profile: { class: 'KEEPER', era: 'Era est. 1905 to 1973', name: 'RSD-9', traits: [], signatureDecodedPct: 61 },
+  });
+  await page.addInitScript((r) => localStorage.setItem('fs4.scans.v1', JSON.stringify(r)), [rec('0003', 62), rec('0002', 55), rec('0001', 50)]);
+  await page.goto('/result/0001?session=1&notify=granted');
+  await expect(page.getByTestId('result-spi')).toHaveText('50', { timeout: 10_000 });
+  await page.waitForTimeout(600);
+  await page.getByTestId('key-back').click();
+  const mod = page.getByTestId('relay-module');
+  await expect(mod).toBeVisible();
+  await expect(mod).toHaveAttribute('data-printed', '0');
+  await page.getByTestId('relay-fit').click({ force: true });
+  await page.waitForTimeout(100);
+  expect(await calls(page)).toEqual([]);
+  await expect(page.getByTestId('relay-result')).toHaveCount(0);
+  await waitPrinted(page);
+  await page.getByTestId('relay-fit').click();
+  await expect(page.getByTestId('relay-result')).toBeVisible();
+  expect(await calls(page)).toEqual(['createChannel:field-log', 'requestPermission']);
+});
+
 // D-045 6: nothing is scheduled without FIT RELAY, whichever way the offer is left.
 test('leaving the offer by CAPTURE or NOT NOW schedules nothing; only FIT RELAY does', async ({ page }) => {
   await start(page, `&notify=granted&clock=${encodeURIComponent('2026-10-13T12:00:00')}`);
   await backFromACase(page);
+  await waitPrinted(page);
   await page.getByTestId('relay-notnow').click();
   await page.waitForTimeout(500);
   expect((await page.evaluate(() => (window.__notifyLog ?? []).filter((e) => e.call === 'schedule' || e.call === 'requestPermission'))).length).toBe(0);

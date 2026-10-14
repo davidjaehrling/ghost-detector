@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { fitRelay, relayCopy, relayStore } from '../../state/relay';
 import { notifyBackend } from '../../state/notifyBackend';
 import type { KeySlot } from '../boot/parts';
-import { readHarness } from '../harness';
 import { stripScrimAlpha } from '../result/stripScrim';
 import { color, type } from '../tokens';
 import { useReduceMotion } from '../useReduceMotion';
@@ -17,9 +16,38 @@ const RESULT_MS = 2400;
 /** One printed line every LINE_MS, the pace of the scan telemetry. */
 const LINE_MS = 160;
 
+/** The body one sentence per printed line. */
+export const bodyLines = (body: string): string[] => body.split(/(?<=[.?!])\s+/).filter(Boolean);
+
+/** Lines in the module: the title, then one per sentence. */
+export const relayLineCount = (body: string): number => 1 + bodyLines(body).length;
+
+/** FIT RELAY is live only once the whole offer, the simulated sentence last, is printed. */
+export const fitLive = (printed: number, total: number): boolean => printed >= total;
+
 /** The module's state and its two keys. `keys` is null once the result line replaces the question. */
-export function useRelayModule(still: boolean, onDone: () => void): { line: string | null; keys: readonly (KeySlot | null)[] | null } {
+export function useRelayModule(
+  still: boolean,
+  onDone: () => void,
+  open = true,
+): { line: string | null; keys: readonly (KeySlot | null)[] | null; printed: number; total: number } {
   const [line, setLine] = useState<string | null>(null);
+  const reduce = useReduceMotion();
+  const quick = still || reduce;
+  const total = relayLineCount(relayCopy.body);
+  const [n, setN] = useState(0);
+  // One printed line every LINE_MS while the offer is up; whole at once when still or reduced.
+  useEffect(() => {
+    if (!open) {
+      setN(0);
+      return;
+    }
+    if (quick || n >= total) return;
+    const id = setTimeout(() => setN((v) => v + 1), LINE_MS);
+    return () => clearTimeout(id);
+  }, [open, quick, n, total]);
+  const printed = quick ? total : n;
+  const live = fitLive(printed, total);
 
   useEffect(() => {
     if (line === null || still) return;
@@ -28,11 +56,12 @@ export function useRelayModule(still: boolean, onDone: () => void): { line: stri
   }, [line, still, onDone]);
 
   const fit = useCallback(() => {
+    if (!live) return;
     void fitRelay(relayStore, notifyBackend)
       .then((fitted) => (fitted ? relayCopy.fitted : relayCopy.notFitted))
       .catch(() => relayCopy.notFitted)
       .then(setLine);
-  }, []);
+  }, [live]);
 
   const keys: readonly (KeySlot | null)[] | null =
     line === null
@@ -43,33 +72,20 @@ export function useRelayModule(still: boolean, onDone: () => void): { line: stri
           null, // slot 4 stays CAPTURE (the viewfinder fills it); pressing it counts as NOT NOW
         ]
       : null;
-  return { line, keys };
-}
-
-/** The body one sentence per printed line. */
-export const bodyLines = (body: string): string[] => body.split(/(?<=[.?!])\s+/).filter(Boolean);
-
-/** How many of `total` lines are printed: all at once when still or reduced, else one per LINE_MS. */
-function usePrinted(total: number): number {
-  const reduce = useReduceMotion();
-  const still = readHarness().isStatic || reduce;
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (still || n >= total) return;
-    const id = setTimeout(() => setN((v) => v + 1), LINE_MS);
-    return () => clearTimeout(id);
-  }, [still, n, total]);
-  return still ? total : n;
+  return { line, keys, printed, total };
 }
 
 const SCRIM = stripScrimAlpha(color.p3);
 
-export function RelayModule({ bottom, line, onDone }: { bottom: number; line: string | null; onDone: () => void }) {
+export function RelayModule({ bottom, line, printed, onDone }: { bottom: number; line: string | null; printed: number; onDone: () => void }) {
   const sentences = bodyLines(relayCopy.body);
   // Line 0 is the title, then one line per sentence. The last sentence says the lines are simulated: p4.
-  const printed = usePrinted(1 + sentences.length);
+  // data-printed="1" marks the module whole (web readiness for the e2e specs).
+  const ready = fitLive(printed, 1 + sentences.length);
+  // react-native-web turns dataSet into data-* attributes (not in RN's View types).
+  const web = { dataSet: { printed: ready ? '1' : '0' } } as Record<string, unknown>;
   return (
-    <View style={[s.module, { bottom }]} testID="relay-module" accessibilityViewIsModal={false}>
+    <View style={[s.module, { bottom }]} testID="relay-module" accessibilityViewIsModal={false} {...web}>
       <Text style={[s.header, { opacity: printed >= 1 ? 1 : 0 }]} accessibilityRole="header">
         {relayCopy.header}
       </Text>

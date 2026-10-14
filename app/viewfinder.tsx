@@ -155,7 +155,7 @@ function Viewfinder({
     }, []),
   );
   const closeRelay = useCallback(() => setRelayOpen(false), []);
-  const relayModule = useRelayModule(isStatic, closeRelay);
+  const relayModule = useRelayModule(isStatic, closeRelay, relayOpen);
 
   const reduceMotion = useReduceMotion();
   const active = useActive();
@@ -303,7 +303,7 @@ function Viewfinder({
               </View>
             ) : null}
 
-            {relayOpen ? <RelayModule bottom={bandH + 12} line={relayModule.line} onDone={closeRelay} /> : null}
+            {relayOpen ? <RelayModule bottom={bandH + 12} line={relayModule.line} printed={relayModule.printed} onDone={closeRelay} /> : null}
 
             <View style={[s.band, { height: bandH }]} testID="hud-band">
               <View style={s.tagRow} accessibilityRole="tablist">

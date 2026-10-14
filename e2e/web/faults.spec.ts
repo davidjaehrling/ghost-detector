@@ -1,3 +1,4 @@
+import { waitPrinted } from './relay';
 import { expect, test, type Page } from '@playwright/test';
 
 // P8-05. Fault injection through ?fault=<name> (src/state/faults.web.ts and the web backends). Each
@@ -145,6 +146,7 @@ test('notify-denied: the relay reports the denial and Settings shows it OFF', as
   await page.getByTestId('history-row-0001').filter({ visible: true }).click();
   await page.getByTestId('screen-result').last().getByTestId('key-back').click();
   await expect(page.getByTestId('screen-viewfinder').last()).toBeVisible();
+  await waitPrinted(page);
   await page.getByTestId('relay-fit').click();
   await expect(page.getByTestId('relay-result')).toHaveText('Relay not fitted. Change in Settings.');
   await page.getByTestId('relay-result-box').click();

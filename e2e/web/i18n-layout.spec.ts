@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { waitWarped } from './warped';
+import { waitPrinted } from './relay';
 
 // P7-05. The screens at the longest strings: German, Spanish and European Portuguese at 390 and
 // German again at 360. Goldens are named <screen>-<lang>.png (and -360 at the narrow width). The
@@ -324,7 +325,7 @@ for (const { lang, project, suffix } of CASES) {
       await expect(page.getByTestId('screen-viewfinder').last()).toBeVisible();
       const mod = page.getByTestId('relay-module');
       await expect(mod).toBeVisible();
-      await page.waitForTimeout(300);
+      await waitPrinted(page);
       await check(page, `relay-${lang}${suffix}`, testInfo);
       const m = (await mod.boundingBox())!;
       const body = await page.getByTestId('relay-body').evaluate((e) => {
