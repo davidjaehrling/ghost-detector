@@ -61,6 +61,8 @@ export interface SentItem {
   /** Delivery time. A time after `nowMs` means still pending. */
   sentAtMs: number;
   opened: boolean;
+  /** Template 5 only: the `catalogueCount` it was sent at, so it goes out once per count. */
+  catalogueCount?: number;
 }
 
 export interface NotifyState {
@@ -78,6 +80,8 @@ export interface NotifyState {
   loggedTags: string[];
   /** Classes logged by Deep Scan so far, of 24. */
   catalogueCount: number;
+  /** Name of the class logged last, for template 5. Omitted: the sentence drops that clause. */
+  lastLoggedClass?: string;
   sent: SentItem[];
   nowMs: number;
   /** Local offset from UTC in minutes at nowMs (UTC+2 = 120). */
@@ -189,7 +193,18 @@ const pad4 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(4, '0');
 
 /* ---------- candidates ---------- */
 
+/** `idx` is the forecast index at 22:00 of the delivery night, `idx03` at 03:00 after it. */
 interface Ctx { s: NotifyState; t: number; moonPct: number; idx: number; idx03: number }
+
+/**
+ * Minute of the local day (inside the 18:00 to 22:00 window) this install is always notified at.
+ * Seeded from `installMs` so the relay is predictable and not drawn again each night.
+ */
+export function deliveryMinute(installMs: number): number {
+  const r = mulberry32(Math.floor(installMs / 1000) >>> 0);
+  r();
+  return WINDOW_START_MIN + Math.floor(r() * (WINDOW_END_MIN - WINDOW_START_MIN));
+}
 
 function build(id: TemplateId, c: Ctx): Notification | null {
   const { s, t, idx, idx03, moonPct } = c;
@@ -199,8 +214,8 @@ function build(id: TemplateId, c: Ctx): Notification | null {
       if (idx < HIGH_INDEX || idx03 < HIGH_INDEX) return null;
       return {
         templateId: 1, fireAtMs: t,
-        title: `FIELD LOG · IDX ${idx03}/5`,
-        body: `03:00 window after midnight. Moon ${moonPct}%. Conditions favourable after 22:00.`,
+        title: `FIELD LOG · IDX ${idx}/5`,
+        body: `Forecast index ${idx}/5 after 22:00. Moon ${moonPct}%. 03:00 window peaks.`,
       };
     case 2:
       if (!isFullMoonWindow(t, s.utcOffsetMin)) return null;
@@ -208,7 +223,7 @@ function build(id: TemplateId, c: Ctx): Notification | null {
       return {
         templateId: 2, fireAtMs: t,
         title: `FIELD LOG · MOON ${moonPct}%`,
-        body: 'Full moon. Forecast index 5/5 from 22:00 to 04:00.',
+        body: `Full moon. Forecast index ${idx}/5 from 22:00. ${idx03}/5 at 03:00.`,
       };
     case 3: {
       if (idx < HIGH_INDEX) return null;
@@ -246,12 +261,14 @@ function build(id: TemplateId, c: Ctx): Notification | null {
     case 5: {
       const unlogged = CATALOGUE_SIZE - s.catalogueCount;
       if (unlogged <= 0) return null;
+      if (s.sent.some((x) => x.templateId === 5 && x.catalogueCount === s.catalogueCount)) return null;
+      const last = s.lastLoggedClass?.trim();
       const fresh = s.scans.some((r) => r.decoded && r.newClass && r.atMs <= t && t - r.atMs <= RECENT_CASE_MS);
       if (!fresh) return null;
       return {
         templateId: 5, fireAtMs: t,
         title: `FIELD LOG · CATALOGUE ${s.catalogueCount}/${CATALOGUE_SIZE}`,
-        body: `${unlogged} classes unlogged. Index ${idx}/5 after 22:00.`,
+        body: `${unlogged} ${unlogged === 1 ? 'class' : 'classes'} unlogged.${last ? ` Last logged: ${last}.` : ''}`,
       };
     }
   }
@@ -263,10 +280,10 @@ function build(id: TemplateId, c: Ctx): Notification | null {
  * The next notification to schedule, or null. Call again after scheduling it, with the item
  * appended to `sent` (`sentAtMs` = `fireAtMs`, `opened` false), to get the one after.
  */
-export function nextNotification(s: NotifyState, seed: number): Notification | null {
+export function nextNotification(s: NotifyState, _seed: number): Notification | null {
   if (!s.optedIn || s.sessionCount < 2) return null;
   if (s.nowMs - s.lastAppOpenMs >= STALE_AFTER_MS) return null;
-  const rnd = mulberry32(seed);
+  const minute = deliveryMinute(s.installMs);
   const off = s.utcOffsetMin * 60_000;
   const todayStart = localDayNumber(s.nowMs, s.utcOffsetMin) * DAY_MS - off;
   const firstDayStart = (localDayNumber(s.installMs, s.utcOffsetMin) + 1) * DAY_MS - off;
@@ -280,11 +297,8 @@ export function nextNotification(s: NotifyState, seed: number): Notification | n
     const dayStart = todayStart + d * DAY_MS;
     const day = localDayNumber(dayStart + 12 * HOUR_MS, s.utcOffsetMin);
     if (nightsUsed.has(day)) continue;
-    const lo = Math.max(dayStart + WINDOW_START_MIN * 60_000, earliest);
-    const hi = dayStart + (WINDOW_END_MIN - 1) * 60_000; // last allowed minute
-    if (lo > hi) continue;
-    const t = Math.floor((lo + rnd() * (hi - lo)) / 60_000) * 60_000;
-    if (t < lo) continue;
+    const t = dayStart + minute * 60_000; // same local minute every night for this install
+    if (t < earliest) continue;
     if (t - s.lastAppOpenMs >= STALE_AFTER_MS) break;
     if (!withinWeeklyCap([...sentTimes, t], cap)) continue;
     const at = (hour: number, plusDays: number) => dayStart + plusDays * DAY_MS + hour * HOUR_MS;

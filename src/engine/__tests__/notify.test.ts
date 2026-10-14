@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ALLOWED_TEMPLATES, BACKOFF_IGNORED, CAP_PER_WEEK, CATALOGUE_SIZE, CLAIM_WORDS,
   MIN_AFTER_INSTALL_MS, PRIORITY, STALE_AFTER_MS, WEEK_MS, WINDOW_END_MIN, WINDOW_START_MIN,
-  applyIntensityChange, effectiveCap, forecastIndex, localDayNumber, localMinuteOfDay,
+  applyIntensityChange, deliveryMinute, effectiveCap, forecastIndex, localDayNumber, localMinuteOfDay,
   nextNotification, withinWeeklyCap,
   type Notification, type NotifyState, type ScanSummary, type SentItem, type TemplateId,
 } from '../notify';
@@ -190,13 +190,14 @@ describe('templates', () => {
   it('1: index title and 03:00 body', () => {
     const n = firstOf(1, (k) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 5 * DAY_MS }));
     expect(n.title).toMatch(/^FIELD LOG · IDX [45]\/5$/);
-    expect(n.body).toMatch(/^03:00 window after midnight\. Moon \d+%\. Conditions favourable after 22:00\.$/);
+    expect(n.body).toMatch(/^Forecast index [45]\/5 after 22:00\. Moon \d+%\. 03:00 window peaks\.$/);
+    expect(n.body).not.toMatch(/favourable/i);
   });
   it('2: full moon forecast wording, once per cycle', () => {
     const mk = (sent: SentItem[]) => (k: number) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 5 * DAY_MS, sent });
     const n = firstOf(2, mk([]));
     expect(n.title).toMatch(/^FIELD LOG · MOON (9[7-9]|100)%$/);
-    expect(n.body).toBe('Full moon. Forecast index 5/5 from 22:00 to 04:00.');
+    expect(n.body).toMatch(/^Full moon\. Forecast index [1-5]\/5 from 22:00\. [1-5]\/5 at 03:00\.$/);
     expect(forecastIndex(n.fireAtMs, 0).moonPct).toBeGreaterThan(96);
     const again = nextNotification(base({ nowMs: n.fireAtMs - 5 * HOUR_MS, lastAppOpenMs: n.fireAtMs - 6 * HOUR_MS, intensity: 'brave', sent: [{ templateId: 2, sentAtMs: n.fireAtMs - 2 * DAY_MS, opened: true }] }), 1);
     expect(again?.templateId).not.toBe(2);
@@ -222,7 +223,15 @@ describe('templates', () => {
   it('5: catalogue, unlogged wording', () => {
     const n = firstOf(5, (k) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 9 * DAY_MS, catalogueCount: 7, scans: [scan({ decoded: true, newClass: true, decodedPct: 100 })] }));
     expect(n.title).toBe('FIELD LOG · CATALOGUE 7/24');
-    expect(n.body).toMatch(/^17 classes unlogged\. Index [1-5]\/5 after 22:00\.$/);
+    expect(n.body).toBe('17 classes unlogged.');
+    const withLast = firstOf(5, (k) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 9 * DAY_MS, catalogueCount: 7, lastLoggedClass: 'Residual', scans: [scan({ decoded: true, newClass: true, decodedPct: 100 })] }));
+    expect(withLast.body).toBe('17 classes unlogged. Last logged: Residual.');
+  });
+  it('5: once per catalogueCount', () => {
+    const mk = (sent: SentItem[], count: number) => (k: number) => base({ nowMs: day(k), lastAppOpenMs: day(k) - HOUR_MS, installMs: day(k) - 9 * DAY_MS, catalogueCount: count, sent, scans: [scan({ decoded: true, newClass: true, decodedPct: 100, atMs: day(k) - HOUR_MS })] });
+    const sent: SentItem[] = [{ templateId: 5, sentAtMs: T0 - 30 * DAY_MS, opened: true, catalogueCount: 7 }];
+    for (let k = 0; k < 60; k++) for (let seed = 1; seed < 4; seed++) expect(nextNotification(mk(sent, 7)(k), seed)?.templateId).not.toBe(5);
+    expect(firstOf(5, mk(sent, 8)).title).toBe('FIELD LOG · CATALOGUE 8/24');
   });
   it('priority: moon beats tag beats index beats catalogue beats case', () => {
     expect(PRIORITY).toEqual([2, 3, 1, 5, 4]);
@@ -289,3 +298,61 @@ describe('applyIntensityChange', () => {
   });
 });
 void WEEK_MS;
+
+describe('quoted numbers come from the forecast index and the moon', () => {
+  const states = Array.from({ length: 1000 }, (_, i) => {
+    const st = randomState(50_000 + i);
+    st.lastLoggedClass = i % 2 ? 'Residual' : undefined;
+    // widen the odds that numbered templates are produced
+    st.optedIn = true; st.sessionCount = 3; st.lastAppOpenMs = st.nowMs - HOUR_MS; st.intensity = i % 3 === 0 ? 'calm' : 'brave';
+    st.sent = []; st.loggedTags = ['cellar', 'cellar', 'attic', 'attic'];
+    st.scans = [scan({ caseId: 3, atMs: st.nowMs - DAY_MS, decoded: true, newClass: true, decodedPct: 100 }), scan({ caseId: 4, atMs: st.nowMs - DAY_MS, decodedPct: 60 })];
+    return st;
+  });
+  it('every N/5 equals forecastIndex at the named hour; every m% equals the moon at delivery', () => {
+    let checked = 0; const seen = new Set<number>();
+    for (const [i, s] of states.entries()) {
+      const n = nextNotification(s, i);
+      if (!n) continue;
+      seen.add(n.templateId);
+      const dayStart = Math.floor((n.fireAtMs + s.utcOffsetMin * 60_000) / DAY_MS) * DAY_MS - s.utcOffsetMin * 60_000;
+      const i22 = forecastIndex(dayStart + 22 * HOUR_MS, s.utcOffsetMin).index;
+      const i03 = forecastIndex(dayStart + 27 * HOUR_MS, s.utcOffsetMin).index;
+      const moon = forecastIndex(n.fireAtMs, s.utcOffsetMin).moonPct;
+      for (const m of n.title.matchAll(/IDX (\d+)\/5/g)) { expect(+m[1]!).toBe(i22); checked++; }
+      for (const m of n.body.matchAll(/index (\d+)\/5/g)) { expect(+m[1]!).toBe(i22); checked++; }
+      for (const m of n.body.matchAll(/(\d+)\/5 at 03:00/g)) { expect(+m[1]!).toBe(i03); checked++; }
+      for (const m of `${n.title} ${n.body}`.matchAll(/(?:MOON|Moon) (\d+)%/g)) { expect(+m[1]!).toBe(moon); checked++; }
+      const slashes = (`${n.title} ${n.body}`.match(/\d+\/5/g) ?? []).length;
+      const covered = (n.title.match(/IDX \d+\/5/g) ?? []).length + (n.body.match(/index \d+\/5/g) ?? []).length + (n.body.match(/\d+\/5 at 03:00/g) ?? []).length;
+      expect(slashes).toBe(covered);
+    }
+    expect(checked).toBeGreaterThan(100);
+    expect(seen.has(1) || seen.has(2) || seen.has(3)).toBe(true);
+  });
+});
+
+describe('delivery minute', () => {
+  it('is inside the window, fixed per install, and shared across nights', () => {
+    for (let i = 0; i < 500; i++) {
+      const installMs = T0 + i * 7_919_000;
+      const m = deliveryMinute(installMs);
+      expect(m).toBeGreaterThanOrEqual(WINDOW_START_MIN);
+      expect(m).toBeLessThan(WINDOW_END_MIN);
+      expect(deliveryMinute(installMs)).toBe(m);
+    }
+    const spread = new Set(Array.from({ length: 200 }, (_, i) => deliveryMinute(T0 + i * 86_413_000)));
+    expect(spread.size).toBeGreaterThan(60);
+  });
+  it('two nights of one install fire at the same local minute', () => {
+    for (const off of [0, 120, -300]) {
+      const s = base({ utcOffsetMin: off, intensity: 'brave', belief: 'no', loggedTags: ['cellar', 'cellar'], catalogueCount: 7, scans: [scan({ decoded: true, newClass: true, decodedPct: 100, atMs: T0 })] });
+      const a = nextNotification(s, 1)!;
+      const b = nextNotification({ ...s, sent: [{ templateId: a.templateId, sentAtMs: a.fireAtMs, opened: true }] }, 2)!;
+      expect(a && b).toBeTruthy();
+      expect(localDayNumber(b.fireAtMs, off)).toBeGreaterThan(localDayNumber(a.fireAtMs, off));
+      expect(localMinuteOfDay(a.fireAtMs, off)).toBe(localMinuteOfDay(b.fireAtMs, off));
+      expect(localMinuteOfDay(a.fireAtMs, off)).toBe(deliveryMinute(s.installMs));
+    }
+  });
+});
