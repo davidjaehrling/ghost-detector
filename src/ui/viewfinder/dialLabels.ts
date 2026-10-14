@@ -13,6 +13,9 @@ export const LABEL_H = 16;
 export const RING_GAP = 8;
 export const PLATE_INSET = 6;
 
+// 1000 sits 6 px further out than the rest, so it never crowds 2000 (which is held by the plate edge).
+const EXTRA_GAP: Partial<Record<number, number>> = { 1000: 6 };
+
 export type LabelBox = { mg: number; text: string; left: number; top: number; width: number; height: number };
 
 export function labelBox(mg: number): LabelBox {
@@ -20,7 +23,7 @@ export function labelBox(mg: number): LabelBox {
   const width = Math.round(text.length * LABEL_CH);
   const a = (fluxAngle(mg) * Math.PI) / 180;
   const half = Math.abs(Math.sin(a)) * (width / 2) + Math.abs(Math.cos(a)) * (LABEL_H / 2);
-  const r = DIAL_R + RING_GAP + half;
+  const r = DIAL_R + RING_GAP + (EXTRA_GAP[mg] ?? 0) + half;
   const cx = PIVOT.x + r * Math.sin(a);
   const cy = PIVOT.y - r * Math.cos(a);
   let left = Math.round(cx - width / 2);
@@ -39,5 +42,7 @@ export function nearestToPivot(b: LabelBox): number {
   return Math.hypot(dx, dy);
 }
 
-// GEO label: left of the needle path, below the arc chord of the Earth band and near the pivot.
-export const GEO_LABEL = { left: PIVOT.x - 40, top: PIVOT.y - 26, width: 28 };
+// GEO label: inside the tick ring, just right of the needle's 200 to 1000 mG path (its lowest and
+// highest positions are 6.5 and 36.9 degrees; the hand and its shadow end at x = 101 where the box
+// starts), under the arc's upper end. The arc's own midpoint lies on that path, so no label fits there.
+export const GEO_LABEL = { left: 102, top: 60, width: 24 };

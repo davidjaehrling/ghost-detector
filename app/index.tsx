@@ -9,7 +9,7 @@ import { sessionActivity } from '../src/state/session';
 import { daysToFullMoon, formatWindowCountdown } from '../src/ui/boot/activity';
 import { useMinuteClock } from '../src/ui/boot/clock';
 import { FIXED_SEED, getInstallIdentity } from '../src/ui/boot/install';
-import { CARD_BOTTOM, READOUT_GAP, STICKER_BOTTOM, bootRows } from '../src/ui/boot/layout';
+import { CALIB_GAP, READOUT_GAP, READOUT_H_CALIB, STICKER_BOTTOM, bootRows } from '../src/ui/boot/layout';
 import { type BootParams, readBootParams } from '../src/ui/boot/params';
 import {
   GRID_COLS,
@@ -76,6 +76,7 @@ const CARD_H_GUESS = 167; // calibration card, until it has been measured
 const ACT_PAD = 8;
 const ACT_BASE = ACT_PAD + 22;
 const ACT_CH = 11.2;
+const ACT_PEAK_MS = 400;
 const CONFIRM_MS = 1400;
 const CONFIRM_MS_STATIC = 800; // the warp snapshot can hold the thread; the e2e must still see the note
 
@@ -127,7 +128,16 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
   // The ACT IDX and MOON rows draw once VT323 has loaded; the warped snapshot waits until both have.
   const [actRowsDrawn, setActRowsDrawn] = useState(0);
   const onActRowReady = useCallback(() => setActRowsDrawn((n) => n + 1), []);
-  const actFontReady = actRowsDrawn >= 2;
+  const actFontReady = actRowsDrawn >= 3;
+  // ACT IDX prints at p4, the brightest line on the glass. Only its value peaks at p5 for 400 ms
+  // when the line first draws, then settles (A-12); a harness run is the settled state.
+  const [peakDone, setPeakDone] = useState(false);
+  useEffect(() => {
+    if (!actFontReady || isStatic) return;
+    const id = setTimeout(() => setPeakDone(true), ACT_PEAK_MS);
+    return () => clearTimeout(id);
+  }, [actFontReady, isStatic]);
+  const actPeak = actFontReady && !isStatic && !peakDone;
   const [warmDone, setWarmDone] = useState(isStatic);
   const transient = usePrimingTransient({ armed: warmDone, still: isStatic, peak: spike });
 
@@ -172,7 +182,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
         warp: WARP_BOOT,
         warmUp: true,
         onWarmUpDone: () => setWarmDone(true),
-        refreshKey: `${stage}-${typing ? 'typing' : 'typed'}-${answer ?? ''}-${transient.logged ? 'logged' : 'open'}-${actFontReady ? 'font' : 'nofont'}`,
+        refreshKey: `${stage}-${typing ? 'typing' : 'typed'}-${answer ?? ''}-${transient.logged ? 'logged' : 'open'}-${actFontReady ? 'font' : 'nofont'}-${actPeak ? 'peak' : 'rest'}`,
       }}
     >
       {({ w, h }) => {
@@ -180,8 +190,9 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
         const gridLeft = Math.round((w - div * GRID_COLS) / 2);
         const rows = bootRows({ h, div, calibrating, pinnedH: calibrating ? cardH : stickerH });
         const gridBottom = GRID_TOP + div * rows;
-        const activity = `${copy.actIdx} ${index}/5 · ${copy.moon} ${moonPct}%`;
-        const idxLen = `${copy.actIdx} ${index}/5`.length;
+        const activity = `${copy.actIdx} ${index}/5  ${copy.moon} ${moonPct}%`;
+        const valueX = ACT_PAD + (copy.actIdx.length + 1) * ACT_CH;
+        const moonX = valueX + (`${index}/5`.length + 2) * ACT_CH;
         return (
           <>
             <Graticule w={w} h={h} rows={rows} />
@@ -213,10 +224,11 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                   {activity}
                 </Text>
                 <SnapshotCanvas style={s.activityCanvas} pointerEvents="none">
-                  <PhosphorText text={`${copy.actIdx} ${index}/5`} x={ACT_PAD} y={ACT_BASE} size={28} step={5} static={isStatic} reduceMotion={reduceMotion} onReady={onActRowReady} />
+                  <PhosphorText text={copy.actIdx} x={ACT_PAD} y={ACT_BASE} size={28} step={4} bloom={false} static={isStatic} reduceMotion={reduceMotion} onReady={onActRowReady} />
+                  <PhosphorText text={`${index}/5`} x={valueX} y={ACT_BASE} size={28} step={actPeak ? 5 : 4} bloom={actPeak} static={isStatic} reduceMotion={reduceMotion} onReady={onActRowReady} />
                   <PhosphorText
-                    text={`· ${copy.moon} ${moonPct}%`}
-                    x={ACT_PAD + (idxLen + 1) * ACT_CH}
+                    text={`${copy.moon} ${moonPct}%`}
+                    x={moonX}
                     y={ACT_BASE}
                     size={28}
                     step={3}
@@ -243,7 +255,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
 
             {calibrating ? (
               <View
-                style={[s.calib, { bottom: CARD_BOTTOM }]}
+                style={[s.calib, { top: snap4(gridBottom + READOUT_GAP + READOUT_H_CALIB + CALIB_GAP) }]}
                 testID="calibration"
                 onLayout={(e: LayoutChangeEvent) => setCardH(Math.round(e.nativeEvent.layout.height))}
               >

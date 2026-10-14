@@ -158,7 +158,7 @@ const GeoArc = memo(function GeoArc() {
   }, []);
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Path path={geoPath} style="stroke" strokeWidth={2} color={color.p2} />
+      <Path path={geoPath} style="stroke" strokeWidth={3} color={color.p2} />
     </Canvas>
   );
 });

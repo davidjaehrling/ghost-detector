@@ -8,6 +8,10 @@ export const GRID_TOP = 24;
 
 export const BOOT_ROWS_MIN = 7;
 export const BOOT_ROWS_MAX = 14;
+/** The calibration stage: the question is the job, so the grid keeps 4 divisions and the card sits under the readout. */
+export const BOOT_ROWS_CALIB = 4;
+/** Gap between the calibration readout (ACT IDX, countdown) and the question block under it. */
+export const CALIB_GAP = 8;
 /** Readout block starts this far under the grid (timebase label sits in between). */
 export const READOUT_GAP = 28;
 /** Least gap between the readout block and what is pinned below it. */
@@ -23,8 +27,9 @@ export const STICKER_TILT = 9;
 export const CARD_BOTTOM = 12;
 
 export function bootRows({ h, div, calibrating, pinnedH }: { h: number; div: number; calibrating: boolean; pinnedH: number }): number {
-  const readout = calibrating ? READOUT_H_CALIB : READOUT_H_BOOT;
-  const pinned = pinnedH + (calibrating ? CARD_BOTTOM : STICKER_BOTTOM + STICKER_TILT);
+  if (calibrating) return BOOT_ROWS_CALIB;
+  const readout = READOUT_H_BOOT;
+  const pinned = pinnedH + STICKER_BOTTOM + STICKER_TILT;
   const rows = Math.floor((h - GRID_TOP - READOUT_GAP - readout - BLOCK_GAP - pinned) / div);
   return Math.max(BOOT_ROWS_MIN, Math.min(BOOT_ROWS_MAX, rows));
 }

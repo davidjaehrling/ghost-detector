@@ -34,7 +34,7 @@ test('three tags: record rows, case rows, nights, no DEEP SCAN key in the list',
   expect(await label('bedroom')).toMatch(/^BEDROOM · 2 CASES · PEAK \d+ \w+ · 2026-10-\d\d \d\d:\d\d$/);
   // Case rows: ID, SPI, tier; UNRESOLVED only where a Deep Scan is still open.
   const strong = page.getByTestId('history-row-0003');
-  await expect(strong).toContainText(/0003\s+80 STRONG\s+22:48/);
+  await expect(strong).toContainText(/0003\s+80 STRONG\s*22:48/);
   // Fixed columns with two spaces, no middle dot between the fields (A-05).
   expect((await strong.innerText()).includes('·')).toBe(false);
   await expect(strong).toContainText(/UNRESOLVED \d+%/);

@@ -94,14 +94,16 @@ test('boot calibration card renders', async ({ page }, testInfo) => {
   expect(pageErrors).toEqual([]);
 });
 
-test('the nameplate serial shortens under 380 px and the activity digit lights at 3', async ({ page }) => {
+test('the nameplate prints the full serial at every width and the activity digit lights at 3', async ({ page }) => {
   await page.goto('/?static=1&date=2026-10-13&time=22:48');
   await page.locator('[data-testid="boot-screen"]').waitFor();
-  const vw = page.viewportSize()!.width;
-  await expect(page.getByText(vw < 380 ? /^00417-9$/ : /^FS4-8711-00417-9$/).first()).toBeVisible();
-  // One serial rule: the full number is printed exactly once, on the plate (wide) or the sticker (narrow).
+  // A-07: the full serial fits the plate at 360 too (11 px, 0.4 tracking), and is printed once, on the plate.
+  const serial = page.getByText(/^FS4-8711-00417-9$/);
+  await expect(serial).toBeVisible();
   await expect(page.getByText(/FS4-8711-00417-9/)).toHaveCount(1);
+  expect(await serial.evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   await expect(page.getByTestId('activity')).toContainText('ACT IDX 3/5');
+  expect((await page.getByTestId('activity').innerText()).includes('·')).toBe(false);
   // The ACT IDX glyphs are drawn on the glass canvas (p5 with bloom); the node beside it keeps the reading.
   await expect(page.getByTestId('activity').locator('xpath=..').locator('canvas')).toHaveCount(1);
   await expect(page.getByTestId('countdown')).toHaveText('03:00 WINDOW IN 4 H 12 MIN');

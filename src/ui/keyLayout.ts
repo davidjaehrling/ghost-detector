@@ -30,3 +30,8 @@ export function legendFit(legend: string): { fontSize: number; letterSpacing: nu
   const fontSize = Math.max(9, Math.floor((LEGEND_INNER / longest - 0.2) / 0.65));
   return { fontSize, letterSpacing: 0.2 };
 }
+
+/** Banner slot bottom to the key band top. The caps start 38 px further down (32 px band, 6 px plate pad), so the slot is 62 dp clear of every key. */
+export const SLOT_GAP_BELOW = 24;
+/** Least distance from the banner slot to any key cap or list row, in dp. */
+export const SLOT_CLEAR_MIN = 32;

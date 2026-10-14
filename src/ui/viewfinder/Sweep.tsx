@@ -8,7 +8,7 @@ import { color } from '../tokens';
 import { SWEEP_STATIC_DEG, sweepPeriodMs, sweepStep } from './sweep';
 
 // The live radar sweep over the camera area (D-017): a wedge that turns about the reticle centre,
-// clipped to a scope ring, with a faint ring graticule. The wedge is the leading edge (p4 over a
+// clipped to a scope ring with 12 ticks. The wedge is the leading edge (p4 over a
 // 3 px n0 outline, so it holds on a bright scene) and a decaying sector behind it: about 28 degrees,
 // the arc the line covers in 450 ms (TAU.sweep) at the slow turn, fading exponentially.
 //
@@ -86,15 +86,17 @@ export function Sweep({
   );
 }
 
-// Faint ring graticule: the scope ring and a half-radius ring, plain views (no canvas).
+// The scope ring with 12 inward ticks at 30 degrees, 4 px long, in p2: plain views (no canvas).
+const TICK_DEGS = Array.from({ length: 12 }, (_, k) => k * 30);
 const Rings = memo(function Rings({ cx, cy, r }: { cx: number; cy: number; r: number }) {
-  const ring = (rr: number, c: string) => (
-    <View style={[s.abs, { left: cx - rr, top: cy - rr, width: 2 * rr, height: 2 * rr, borderRadius: rr, borderWidth: 1, borderColor: c }]} />
-  );
   return (
     <>
-      {ring(r, withAlpha(color.p2, 0.45))}
-      {ring(Math.round(r / 2), withAlpha(color.p1, 0.55))}
+      <View style={[s.abs, { left: cx - r, top: cy - r, width: 2 * r, height: 2 * r, borderRadius: r, borderWidth: 1, borderColor: withAlpha(color.p2, 0.45) }]} />
+      {TICK_DEGS.map((deg) => (
+        <View key={deg} style={[s.abs, { left: cx, top: cy, width: 0, height: 0, transform: [{ rotate: `${deg}deg` }] }]}>
+          <View style={{ position: 'absolute', left: -0.5, top: -r + 1, width: 1, height: 4, backgroundColor: color.p2 }} />
+        </View>
+      ))}
     </>
   );
 });

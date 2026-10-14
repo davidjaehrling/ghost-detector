@@ -122,24 +122,47 @@ test('the seeded walk moves the flux and redraws the needle on web', async ({ pa
   await expect.poll(() => angle('hud-sweep'), { timeout: 10_000 }).not.toBe(sweep0);
 });
 
-// Selected tag: p5 text with its own p4 rule under it (not the text's underline).
-test('the selected tag is p5 with a p4 rule under it', async ({ page }) => {
+// Selected tag (A-24): inverse video, n0 text on a p4 block. The others are p3 text with no block and no rule.
+test('the selected tag is inverse video: n0 on a p4 block', async ({ page }) => {
   await page.goto('/viewfinder?static=1&fixture=cellar');
-  await expect(page.getByTestId('tag-underline')).toHaveCount(1);
+  await expect(page.getByTestId('tag-block')).toHaveCount(1);
+  await expect(page.getByTestId('tag-underline')).toHaveCount(0);
   const on = page.getByTestId('tag-text-cellar');
-  expect(await on.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(212, 255, 220)');
+  expect(await on.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(10, 15, 11)');
   expect(await on.evaluate((e) => getComputedStyle(e).textDecorationLine)).toBe('none');
-  expect(await page.getByTestId('tag-underline').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(124, 232, 149)');
-  const rule = (await page.getByTestId('tag-underline').boundingBox())!;
+  expect(await page.getByTestId('tag-block').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(124, 232, 149)');
+  const block = (await page.getByTestId('tag-block').boundingBox())!;
   const text = (await on.boundingBox())!;
-  expect(rule.height).toBeLessThanOrEqual(1.5);
-  expect(rule.y).toBeGreaterThanOrEqual(text.y + text.height - 3);
-  expect(Math.abs(rule.width - text.width)).toBeLessThan(2);
+  expect(block.x).toBeLessThanOrEqual(text.x);
+  expect(block.x + block.width).toBeGreaterThanOrEqual(text.x + text.width);
+  expect(block.y).toBeLessThanOrEqual(text.y);
+  expect(block.y + block.height).toBeGreaterThanOrEqual(text.y + text.height);
   const off = page.getByTestId('tag-text-attic');
-  expect(await off.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(138, 139, 124)');
+  expect(await off.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(79, 180, 106)');
   await page.getByTestId('tag-attic').click();
-  await expect(page.getByTestId('tag-underline')).toHaveCount(1);
-  expect(await page.getByTestId('tag-text-attic').evaluate((e) => getComputedStyle(e).color)).toBe('rgb(212, 255, 220)');
+  await expect(page.getByTestId('tag-block')).toHaveCount(1);
+  expect(await page.getByTestId('tag-text-attic').evaluate((e) => getComputedStyle(e).color)).toBe('rgb(10, 15, 11)');
+  expect(await page.getByTestId('tag-text-cellar').evaluate((e) => getComputedStyle(e).color)).toBe('rgb(79, 180, 106)');
+});
+
+// A-23: the 03:00 window in the top strip, right-aligned beside IDX, minutes only, held while the screen is up.
+test('the 03:00 window countdown sits right-aligned in the top strip and does not tick', async ({ page }) => {
+  await page.goto('/viewfinder?static=1&fixture=cellar');
+  const win = page.getByTestId('hud-window');
+  await expect(win).toHaveText(/^03:00 IN \d+ H \d+ MIN$/);
+  expect(await win.innerText()).not.toMatch(/\d:\d\d:\d\d|\bS\b/);
+  const [w, top, idx] = await Promise.all([win.boundingBox(), page.getByTestId('hud-top').boundingBox(), page.getByTestId('hud-top').boundingBox()]);
+  const vw = page.viewportSize()!.width;
+  expect(w!.y).toBeLessThan(top!.y + 30);
+  expect(w!.x).toBeGreaterThan(idx!.x + idx!.width);
+  expect(w!.x + w!.width).toBeGreaterThan(vw / 2);
+  const first = await win.innerText();
+  await page.waitForTimeout(1300);
+  expect(await win.innerText()).toBe(first);
+  // Never on the result.
+  await page.goto('/result/demo?static=1&fixture=cellar&demo=active');
+  await expect(page.getByTestId('screen-result')).toBeVisible();
+  await expect(page.getByTestId('hud-window')).toHaveCount(0);
 });
 
 // ΔT is the live digit beside FLUX (in the flux block, not in the top corner).
@@ -153,7 +176,14 @@ test('the live ΔT sits with FLUX, frozen under static and moving live', async (
   const geo = (await page.getByTestId('hud-geo').boundingBox())!;
   const box = (await dt.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(flux.y + flux.height - 2);
-  expect(box.x).toBeGreaterThan(geo.x + geo.width);
+  const vw = page.viewportSize()!.width;
+  if (vw < 380) {
+    // A narrow window: ΔT takes its own line under GEO, with the spaces of the unit format intact (A-26).
+    expect(box.y).toBeGreaterThanOrEqual(geo.y + geo.height - 2);
+    await expect(dt).toHaveText(/^ΔT -?\d+\.\d °C$/);
+  } else {
+    expect(box.x).toBeGreaterThan(geo.x + geo.width);
+  }
   // Never under the gauge plate, at any width (360 px used to clip the C).
   const dial = (await page.getByTestId('hud-dial').boundingBox())!;
   expect(box.x + box.width).toBeLessThanOrEqual(dial.x + 1);

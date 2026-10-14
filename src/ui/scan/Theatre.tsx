@@ -25,6 +25,7 @@ const copy = copyOf({
   trig: 'hud.trig',
   timebase: 'hud.timebase',
   sens: 'hud.sens',
+  hold: 'scan.hold',
 });
 
 // The fault line is two sentences; a narrow glass sets one per row.
@@ -39,8 +40,9 @@ const RATE_BAR_BOTTOM = 12;
 const PINNED_BOTTOM = RATE_BAR_BOTTOM + RATE_MAX_H + 6;
 const LIVE_H = 44;
 const RATE_H = 24;
-const TELEMETRY_GAP = 12; // least gap between the telemetry and the pinned live row
-const GRID_ROWS_MAX = 12;
+const TELEMETRY_GAP = 12; // gap between the telemetry and the pinned live row when the grid is at its row count
+const TELEMETRY_GAP_MIN = 4; // the grid takes one more division when that still leaves this much
+const GRID_ROWS_MAX = 14;
 // Progress bar 24 px under the grid, telemetry 52 px under it (three log rows, then the status row).
 const TELEMETRY_TOP = 52;
 const FAULT_INDENT = 'E-07 '.length * CH_S;
@@ -59,10 +61,10 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   const narrow = gw < 304;
   // The graticule takes the height the telemetry and the pinned live row leave over, in whole
   // divisions (8 at the least, the Bible's grid); what is left below that is the gap between the
-  // telemetry and the live row, 12 px or a little more. Every state shares this layout.
+  // telemetry and the live row, 4 px at the least and under a division more than the 12 px target. Every state shares this layout.
   const telemetryH = 3 * 24 + (narrow ? 48 : 24);
   const below = TELEMETRY_TOP + telemetryH + TELEMETRY_GAP + LIVE_H + RATE_H + PINNED_BOTTOM;
-  const rows = Math.max(GRID_ROWS, Math.min(GRID_ROWS_MAX, Math.floor((h - GRID_TOP - below) / div)));
+  const rows = Math.max(GRID_ROWS, Math.min(GRID_ROWS_MAX, Math.floor((h - GRID_TOP - below + TELEMETRY_GAP - TELEMETRY_GAP_MIN) / div)));
   const gh = div * rows;
   const gridLeft = Math.round((w - gw) / 2);
   const gridBottom = GRID_TOP + gh;
@@ -70,8 +72,9 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
   const fault = frame.kind === 'fault';
   const phase: Phase = hold ? 4 : frame.phase;
   const live = hold || fault ? null : liveAt(seed, phase, frame.tick);
-  // The hold keeps the last thermal reading of phase 2, dimmed to p2, with a block blinking after it.
-  const held = hold ? heldThermal(seed, frame.t) : null;
+  // The hold and the fault beat keep the last thermal reading of phase 2 (the fault always lands in it),
+  // dimmed to p3 and tagged HOLD; the tag blinks in the hold only.
+  const held = hold ? heldThermal(seed, frame.t) : fault ? liveAt(seed, 2, Math.max(0, frame.tick - 1)) : null;
   const pct = Math.floor(frame.progress * 100);
   const blink = useBlink(still);
 
@@ -103,13 +106,10 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
         still={still}
       />
       <BlockBar lit={lit} left={barLeft} top={gridBottom + 24} width={gw - 48} hideLast={fault && !faultVisible} testID="scan-bar" label={t('scan.progressLabel', { pct })} />
-      {hold ? (
-        <View style={[s.holdBlock, { left: gridLeft + gw - 10, top: gridBottom + 26, opacity: blink ? 1 : 0 }]} testID="scan-percent" />
-      ) : (
-        <Text style={[s.pct, { left: gridLeft + gw - 44, top: gridBottom + 22, width: 44 }]} testID="scan-percent">
-          {`${String(pct).padStart(3, ' ')}%`}
-        </Text>
-      )}
+      {/* The percentage stays through the hold at 100%; the HOLD tag sits on the held ΔT row. */}
+      <Text style={[s.pct, { left: gridLeft + gw - 44, top: gridBottom + 22, width: 44 }]} testID="scan-percent">
+        {`${String(hold ? 100 : pct).padStart(3, ' ')}%`}
+      </Text>
       {/* Telemetry sits directly under the progress bar: no dead band between them. */}
       <View style={[s.block, { left: gridLeft, top: gridBottom + TELEMETRY_TOP, width: gw }]} testID="scan-readout">
         {[0, 1, 2].map((slot) => (
@@ -130,22 +130,13 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
       </View>
       <View style={[s.pinned, { left: gridLeft, width: gw, bottom: PINNED_BOTTOM }]}>
         <View style={s.live} testID="scan-live">
-          {live ? <Readout size="rdL" label={live.label} value={live.value} unit={live.unit} labelCh={4} valueCh={5} unitCh={5} /> : null}
+          {live ? <LiveRow label={live.label} value={live.value} unit={live.unit} /> : null}
           {held ? (
             <View style={s.heldRow} testID="scan-held">
-              <Readout
-                size="rdL"
-                label={held.label}
-                value={held.value}
-                unit={held.unit}
-                labelCh={4}
-                valueCh={5}
-                unitCh={2}
-                labelColor={color.p2}
-                valueColor={color.p2}
-                unitColor={color.p2}
-              />
-              <View style={[s.heldBlock, { opacity: blink ? 1 : 0 }]} testID="scan-held-block" />
+              <LiveRow label={held.label} value={held.value} unit={held.unit} tone={color.p3} />
+              <Text style={[s.heldTag, { opacity: fault || blink ? 1 : 0 }]} testID="scan-held-tag">
+                {copy.hold}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -175,14 +166,37 @@ export function TheatreGlass({ size, seed, frame, cap, still = false }: { size: 
 const StaticGraticule = memo(Graticule);
 const StaticGridLabels = memo(GridLabels);
 
+// The big live row: the label as wide as its own text, the value right-aligned in a 5-character field
+// straight after it, the unit at rdXS on the value's baseline. rdL advances 19.2 px a character, so for
+// ΔT the value starts 57 px from the label's left edge (it used to start about 100 px away).
+const LIVE_CH = 19.2;
+function LiveRow({ label, value, unit, tone }: { label: string; value: string; unit: string; tone?: string }) {
+  return (
+    <View style={s.liveRow}>
+      <Text style={[s.liveLabel, tone ? { color: tone } : null]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={[s.liveValue, tone ? { color: tone } : null]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[s.liveUnit, tone ? { color: tone } : null]} numberOfLines={1}>
+        {unit}
+      </Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   pct: { ...type.rdXS, position: 'absolute', color: color.p4, textAlign: 'right' },
   block: { position: 'absolute' },
   log: { ...type.rdS, color: color.p3, height: 24 },
   status: { ...type.rdS, height: 24 },
-  heldRow: { flexDirection: 'row', alignItems: 'center' },
-  heldBlock: { width: 12, height: 26, marginLeft: 6, backgroundColor: color.p3 },
-  holdBlock: { position: 'absolute', width: 10, height: 14, backgroundColor: color.p4 },
+  heldRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  heldTag: { ...type.rdS, height: 24, marginLeft: 12, marginBottom: 6, color: color.p3 },
+  liveRow: { flexDirection: 'row', alignItems: 'flex-end', height: 44 },
+  liveLabel: { ...type.rdL, height: 44, color: color.p3 },
+  liveValue: { ...type.rdL, width: 5 * LIVE_CH, height: 44, textAlign: 'right', color: color.p4 },
+  liveUnit: { ...type.rdXS, height: 20, marginLeft: 6, marginBottom: 6, color: color.p3 },
   pinned: { position: 'absolute' },
   live: { height: 44 },
   rate: { height: 24 },

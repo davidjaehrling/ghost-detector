@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { type RefObject, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { fault } from '../src/state/faults';
+import { windowCountdown } from '../src/ui/boot/activity';
 import { cadenceStore } from '../src/state/cadence';
 import { syncRelay } from '../src/state/notifyRuntime';
 import { relayDue, relayStore } from '../src/state/relay';
@@ -52,6 +53,7 @@ const copy = copyOf({
   hudLogLabel: 'viewfinder.hud.logLabel',
   hudCapture: 'viewfinder.hud.capture',
   hudCaptureLabel: 'viewfinder.hud.captureLabel',
+  windowOpen: 'viewfinder.window.open',
 });
 
 // Harness: a fixed capture time so the scan seed, and the result golden, repeat.
@@ -60,6 +62,7 @@ const STATIC_SEED = 417;
 const FIXTURE_SIZE = { w: 768, h: 1024 };
 const BAND = 0.3; // scrim band: lower 30% of the glass, never less than it needs
 const BAND_MIN = TAG_HIT + 36 + 96; // tag row, two lore rows, dial plate height
+const DT_LINE = 18; // a narrow window sets the thermal reading on its own line
 const RETICLE_TOP = 68; // keep in step with s.reticle.top
 const SCRIM = 'rgba(10, 15, 11, 0.64)';
 
@@ -84,6 +87,13 @@ function NativeViewfinder({ harness }: { harness: Harness }) {
 
 type Source = 'loading' | 'camera' | 'ask' | 'fixture' | 'denied';
 
+// `03:00 IN 4 H 12 MIN`, or `03:00 OPEN` inside the 03:00 hour; under an hour the hours part drops.
+function windowText(now: Date): string {
+  const c = windowCountdown(now);
+  if (c.open) return copy.windowOpen;
+  return c.hours > 0 ? t('viewfinder.window.inHours', { h: c.hours, m: c.minutes }) : t('viewfinder.window.inMinutes', { m: c.minutes });
+}
+
 function sourceFor(permission: PermissionResponse | null | undefined, web: boolean, webDenied = false): Source {
   if (web) return webDenied ? 'denied' : 'fixture';
   if (!permission) return 'loading';
@@ -106,7 +116,7 @@ function Viewfinder({
   const router = useRouter();
   const { width: windowW } = useWindowDimensions();
   const { isStatic } = harness;
-  // Under 380 px the dial plate leaves 126 px beside GEO: the thermal digit drops its spaces to fit.
+  // Under 380 px the dial plate leaves 126 px beside GEO: the thermal reading takes its own line.
   const narrow = windowW < 380;
   const fixture = harness.fixture ?? DEFAULT_FIXTURE;
   // Harness (web only): ?fault=camera-denied starts denied; ?fault=camera-revoked takes the
@@ -156,6 +166,14 @@ function Viewfinder({
   // One index per session (boot fixes it first). Under ?static=1 the clock is the boot screen's:
   // ?date=&time= when given, else the harness time, so a direct visit shows the same number.
   const { index } = sessionActivity(isStatic ? readBootParams().date : new Date());
+  // The 03:00 window in the top strip: read when the screen gains focus and held. No seconds and no
+  // timer, so nothing ticks while the screen is up (D-045). It is not shown on a result or an offer.
+  const [windowLine, setWindowLine] = useState(() => windowText(isStatic ? readBootParams().date : new Date()));
+  useFocusEffect(
+    useCallback(() => {
+      setWindowLine(windowText(isStatic ? readBootParams().date : new Date()));
+    }, [isStatic]),
+  );
 
   // Sound follows the screen: on while it is focused and in the foreground, off on a blur or when
   // the app goes to the background (useActive). The flux and its tier drive the clicks and the hum.
@@ -206,6 +224,13 @@ function Viewfinder({
     else void request?.();
   };
 
+  const deltaT = (
+    <Text style={[s.dt, narrow && s.dtNarrow]} testID="hud-dt" accessibilityLabel={formatThermal(dT)}>
+      <Text style={s.dtLabel}>{`${t('viewfinder.dtLabel')} `}</Text>
+      {`${fmtFixed(dT, 1, locale)} °C`}
+    </Text>
+  );
+
   const canCapture = source === 'camera' || source === 'fixture' || source === 'denied';
   const showAllow = source === 'ask' || source === 'denied';
   const state = source === 'denied' ? copy.hudStored : source === 'ask' || source === 'loading' ? copy.hudWait : copy.hudLive;
@@ -233,7 +258,7 @@ function Viewfinder({
       keys={keySlots}
     >
       {({ w, h }) => {
-        const bandH = Math.max(Math.round(h * BAND), BAND_MIN);
+        const bandH = Math.max(Math.round(h * BAND), BAND_MIN + (narrow ? DT_LINE : 0));
         return (
           <>
             {/* The feed seen through the tube: the phosphor ramp mixed over the colour, lifted blacks (FeedTint). */}
@@ -261,6 +286,9 @@ function Viewfinder({
             <View style={s.topLeft} pointerEvents="none" testID="hud-top">
               <Readout label={t('viewfinder.idx')} value={`${index}/5`} labelCh={3} valueCh={5} unitCh={0} {...HUD} />
             </View>
+            <Text style={s.topRight} pointerEvents="none" testID="hud-window" numberOfLines={1}>
+              {windowLine}
+            </Text>
 
             {source === 'ask' ? (
               <View style={[s.notice, { bottom: bandH }]} testID="permission-ask">
@@ -290,10 +318,12 @@ function Viewfinder({
                     style={s.tagHit}
                   >
                     <View>
+                      {/* Inverse video for the selected chip: a p4 block behind n0 text. The block overhangs
+                          the text box, so the row layout is the same either way. */}
+                      {tg === tag ? <View style={s.tagBlock} testID="tag-block" /> : null}
                       <Text style={[s.tag, { letterSpacing: tagTracking(windowW) }, tg === tag && s.tagOn]} testID={`tag-text-${tg}`}>
                         {tagLegend(tg, windowW)}
                       </Text>
-                      {tg === tag ? <View style={s.tagLine} testID="tag-underline" /> : null}
                     </View>
                   </Pressable>
                 ))}
@@ -314,11 +344,9 @@ function Viewfinder({
                   <Text style={s.geo} testID="hud-geo">
                     {formatGeo(sample.mg)}
                   </Text>
-                  <Text style={[s.dt, narrow && s.dtNarrow]} testID="hud-dt" accessibilityLabel={formatThermal(dT)}>
-                    <Text style={s.dtLabel}>{narrow ? t('viewfinder.dtLabel') : `${t('viewfinder.dtLabel')} `}</Text>
-                    {`${fmtFixed(dT, 1, locale)}${narrow ? '' : ' '}°C`}
-                  </Text>
+                  {narrow ? null : deltaT}
                 </View>
+                {narrow ? deltaT : null}
                 <Text style={s.state} testID="hud-state">
                   {state}
                 </Text>
@@ -374,6 +402,7 @@ const s = StyleSheet.create({
   dim: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(10, 15, 11, 0.22)' },
   topScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: 56, backgroundColor: SCRIM },
   topLeft: { position: 'absolute', left: 12, top: 4 },
+  topRight: { ...type.rdS, position: 'absolute', right: 12, top: 4, height: 24, color: color.p3 },
   reticle: { position: 'absolute', left: 12, right: 12, top: RETICLE_TOP },
   crossHo: { position: 'absolute', left: '50%', top: '50%', width: 17, height: 3, marginLeft: -8, marginTop: -1, backgroundColor: color.n0 },
   crossVo: { position: 'absolute', left: '50%', top: '50%', width: 3, height: 17, marginLeft: -1, marginTop: -8, backgroundColor: color.n0 },
@@ -383,10 +412,10 @@ const s = StyleSheet.create({
   band: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: color.n0 },
   tagRow: { position: 'absolute', left: TAG_ROW_PAD, right: TAG_ROW_PAD, top: 0, flexDirection: 'row', justifyContent: 'space-between' },
   tagHit: { minWidth: TAG_HIT, height: TAG_HIT, alignItems: 'center', justifyContent: 'center' },
-  tag: { ...type.lbXS, color: color.n5 },
-  // Selected: p5 text with a 1 px p4 rule under it (its own view, so the rule is not the text's colour).
-  tagOn: { color: color.p5 },
-  tagLine: { position: 'absolute', left: 0, right: 0, bottom: -2, height: 1, backgroundColor: color.p4 },
+  tag: { ...type.lbXS, color: color.p3 },
+  // Selected: n0 text on a p4 block.
+  tagOn: { color: color.n0 },
+  tagBlock: { position: 'absolute', left: -3, right: -3, top: -2, bottom: -2, backgroundColor: color.p4 },
   lore: { position: 'absolute', left: 12, right: 12, top: TAG_HIT },
   loreText: { ...type.rdXS, color: color.p4, height: 18 },
   fluxBlock: { position: 'absolute', left: 12, bottom: 8 },
@@ -397,7 +426,7 @@ const s = StyleSheet.create({
   geoRow: { flexDirection: 'row', alignItems: 'center' },
   geo: { ...type.rdXS, color: color.p3, height: 18 },
   dt: { ...type.rdXS, color: color.p4, height: 18, marginLeft: 12 },
-  dtNarrow: { marginLeft: 6 },
+  dtNarrow: { marginLeft: 0 },
   dtLabel: { color: color.p3 },
   state: { ...type.lbS, color: color.p3 },
   dialPlate: {

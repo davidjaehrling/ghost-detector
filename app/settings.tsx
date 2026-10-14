@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { showPrivacyOptions } from '../src/ads';
 import { notifyBackend } from '../src/state/notifyBackend';
 import { cycleIntensity, intensityWord } from '../src/state/intensity';
@@ -13,6 +13,8 @@ import { useConsent } from '../src/state/useConsent';
 import { useSettings } from '../src/state/useSettings';
 import { sound } from '../src/ui/audio';
 import { faultArmed } from '../src/state/faults';
+import { FIXED_SEED, dueFor, getInstallIdentity } from '../src/ui/boot/install';
+import { readHarness } from '../src/ui/harness';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 import { color, type } from '../src/ui/tokens';
 import type { LangSetting } from '../src/i18n';
@@ -35,6 +37,8 @@ const copy = copyOf({
   legal: 'settings.legal',
   open: 'settings.open',
   about: 'about.line',
+  model: 'sticker.model',
+  firmware: 'hud.firmware',
 });
 
 export default function Settings() {
@@ -46,6 +50,8 @@ export default function Settings() {
   const settings = useSettings();
   const consent = useConsent();
   const relay = useRelay();
+  // The unit's own plate data, the same numbers as the nameplate and the housing sticker.
+  const [unit] = useState(() => (readHarness().isStatic ? getInstallIdentity(new Date(2026, 9, 13, 12), FIXED_SEED) : getInstallIdentity()));
   const [calmNote, setCalmNote] = useState(false);
   const [intensity, setIntensityNow] = useState(getIntensity);
   // Nothing plays on this screen; a scene left running from the result ends here.
@@ -100,7 +106,7 @@ export default function Settings() {
       graticule={false}
       keys={[{ testID: 'key-forward', label: copy.nextLabel, legend: copy.next, onPress: () => router.back() }]}
     >
-      <View style={s.list} testID="settings-list">
+      <ScrollView style={s.list} contentContainerStyle={s.listContent} testID="settings-list" showsVerticalScrollIndicator={false}>
         {rows.map((r) => (
           <View key={r.id} style={s.rowWrap}>
             <Pressable
@@ -158,13 +164,24 @@ export default function Settings() {
             {calmLine()}
           </Text>
         ) : null}
-      </View>
+        {/* Below ABOUT, so the simulated line is never the part that scrolls out of view. */}
+        <View style={s.unit} testID="settings-unit">
+          <View style={s.unitRow}>
+            <Text style={s.unitText}>{copy.model}</Text>
+            <Text style={s.unitValue}>{unit.serial}</Text>
+          </View>
+          <Text style={s.unitText}>{copy.firmware}</Text>
+          <Text style={s.unitText}>{`CAL ${unit.cal}  DUE ${dueFor(unit.cal)}  PRÜF ${unit.pruef}`}</Text>
+        </View>
+      </ScrollView>
     </Placeholder>
   );
 }
 
 const s = StyleSheet.create({
-  list: { position: 'absolute', left: 12, right: 12, top: 12, backgroundColor: color.n0, paddingHorizontal: 4 },
+  // Above the screen code line along the bottom of the glass.
+  list: { position: 'absolute', left: 12, right: 12, top: 12, bottom: 48, backgroundColor: color.n0 },
+  listContent: { paddingHorizontal: 4 },
   rowWrap: { borderBottomWidth: 1, borderBottomColor: color.p1 },
   rowIn: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   row: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: color.p1 },
@@ -173,6 +190,10 @@ const s = StyleSheet.create({
   state: { ...type.rdM, color: color.p2 },
   stateOn: { color: color.p5 },
   about: { ...type.rdXS, color: color.p3, marginTop: 12 },
+  unit: { marginTop: 12, paddingTop: 8, borderTopWidth: 1, borderTopColor: color.p1 },
+  unitRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  unitText: { ...type.rdXS, color: color.p3 },
+  unitValue: { ...type.rdXS, color: color.p4 },
   note: { ...type.rdXS, color: color.p5, marginTop: 12 },
 });
 

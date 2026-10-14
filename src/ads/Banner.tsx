@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useConsent } from '../state/useConsent';
 import { banner } from './index';
-import { BANNER_GAP, anchoredAdaptiveHeight, bannerSlotHeight } from './bannerSize';
+import { color } from '../ui/tokens';
+import { anchoredAdaptiveHeight } from './bannerSize';
 
 // Native banner slot. The module is required only when a request is allowed, so nothing from the
 // SDK loads before consent. The wrapper has the same fixed height with or without an ad.
@@ -12,17 +13,20 @@ const sdk = (): Sdk => require('react-native-google-mobile-ads') as Sdk;
 
 export function AdBanner() {
   const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const consent = useConsent();
-  const slotH = bannerSlotHeight(width, insets.bottom, height);
+  const slotH = anchoredAdaptiveHeight(width, height);
+  // Empty: plain housing paint. Filled: a 1 px n4 boundary around the creative; the slot is never tinted.
+  const [filled, setFilled] = useState(false);
   const allowed = consent.canRequestAds && banner.enabled();
   const { BannerAd, BannerAdSize } = allowed ? sdk() : ({} as Partial<Sdk>);
   return (
-    <View testID="ad-banner-slot" style={[s.slot, { height: slotH, paddingBottom: insets.bottom }]}>
+    <View testID="ad-banner-slot" style={[s.slot, { height: slotH }, filled && s.filled]}>
       {allowed && BannerAd && BannerAdSize ? (
         <BannerAd
           unitId={banner.unitId}
           size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          onAdLoaded={() => setFilled(true)}
+          onAdFailedToLoad={() => setFilled(false)}
           onSizeChange={(size) => {
             if (__DEV__ && Math.round(size.height) !== anchoredAdaptiveHeight(width, height)) {
               console.warn(`banner: slot assumes ${anchoredAdaptiveHeight(width, height)} dp, the SDK reports ${size.height} dp`);
@@ -35,5 +39,6 @@ export function AdBanner() {
 }
 
 const s = StyleSheet.create({
-  slot: { width: '100%', marginTop: BANNER_GAP, alignItems: 'center', justifyContent: 'flex-start', overflow: 'hidden' },
+  slot: { width: '100%', alignItems: 'center', justifyContent: 'flex-start', overflow: 'hidden' },
+  filled: { borderWidth: 1, borderColor: color.n4 },
 });

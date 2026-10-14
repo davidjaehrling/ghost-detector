@@ -316,13 +316,20 @@ export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
   );
 }
 
-// Engraved dummy cap: same footprint as a live key and a blank seat, no legend. The engraving is
-// one shallow ring (a dark groove with a light lower edge), which reads as a pressed-in mark and
-// never as a dash or a dotted label.
+// Blank moulded cap: same footprint as a live key, no legend and no glyph. The only mark is a 1 px
+// recess ring inset from the edge, which reads as moulding and never as a dash, a dot or an icon.
+// It is not focusable, has no label and takes no press.
 export function DummyCap() {
   return (
-    <View testID="key-dummy" style={st.dummy} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={st.ringLip} />
+    <View
+      testID="key-dummy"
+      style={st.dummy}
+      pointerEvents="none"
+      focusable={false}
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       <View style={st.ring} />
     </View>
   );
@@ -510,6 +517,5 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ring: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n1 },
-  ringLip: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n4, opacity: 0.55, transform: [{ translateY: 1 }] },
+  ring: { position: 'absolute', left: 5, right: 5, top: 5, bottom: 5, borderRadius: 3, borderWidth: 1, borderColor: color.n1 },
 });
