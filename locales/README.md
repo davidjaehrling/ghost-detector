@@ -284,3 +284,12 @@ PT `result.hidden.behaviour` is `COMPORT.` (8 against `BEHAVIOUR` 9). The round 
 - `relay.body` merge (`18:00 to 22:00, no sound.`): de, es, pt read correctly. The simulated sentence is last and
   unchanged in all four. PT keeps third person (`O utilizador recebe`) as a D-038 consequence surface.
 - `git diff 2b260ab -- locales/` shows no other builder edit besides the three keys above.
+
+## No-break spaces (P8 polish)
+
+U+00A0 is now used in time ranges and before a closing word, in copy only. Cause: QA golden review at 390 and 360 showed `18:00 / bis 22:00` split across lines and a lone "12%." or "höher." on a last line.
+
+- `relay.settingsHelp`, `relay.body`: the whole range is bound (`18:00 bis 22:00`, `De 18:00 a 22:00`, `Das 18:00 às 22:00`, `18:00 to 22:00`). Width is unchanged, so the 360 row budget is unchanged.
+- `relay.body`: the last two words of the disclosure sentence are bound ("sind simuliert."). The sentence is otherwise unchanged.
+- `lore.cellar.1` (the viewfinder lore line holding "12%"): the last three words are bound (en/de/es) or "sobem 12%." (pt), so the figure never sits alone. The "höher." orphan was this key, not `relay.body`.
+- Do not strip NBSPs when editing. Use U+00A0 for any new time range.
