@@ -8,7 +8,7 @@ Live state. The plan is `docs/MASTER-PLAN.md`; this file is what is done, what i
 P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensory layer as PR #4, P5 as PR #5, P6 as PR #6, P7 as PR #7 (2026-10-14). Web preview: GitHub Pages workflow on main (owner enables Pages once). Carried forward: P0-06, P0-09 (expo.dev allowlist, EXPO_TOKEN); P3-07 believability (4.8 to 6 on synthetic fixtures, resumes in P8 on real photographs); P3-08 screen leftovers (D-022, D-023).
 
 ## Last thing done
-- P8 contract P8-01 to P8-08 written (D-044); wave 1 launching.
+- P8 waves 1 and 2 landed on `claude/p8-polish` (PR #8, draft): Impeccable audit with 65 findings (D-045 panel ruling), Maestro three-profile workflow (P8-06, owner-blocked for the live run), fault injection with the FAULT screen (P8-05), perf guards and the main-thread pass (P8-03, D-046), engine notification fixes incl. the weekly-cap bug (Builder B), DEEP SCAN as a hardware key with a two-step arm, share format keys, one chassis, history banner slot, relay offer as printed text, card tint, LED plate, sticker text and hem fade, therm scale in °C, Copy and Compliance reviews (no veto, D-048), panel round 1 (D-049: cards 8.75+, most screens 7.3 to 7.8), round 2 fixes, the accessibility wave (P8-04: roles and labels, 44 dp, reduce-motion, font scale 1.3, contrast, axe). Running: QA final golden regeneration; then the round 2 re-score, the Refuter re-check (D-050 list), flips and merge.
 - P7 verified and merged as PR #7 (68a5261): i18n layer, engine resources, DE/ES/PT written per culture and reviewed twice, localised card and notifications, layout goldens in four languages plus de at 360, Compliance PASS (D-041), Refuter sweep and two re-checks (D-041 to D-043). P7-01..08 flipped. P8 contract next.
 - P6 merged as PR #6 (8df1e12) with the GitHub Pages web-preview workflow. P7 contract P7-01 to P7-08 written (D-037); wave 1 launching.
 - P6 verified: panel rounds (D-034, D-035; five of six surfaces at 8+), Compliance diff review (FCM veto fixed by a config plugin, lifted pending device check), Refuter sweep and re-check (D-035, D-036). P6-01..08 flipped; P6-05 device clauses owner-blocked. Merge PR #6 on CI green after the test hardening commit.
@@ -32,7 +32,7 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 - Skills installed at project scope (Expo plugin, frontend-design, Impeccable via its GitHub marketplace); agent roster with pinned models; state files.
 
 ## Next 3 things
-1. P8 contract (D-044): Impeccable audit and polish sweep, performance, accessibility, crash-free flows, three Maestro device profiles, the D-022/D-029/D-034/D-035 leftovers; believability loop waits on real photographs.
+1. P8 close: QA goldens, panel round 2 re-score (exit at 8 on every screen, no dimension under 7), Refuter re-check, flips, squash-merge PR #8; then phone check 3 list for David (FCM inert before consent, print time, test ad units, notification delivery, three Maestro profiles once EXPO_TOKEN exists).
 2. P9 launch prep: per-language legal URLs, DE Impressum and policy, ES/PT policies, localised listings, `[STORE NAME]` after Gate 1.
 3. Owner items unchanged: Gate 1 picks, expo.dev allowlist, EXPO_TOKEN, Play Console, AdMob, Firebase; plus 5 to 8 real dark-room photos for `e2e/fixtures/real/` (D-023).
 
@@ -55,4 +55,4 @@ P0 merged as PR #1, P1 as PR #2, P2 as PR #3 (2026-10-13), P3 with the P4 sensor
 | P5 | ~2.3M | Subagents: compliance 76k+147k+151k, cadence 76k, Builder A 140k+286k+79k+85k+84k, release 60k, QA diagnosis 126k + fix 102k, FX 84k, Refuter 148k+69k, Hollow P6 brief 106k; Director context ~0.15M |
 | P6 | ~3.6M | Subagents: Hollow brief 110k, Compliance 84k+149k+155k, FX 248k+165k, Builder B 106k+79k+71k, Builder A 186k+214k+171k+200k+143k+162k, panel 220k+265k, Refuter 137k+83k, Release 68k+72k, FX wasm fix 60k, Refuter re-check 83k, Builder B tests 65k; Director context ~0.25M |
 | P7 | ~3.0M | Subagents: Compliance pre-ruling and diff review ~90k+91k, Builder A i18n ~1.0M over six resumes, Builder B resources and locale tests ~150k, Copy 198k, review rounds 330k, QA goldens ~200k, Refuter 132k+83k+62k; Director context ~0.3M |
-| P8 | (running) | |
+| P8 | (running, ~9M so far) | Subagents: audit 176k, panel 97k+137k+119k+137k, Compliance 86k+149k, Builder A ~2.6M over ten runs, Builder B 104k+65k, FX ~1.2M over six runs, Copy 173k+70k+60k, Release 122k, QA 194k+ (final pass running), Refuter 139k; Director context ~0.4M |
