@@ -17,6 +17,31 @@ export const DIP_MS = 400;
 
 export type TearBand = { y: number; h: number; dx: number };
 
+/** The scope's time source: everything in it that moves with the scan clock. */
+export type ScopeFrame = {
+  tick: number;
+  /** Sweep position in turns (frameAt's `sweep`). */
+  sweep: number;
+  activeFrac: number;
+  /** ms into the fault beat, or -1. */
+  faultT: number;
+};
+
+/**
+ * The held frame for the next render. Under `still` (frozen harness frame, OS reduced motion) the
+ * first frame seen is held and returned for as long as `still` lasts, whatever the clock does: the
+ * caller may keep stepping tick or activeFrac (the reduced-motion readouts step every 5 s and the
+ * amplitude every 1 s), and the trace, sweep and fault beat must not follow. Not still: null.
+ */
+export function holdScopeFrame(held: ScopeFrame | null, frame: ScopeFrame, still: boolean): ScopeFrame | null {
+  return still ? (held ?? frame) : null;
+}
+
+/** The frame the scope draws: the held one under `still`, else the live one unchanged. */
+export function scopeTime(frame: ScopeFrame, held: ScopeFrame | null, still: boolean): ScopeFrame {
+  return still ? (held ?? frame) : frame;
+}
+
 export function sweepTail(gw: number): number {
   return Math.max(16, Math.round(gw * SWEEP_TAIL));
 }

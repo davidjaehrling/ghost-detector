@@ -1,12 +1,12 @@
 import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia';
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { mulberry32 } from '../../engine';
 import { color } from '../../ui/tokens';
 import { withAlpha } from '../glass/color';
 import { sweepStripStops } from './bloom';
-import { faultDip, faultTear, sweepTail, TRACE_SEG, type TearBand } from './scope';
+import { faultDip, faultTear, holdScopeFrame, scopeTime, sweepTail, TRACE_SEG, type ScopeFrame, type TearBand } from './scope';
 
 // The scan theatre's scope (D-017, P3-09): the noise trace, its phosphor afterglow, and the sweep
 // with a continuous exponential tail, plus the fault beat (a torn frame and a brightness dip).
@@ -16,14 +16,7 @@ import { faultDip, faultTear, sweepTail, TRACE_SEG, type TearBand } from './scop
 // shared value: the 20 Hz scan clock sets the next position and a 50 ms linear timing fills the
 // frames between, so the line glides at 60 fps with no React render and no canvas redraw.
 
-export type ScopeFrame = {
-  tick: number;
-  /** Sweep position in turns (frameAt's `sweep`). */
-  sweep: number;
-  activeFrac: number;
-  /** ms into the fault beat, or -1. */
-  faultT: number;
-};
+export type { ScopeFrame };
 
 export interface ScopeLayerProps {
   seed: number;
@@ -39,7 +32,7 @@ export interface ScopeLayerProps {
   flat: boolean;
   /** Hold: trace and sweep stay where they stopped, at p2. */
   dim: boolean;
-  /** Frozen harness frame: no animation. */
+  /** Frozen harness frame or OS reduced motion: the first frame is held, no animation. */
   still: boolean;
   /** Clock period of the caller in ms (the sweep glides over it). */
   clockMs?: number;
@@ -62,7 +55,13 @@ function tracePoints(seed: number, tick: number, activeFrac: number, gw: number,
   });
 }
 
-export function ScopeLayer({ seed, frame, left, top, gw, gh, div, flat, dim, still, clockMs = CLOCK_MS }: ScopeLayerProps) {
+export function ScopeLayer({ seed, frame: live, left, top, gw, gh, div, flat, dim, still, clockMs = CLOCK_MS }: ScopeLayerProps) {
+  // Under `still` the first frame is held whatever the caller's clock does (P8-04: the reduced-motion
+  // route still steps tick and activeFrac); not still, the live frame passes through unchanged.
+  const [held, setHeld] = useState<ScopeFrame | null>(() => holdScopeFrame(null, live, still));
+  const nextHeld = holdScopeFrame(held, live, still);
+  if (nextHeld !== held) setHeld(nextHeld);
+  const frame = scopeTime(live, nextHeld, still);
   const x = Math.floor((frame.sweep % 1) * gw);
   const pos = useSharedValue(x);
   const fade = useSharedValue(1);

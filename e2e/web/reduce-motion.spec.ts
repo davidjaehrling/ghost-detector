@@ -141,6 +141,36 @@ for (const surface of SURFACES) {
   });
 }
 
+// The scope trace (src/fx/scope): under the flag the route passes `still`, and the trace area must not change
+// at all (byte-identical PNGs one second apart); the control without the flag keeps moving.
+test('scan trace: identical under reduced motion, alive without it', async ({ page }, info) => {
+  test.skip(info.project.name !== 'android-390x844', 'measured at 390');
+  test.setTimeout(90_000);
+  const open = async () => {
+    await page.goto('/scan?fixture=cellar&seed=41&speed=1');
+    await expect(page.getByTestId('scan-scope')).toBeVisible();
+    await page.waitForTimeout(1500);
+  };
+  const shots = async () => {
+    const clip = await boxOf(['scan-scope'])(page);
+    const first = await page.screenshot({ clip });
+    await page.waitForTimeout(1000);
+    return [first, await page.screenshot({ clip })] as const;
+  };
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await open();
+  const [a, b] = await shots();
+  const reduced = await diffPixels(page, a, b);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.reload();
+  await open();
+  const [c, d] = await shots();
+  const live = await diffPixels(page, c, d);
+  console.log(`[reduce-motion] scan trace: reduced ${reduced} px (bytes equal ${a.equals(b)}), no-preference ${live} px`);
+  expect(a.equals(b)).toBe(true);
+  expect(live).toBeGreaterThan(NOISE_PX);
+});
+
 // Under the flag the screens still work: RESET remounts the route, and the DEEP SCAN arm prints on the first press.
 test('reduced motion: the fault screen RESET remounts the route', async ({ page }, info) => {
   test.skip(info.project.name !== 'android-390x844', 'functional check at 390');
