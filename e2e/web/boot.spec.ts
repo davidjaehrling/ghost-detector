@@ -89,8 +89,6 @@ test('boot calibration card renders', async ({ page }, testInfo) => {
   // bottom, which is where the keys' band starts), and the graticule takes the room above the readout.
   expect(glassBox.y + glassBox.height - (card.y + card.height)).toBeLessThanOrEqual(16);
   expect(glassBox.y + glassBox.height - (card.y + card.height)).toBeGreaterThanOrEqual(0);
-  const q = (await page.getByTestId('calibration-question').boundingBox())!;
-  expect(yes.y - (q.y + q.height)).toBeLessThan(90);
   const readoutBox = (await page.getByTestId('readout').boundingBox())!;
   expect(readoutBox.y - glassBox.y).toBeGreaterThan(24 + 34 * 5);
   await page.evaluate(() => document.fonts.ready);

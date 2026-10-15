@@ -264,6 +264,26 @@ for (const { lang, project, suffix } of CASES) {
       });
     }
 
+    // A-52: the profile head clears the rule above it by at least 4 px; A-53: the housing sticker's text is
+    // never clipped (every printed row whole inside the paper, and the paper inside the screen).
+    test('profile head clears its rule and the sticker is not clipped', async ({ page }) => {
+      const done = watch(page);
+      await page.goto(`/result/demo?static=1&fixture=cellar&demo=strong&deepscan=unlocked&lang=${lang}`);
+      await expect(page.getByTestId('screen-result')).toBeVisible();
+      await settleResult(page);
+      const prof = (await page.getByTestId('result-profile').boundingBox())!;
+      const head = (await page.getByTestId('result-profile').locator('div[dir="auto"]').first().boundingBox())!;
+      expect(head.y - (prof.y + 1), 'head to rule').toBeGreaterThanOrEqual(4);
+      const mini = page.getByTestId('sticker-mini');
+      const cut = await mini.locator('div[dir="auto"]').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).length);
+      expect(cut, 'sticker rows clipped').toBe(0);
+      const m = (await mini.boundingBox())!;
+      const vw = page.viewportSize()!.width;
+      expect(m.x).toBeGreaterThanOrEqual(0);
+      expect(m.x + m.width).toBeLessThanOrEqual(vw - 40);
+      done();
+    });
+
     // The share format choice prints its keys in the locale (A-49, A-50); goldens at 390 only.
     test('result-share-format', async ({ page }, testInfo) => {
       test.skip(suffix !== '', 'share format goldens at 390 only');
