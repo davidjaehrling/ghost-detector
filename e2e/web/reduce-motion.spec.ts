@@ -45,13 +45,21 @@ async function diffPixels(page: Page, a: Buffer, b: Buffer): Promise<number> {
 type Clip = { x: number; y: number; width: number; height: number };
 
 async function movement(page: Page, clip?: (p: Page) => Promise<Clip>, attempts = 1): Promise<number> {
-  let best = Infinity;
-  for (let i = 0; i < attempts && best > NOISE_PX; i++) {
+  // All pairs are captured back to back and only then diffed: decoding a pair on a loaded host takes seconds
+  // of wall time, and a scan that is still running walks into its HOLD phase (a blinking tag) while the
+  // retries are being measured. Back to back, a 5 s step lands in at most one pair and the best pair wins.
+  const pairs: [Buffer, Buffer][] = [];
+  for (let i = 0; i < attempts; i++) {
     const c = clip ? await clip(page) : undefined;
     const first = await page.screenshot({ clip: c });
     await page.waitForTimeout(1000);
     const second = await page.screenshot({ clip: c });
-    best = Math.min(best, await diffPixels(page, first, second));
+    pairs.push([first, second]);
+  }
+  let best = Infinity;
+  for (const [a, b] of pairs) {
+    best = Math.min(best, await diffPixels(page, a, b));
+    if (best <= NOISE_PX) break;
   }
   return best;
 }
