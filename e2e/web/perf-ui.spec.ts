@@ -23,7 +23,7 @@ const BUNDLE_BASELINE_BYTES = 2_986_773;
 const BUNDLE_BYTES_MAX = Math.round(1.1 * BUNDLE_BASELINE_BYTES);
 
 test.beforeEach(({ page: _page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'android-390x844', 'budgets measured at 390 only');
+  test.skip(testInfo.project.name !== 'perf-ui-390x844', 'budgets measured at 390, alone on the machine (project perf-ui-390x844)');
 });
 
 async function throttle(page: Page, rate: number) {
@@ -33,12 +33,12 @@ async function throttle(page: Page, rate: number) {
 }
 
 test(`cold boot to an enabled CAPTURE key within 1.2x its baseline (${BOOT_MS_MAX} ms) at CPU x${BOOT_RATE}`, async ({ browser, page: first }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(150_000);
   // The guard is a floor on the app's cost, not on the host's load: two workers share the CPU, so a run can
-  // land slow (2854 and 3043 ms under load, 2231 to 2449 ms alone, same bytes). Up to five cold loads, each in
+  // land slow (2854 and 3043 ms under load, 2231 to 2449 ms alone, same bytes). Up to three cold loads, each in
   // a fresh context; the best one is held to the budget. A real regression raises every load.
   const bests: { boot: number; total: number }[] = [];
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     const ctx = attempt === 0 ? null : await browser.newContext({ viewport: first.viewportSize()!, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
     const page = ctx ? await ctx.newPage() : first;
     try {
