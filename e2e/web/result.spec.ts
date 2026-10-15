@@ -1,3 +1,4 @@
+import { waitPixelsStable } from './stable';
 import { expect, test, type Page } from '@playwright/test';
 import { waitWarped } from './warped';
 
@@ -182,6 +183,7 @@ test('result-therm-critical: the thermal view', async ({ page }, testInfo) => {
   await expect(page.getByTestId('key-therm')).toHaveText('PHOTO');
   await page.evaluate(() => document.fonts.ready);
   await frames(page);
+  await waitPixelsStable(page.getByTestId('thermal-view')); // Skia caption and labels land after the shader
   await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/result-therm-critical.png` });
   // The thermal panel is a Skia shader; the runner's software renderer differs from the
   // container by about 2% of the panel, so this golden uses the Skia tolerance (400 px for

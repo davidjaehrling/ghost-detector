@@ -1,3 +1,4 @@
+import { waitPixelsStable } from './stable';
 import { expect, test } from '@playwright/test';
 
 // P3-05: thermal view in the result screen's 318 x 303 photo panel, PH-WHT palette, cold spot
@@ -19,8 +20,8 @@ for (const fixture of ['cellar', 'bright'] as const) {
     // The readout is Skia text inside the canvas; its string is mirrored in the view's label.
     await expect(page.getByRole('img', { name: /SP1 ΔT -9\.0 °C/ })).toBeVisible();
     // Fonts load asynchronously into Skia; give the canvas a couple of frames after that.
-    await page.waitForTimeout(300);
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await waitPixelsStable(view);
     await expect(view).toHaveScreenshot(`thermal-${fixture}.png`, { maxDiffPixels: 400 });
 
     expect(consoleErrors).toEqual([]);
