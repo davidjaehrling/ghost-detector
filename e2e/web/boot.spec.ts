@@ -34,6 +34,23 @@ test('boot screen renders', async ({ page }, testInfo) => {
   expect(pageErrors).toEqual([]);
 });
 
+// D-049: the harness spike moment. ?spike=1 (with static) freezes the priming transient at its peak and the
+// launch seed, so the boot golden shows the spike on the trace and one reading line, the same at every run.
+test('boot priming transient at its peak', async ({ page }, testInfo) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(String(err)));
+  await page.goto('/?static=1&date=2026-10-13&time=22:48&spike=1');
+  await page.locator('[data-testid="boot-screen"]').waitFor();
+  await expect(page.getByTestId('boot-transient')).toBeVisible();
+  await expect(page.getByTestId('boot-transient')).toHaveAttribute('aria-valuetext', /100/);
+  await expect(page.getByTestId('transient')).toHaveText(/^TRANSIENT [01] · LOGGED$|^TRANSIENT 0/);
+  await page.evaluate(() => document.fonts.ready);
+  await waitWarped(page);
+  await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/boot-spike.png` });
+  if (testInfo.project.name === 'android-390x844') await expect(page).toHaveScreenshot('boot-spike.png', { maxDiffPixels: 150 });
+  expect(pageErrors).toEqual([]);
+});
+
 // ?calib=1 opens on the belief-calibration card. Keys are YES / NOT SURE / NO / SKIP.
 test('boot calibration card renders', async ({ page }, testInfo) => {
   const consoleErrors: string[] = [];
