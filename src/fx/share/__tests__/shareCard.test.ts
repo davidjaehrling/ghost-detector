@@ -318,7 +318,7 @@ describe('card contents', () => {
           : tr('share.card.decoded', { pct: rec.profile.signatureDecodedPct });
       expect(t.reading.line).toBe(want);
       // Every drawn run is a piece of the card's own strings (lines break only at ` · `).
-      const pieces = new Set([t.nameplate, t.strip.mark, t.reading.spi + ' ', t.reading.tier, t.reading.line, ...(t.reading.detail ? [t.reading.detail] : []), t.footer, ...t.footer.split(' · ')]);
+      const pieces = new Set([t.nameplate, R.CARD_IDENTITY.serial, t.strip.mark, t.reading.spi + ' ', t.reading.tier, t.reading.line, ...(t.reading.detail ? [t.reading.detail] : []), t.footer, ...t.footer.split(' · ')]);
       const words = new Set(t.footer.split(/ · | /));
       for (const run of c.texts) expect(pieces.has(run) || t.strip.lines.includes(run) || run.split(' ').every((w) => words.has(w))).toBe(true);
       expect(c.texts.at(-1)!.endsWith(MARK_TABLE[lang].footer)).toBe(true);
@@ -326,11 +326,36 @@ describe('card contents', () => {
     }
   }, 60000);
 
+  it("prints the install's serial on the nameplate, as the screen's nameplate does", async () => {
+    const { identityFromSeed, FIXED_SEED } = await import('../../../ui/boot/install');
+    // The harness identity is the fixed-seed install the app shows (FS4-8711-00417-9).
+    expect(R.CARD_IDENTITY.serial).toBe(identityFromSeed(FIXED_SEED, new Date(2026, 9, 13)).serial);
+    expect(R.CARD_IDENTITY.serial).toBe('FS4-8711-00417-9');
+    for (const format of ['story', 'square'] as const) {
+      const c = card('cellar', 'critical', format);
+      expect(c.texts.slice(0, 2)).toEqual(['VELDEN  FS-4/87-P', 'FS4-8711-00417-9']);
+      // Ink in the plate's right third: the serial is drawn there (a bare plate is flat n5 with a 6 px scuff).
+      const b = c.layout.plate;
+      const px = pixels(c.image, { x: Math.round(b.x + b.w * 0.62), y: Math.round(b.y + b.h * 0.3), w: Math.round(b.w * 0.3), h: Math.round(b.h * 0.4) });
+      let dark = 0;
+      for (let i = 0; i < px.length; i += 4) if (px[i]! < 90) dark++;
+      expect(dark, format).toBeGreaterThan(400);
+    }
+    // Another install's identity reaches the plate.
+    const photo = Skia.Image.MakeImageFromEncoded(Skia.Data.fromBytes(readBytes('e2e/fixtures/cellar.png')));
+    const record = demo.demoRecord('active', 'fixture', demo.DEMO_CASES.active);
+    const other = R.drawShareCard({ record, format: 'story', photo, stats: null, fonts, identity: { serial: 'FS4-8802-01234-5', cal: '2026-01-02', pruef: '03' } });
+    photo.dispose();
+    made.push(other.image);
+    expect(other.texts[1]).toBe('FS4-8802-01234-5');
+  }, 60000);
+
   it('draws only the brief strings: no key, QR, arrow, link or claim word', () => {
     const c = card('cellar', 'critical', 'square', true);
     expect(c.fileName).toBe('field-card-0004-simulated.png');
     expect(c.texts).toEqual([
       'VELDEN  FS-4/87-P',
+      'FS4-8711-00417-9',
       expect.stringMatching(/^\d\d:\d\d  \d{4}-\d\d-\d\d$/),
       expect.stringMatching(/^CASE 0004  ΔT -?\d+\.\d °C$/),
       'SIMULATED',
@@ -345,6 +370,7 @@ describe('card contents', () => {
     const plain = card('cellar', 'active', 'story');
     expect(plain.texts).toEqual([
       'VELDEN  FS-4/87-P',
+      'FS4-8711-00417-9',
       expect.stringMatching(/^\d\d:\d\d  \d{4}-\d\d-\d\d$/),
       expect.stringMatching(/^CASE 0007  ΔT -?\d+\.\d °C$/),
       'SIMULATED',
@@ -355,7 +381,7 @@ describe('card contents', () => {
       'READINGS ARE SIMULATED',
     ]);
     expect(plain.marks[0]!.x).toBe(plain.strip.x + Math.round(plain.layout.photo.w * 0.02));
-    expect(card('black', 'quiet', 'story').texts[6]).toBe('NO SIGNATURE');
+    expect(card('black', 'quiet', 'story').texts[7]).toBe('NO SIGNATURE');
     for (const t of [...c.texts, ...plain.texts]) expect(t).not.toMatch(/SPI/);
     const banned = /\b(detected|proof|verified|confirmed|unconfirmed|accurate|real|deep scan|sponsored|download|install|qr|http|www)\b|[←→↑↓⇦⇨➔▶◀★☆]/i;
     for (const t of [...c.texts, ...plain.texts]) expect(t).not.toMatch(banned);

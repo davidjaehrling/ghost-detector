@@ -3,7 +3,7 @@
 /** Store name, filled at Gate 1. The only place the store name appears on the card (footer). */
 export const STORE_NAME = '[STORE NAME]';
 
-/** The housing's nameplate text (docs/instrument-bible.md section 2). No serial on the card. */
+/** The housing's nameplate maker text (docs/instrument-bible.md section 2); the install's serial sits right of it, as on screen. */
 export const NAMEPLATE = 'VELDEN  FS-4/87-P';
 
 // The SIMULATED mark (Compliance launch blocker, D-026, D-032) and the footer sentence are

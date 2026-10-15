@@ -7,7 +7,7 @@ import { getInstallIdentity } from '../../ui/boot/install';
 import { regionFromImage } from '../compositor/regionFromImage';
 import type { CardFormat } from './constants';
 import { encodeCard } from './encode';
-import { drawShareCard, encodePng, type CardFonts, type CardRender } from './render';
+import { drawShareCard, encodePng, type CardFonts, type CardIdentity, type CardRender } from './render';
 import { saveCard } from './save';
 
 export { STORE_NAME, NAMEPLATE, LAYOUTS, cardFileName, MARK_CAP_FRAC, type CardFormat } from './constants';
@@ -48,7 +48,7 @@ export interface ShareCardOptions {
   /** Locale override (the L2 probe's `?lang=`); default the locale in force. */
   locale?: Lang;
   /** The calibration stamp the card's sticker prints (A-92); default this install's, as the housing shows it. */
-  identity?: { cal: string; pruef: string };
+  identity?: CardIdentity;
   /** 'skia' forces CanvasKit's PNG encoder on web too (the L2 probe's `?encoder=skia`, to compare pixels). */
   encoder?: 'skia';
 }

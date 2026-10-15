@@ -45,6 +45,13 @@ export interface CardFonts {
   b612Bold: SkTypeface;
 }
 
+/** The install identity the card prints: serial on the nameplate, CAL and PRÜF on the sticker. */
+export interface CardIdentity {
+  serial: string;
+  cal: string;
+  pruef: string;
+}
+
 export interface CardInput {
   record: ScanRecord;
   format: CardFormat;
@@ -58,8 +65,8 @@ export interface CardInput {
   store?: string;
   /** Locale override for the card's strings (probe and tests); default the locale in force. */
   locale?: Lang;
-  /** The install's calibration stamp the housing sticker prints (A-92); default the harness unit's (`CAL 2026-10-13`, `PRÜF 07`). */
-  identity?: { cal: string; pruef: string };
+  /** The install's serial (nameplate) and calibration stamp (housing sticker, A-92); default the harness unit's (`CARD_IDENTITY`). */
+  identity?: CardIdentity;
   /** Test switches: `tint: false` draws the photo's own colour, `ghost: false` the photo without the figure (same layout). */
   fx?: { tint?: boolean; ghost?: boolean };
 }
@@ -286,8 +293,8 @@ function drawScrew(canvas: SkCanvas, cx: number, cy: number, rad: number, angle:
   canvas.restore();
 }
 
-/** The harness unit's calibration stamp (Bible section 11), the card's default. */
-export const CARD_IDENTITY = { cal: '2026-10-13', pruef: '07' } as const;
+/** The harness unit's identity (Bible section 11, `identityFromSeed` at the fixed seed), the card's default. */
+export const CARD_IDENTITY: Readonly<CardIdentity> = { serial: 'FS4-8711-00417-9', cal: '2026-10-13', pruef: '07' };
 /** Sticker turn (Bible section 2) and its paper padding as shares of the cap height. */
 const STICKER_DEG = -1.5;
 const STICKER_PAD = { x: 0.45, y: 0.4 } as const;
@@ -454,7 +461,8 @@ function drawEngraving(canvas: SkCanvas, L: CardLayout, footer: FooterGeom, font
   return { ...box, lines, fontSize: size };
 }
 
-function drawNameplate(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, label: string, seed: number) {
+/** Nameplate: maker left, the install's full serial right (the screen's Nameplate, src/ui/screens/Nameplate.tsx). Returns the runs drawn. */
+function drawNameplate(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, label: string, serial: string, seed: number): string[] {
   const b = L.plate;
   const k = L.width / 390;
   canvas.drawRect(Skia.XYWHRect(b.x + 2, b.y + 3, b.w, b.h), paintOf(color.n1, 0.6));
@@ -478,15 +486,19 @@ function drawNameplate(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, label:
       canvas.drawCircle(cx - 1.5, cy + dy - 1.5, 0.7 * k, paintOf(color.n6, 0.7));
     }
   }
-  // A 6 px scuff on the plate (Bible section 2), seeded.
-  const r = mulberry32((seed ^ 0x5c0f) >>> 0);
-  canvas.drawRect(Skia.XYWHRect(b.x + b.w * (0.55 + r() * 0.3), cy + (r() - 0.5) * b.h * 0.5, 6 * k, 1.2 * k), paintOf(color.n4, 0.7));
   // Engraved: the n2 text over a faint lit lower lip. lbM (13 px at 390), B612 Mono Bold.
   const size = Math.round(13 * k * 0.85);
   const base = cy + (CAP_EM.b612 * size) / 2;
   const x = b.x + 18 * k;
-  text(canvas, label, x, base + 1.5, fonts.b612Bold, size, color.n6, 0.45);
-  text(canvas, label, x, base, fonts.b612Bold, size, color.n2);
+  const sx = b.x + b.w - 18 * k - width(serial, fonts.b612Bold, size);
+  // A 6 px scuff (Bible section 2), seeded, in the maker text's span under its baseline, never on a letter.
+  const r = mulberry32((seed ^ 0x5c0f) >>> 0);
+  canvas.drawRect(Skia.XYWHRect(x + width(label, fonts.b612Bold, size) * (0.2 + r() * 0.6), base + 3 * k, 6 * k, 1.2 * k), paintOf(color.n4, 0.7));
+  for (const [run, rx] of [[label, x], [serial, sx]] as const) {
+    text(canvas, run, rx, base + 1.5, fonts.b612Bold, size, color.n6, 0.45);
+    text(canvas, run, rx, base, fonts.b612Bold, size, color.n2);
+  }
+  return [label, serial];
 }
 
 /** Reading row: SPI and tier near 96 px, the EVP or decoded line in p5, class and era in p3. */
@@ -710,7 +722,8 @@ export function drawShareCard(i: CardInput): CardRender {
   if (!surface) throw new Error('share card: no raster surface');
   const canvas = surface.getCanvas();
   drawHousing(canvas, L, record.seed >>> 0);
-  drawNameplate(canvas, L, fonts, t.nameplate, record.seed >>> 0);
+  const id = i.identity ?? CARD_IDENTITY;
+  const plateRuns = drawNameplate(canvas, L, fonts, t.nameplate, id.serial, record.seed >>> 0);
   // The photo sits recessed: a 4 px n1 surround.
   canvas.drawRect(Skia.XYWHRect(P.x - 4, P.y - 4, P.w + 8, P.h + 8), paintOf(color.n1));
   // Grain after compositing, over the tinted photo, the figure and the scrim together (COMPOSITE_SKSL's step).
@@ -740,7 +753,6 @@ export function drawShareCard(i: CardInput): CardRender {
   const reading = drawReading(canvas, L, fonts, t.reading, record.outcome.tier === 'critical');
   const leds = drawLeds(canvas, L, record.outcome.tier);
   const footer = drawFooter(canvas, L, fonts, t.footer, t.footerMark);
-  const id = i.identity ?? CARD_IDENTITY;
   const stickerLines = L.height > L.width ? [t.stickerHead, `CAL ${id.cal}`, `PRÜF ${id.pruef}`] : [t.stickerHead, `CAL ${id.cal} · PRÜF ${id.pruef}`];
   const avoid: Box[] = [L.leds, L.reading, { x: P.x, y: P.y, w: P.w, h: P.h }];
   const housing = drawHousingDetail(canvas, L, { top: L.footerTop, bottom: footer.bottom, x0: footer.x0, x1: footer.x1, boxes: footer.boxes, mark: footer.mark }, record.seed >>> 0, fonts, stickerLines, avoid);
@@ -758,7 +770,7 @@ export function drawShareCard(i: CardInput): CardRender {
     image,
     fileName: cardFileName(record.id),
     text: t,
-    texts: [t.nameplate, ...stripLines, ...reading.runs, ...footer.lines],
+    texts: [...plateRuns, ...stripLines, ...reading.runs, ...footer.lines],
     marks: [stripMark, footer.mark],
     strip: { x: P.x + sx, y: P.y + scrimTop, w: scrimW, h: scrimBottom - scrimTop, alpha },
     layout: L,
