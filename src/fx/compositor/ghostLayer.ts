@@ -9,6 +9,7 @@
 import { BlendMode, FilterMode, MipmapMode, Skia, TileMode, type SkCanvas, type SkImage, type SkRuntimeEffect } from '@shopify/react-native-skia';
 
 import type { Tier } from '../../engine';
+import { Bin } from '../bin';
 import { makeSurface, snapshotFree } from '../apparition/render';
 import { imageRectFor } from '../apparition/shape';
 import { RAG_CORE, RAG_CYCLES, RAG_DISPLACE, RAG_EDGES, RAG_ERODE, RAG_STRETCH } from '../apparition/metrics';
@@ -78,13 +79,15 @@ export function buildGhostLayer({ figure, padded = true, placement, width, heigh
   const H = Math.max(1, Math.round(height * scale));
   const surface = makeSurface(W, H);
   if (!surface) return null;
+  // The paints and filters below are freed once the layer is snapshot (CanvasKit's wasm heap has no GC).
+  const bin = new Bin();
   const canvas = surface.getCanvas();
   canvas.clear(Skia.Color('transparent'));
   canvas.save();
   canvas.scale(scale, scale);
   const sigma = ghostBlurSigma(placement.w, tier) * blur * scale;
-  const layer = Skia.Paint();
-  layer.setImageFilter(Skia.ImageFilter.MakeBlur(sigma, sigma, TileMode.Decal));
+  const layer = bin.own(Skia.Paint());
+  layer.setImageFilter(bin.own(Skia.ImageFilter.MakeBlur(sigma, sigma, TileMode.Decal)));
   canvas.saveLayer(layer);
   const src = Skia.XYWHRect(0, 0, figure.width(), figure.height());
   const { opacity, flipX } = placement;
@@ -100,8 +103,8 @@ export function buildGhostLayer({ figure, padded = true, placement, width, heigh
   // CRITICAL echo goes under everything.
   const layers = layerCopies(placement);
   const drawCopies = (cv: SkCanvas) => {
-    const layerPaint = Skia.Paint();
-    const paint = Skia.Paint();
+    const layerPaint = bin.own(Skia.Paint());
+    const paint = bin.own(Skia.Paint());
     paint.setAntiAlias(true);
     paint.setBlendMode(BlendMode.Plus);
     for (const c of layers) {
@@ -125,12 +128,14 @@ export function buildGhostLayer({ figure, padded = true, placement, width, heigh
     }
   };
   const ragged = pop ? popDissolve(drawCopies, W, H, scale, w * scale, Math.min(1, stackedAlpha(placement)), seed) : null;
-  if (ragged) canvas.drawImageRect(ragged, Skia.XYWHRect(0, 0, W, H), Skia.XYWHRect(0, 0, width, height), Skia.Paint());
+  if (ragged) canvas.drawImageRect(ragged, Skia.XYWHRect(0, 0, W, H), Skia.XYWHRect(0, 0, width, height), bin.own(Skia.Paint()));
   else drawCopies(canvas);
   canvas.restore(); // blur layer
   canvas.restore(); // scale
   ragged?.dispose();
-  return snapshotFree(surface);
+  const out = snapshotFree(surface);
+  bin.free();
+  return out;
 }
 
 /** The pop's smeared copies through POP_RAG_SKSL, device pixels. `imgW` is the figure image width (px). */
@@ -138,7 +143,12 @@ function popDissolve(drawCopies: (cv: SkCanvas) => void, W: number, H: number, s
   const a = makeSurface(W, H);
   const b = makeSurface(W, H);
   popRag ??= Skia.RuntimeEffect.Make(POP_RAG_SKSL);
-  if (!a || !b || !popRag) return null;
+  if (!a || !b || !popRag) {
+    a?.dispose();
+    b?.dispose();
+    return null;
+  }
+  const bin = new Bin();
   const ca = a.getCanvas();
   ca.clear(Skia.Color('transparent'));
   ca.save();
@@ -147,18 +157,21 @@ function popDissolve(drawCopies: (cv: SkCanvas) => void, W: number, H: number, s
   ca.restore();
   const smeared = snapshotFree(a);
   const s = (seed % 9973) * 23 + 5;
-  const nDisp = Skia.Shader.MakeFractalNoise(RAG_CYCLES / imgW, RAG_CYCLES / imgW, 2, s, 0, 0);
-  const nRag = Skia.Shader.MakeFractalNoise(RAG_CYCLES / imgW, (RAG_CYCLES * RAG_STRETCH) / imgW, 2, s + 1, 0, 0);
-  const shader = popRag.makeShaderWithChildren(
-    [RAG_DISPLACE * 0.5 * imgW, Math.max(1e-3, peak), RAG_ERODE, RAG_EDGES[0], RAG_EDGES[1], RAG_CORE[0], RAG_CORE[1]],
-    [smeared.makeShaderOptions(TileMode.Decal, TileMode.Decal, FilterMode.Linear, MipmapMode.None), nDisp, nRag],
+  const nDisp = bin.own(Skia.Shader.MakeFractalNoise(RAG_CYCLES / imgW, RAG_CYCLES / imgW, 2, s, 0, 0));
+  const nRag = bin.own(Skia.Shader.MakeFractalNoise(RAG_CYCLES / imgW, (RAG_CYCLES * RAG_STRETCH) / imgW, 2, s + 1, 0, 0));
+  const shader = bin.own(
+    popRag.makeShaderWithChildren(
+      [RAG_DISPLACE * 0.5 * imgW, Math.max(1e-3, peak), RAG_ERODE, RAG_EDGES[0], RAG_EDGES[1], RAG_CORE[0], RAG_CORE[1]],
+      [bin.own(smeared.makeShaderOptions(TileMode.Decal, TileMode.Decal, FilterMode.Linear, MipmapMode.None)), nDisp, nRag],
+    ),
   );
   const cb = b.getCanvas();
   cb.clear(Skia.Color('transparent'));
-  const fill = Skia.Paint();
+  const fill = bin.own(Skia.Paint());
   fill.setShader(shader);
   cb.drawRect(Skia.XYWHRect(0, 0, W, H), fill);
   const out = snapshotFree(b);
+  bin.free();
   smeared.dispose();
   return out;
 }

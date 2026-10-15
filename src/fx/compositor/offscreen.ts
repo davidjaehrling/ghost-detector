@@ -2,6 +2,7 @@ import { FilterMode, MipmapMode, processUniforms, Skia, TileMode, type SkCanvas,
 
 import type { Tier } from '../../engine';
 import { renderApparition, VARIANT_COUNT } from '../apparition';
+import { Bin } from '../bin';
 import type { Placement, RegionInput } from '../ghostV0/placement';
 import { activeRect, bandRect, ghostLayerRect } from './activeRect';
 import { COMPOSITE_SKSL } from './blend';
@@ -90,38 +91,38 @@ export function drawComposite(canvas: SkCanvas, i: OffscreenCompositeInput): Com
     ? buildGhostLayer({ figure, padded: true, placement: setup.placement, width, height, scale: 1, tier: setup.tier, seed: seed >>> 0, blur: setup.blur })
     : null;
   if (!i.disabled && !layer) return null;
-  const occl = gridImage(i.grid);
-  const fx = compositeEffect();
-  const u = compositeUniforms(setup, { pop: 0, on: layer ? 1 : 0, useGrid: !!i.grid, grain: i.grain, tint: i.tint });
-  const freq = i.grainFreq ?? GRAIN_FREQ;
-  const children = [
-    imageShader(i.photo, rect, TileMode.Clamp),
-    layer ? imageShader(layer, { x: 0, y: 0, width, height }, TileMode.Decal) : Skia.Shader.MakeColor(Skia.Color('transparent')),
-    // With the grain held back (0) the noise is never needed: a flat 0.5 grey costs nothing per pixel.
-    u.values.grain > 0 ? Skia.Shader.MakeFractalNoise(freq, freq, 2, (seed >>> 0) % 1000, 0, 0) : Skia.Shader.MakeColor(Skia.Color('#808080')),
-    occl ? imageShader(occl, rect, TileMode.Clamp) : Skia.Shader.MakeColor(Skia.Color('black')),
-  ];
-  const paint = Skia.Paint();
-  paint.setShader(fx.makeShaderWithChildren(processUniforms(fx, u.values), children));
-  // With the grain held back, only the ghost's and the band's rectangle needs the full shader; the
-  // rest is the photo sample (see activeRect.ts). With grain every pixel takes the full shader.
-  // The canvas is a CPU raster (the card's), so the draw is done when drawRect returns: the
-  // per-call images are freed here (CanvasKit's wasm heap has no GC).
-  const free = () => {
-    layer?.dispose();
-    occl?.dispose();
-  };
-  if (u.values.grain > 0) {
-    canvas.drawRect(Skia.XYWHRect(0, 0, width, height), paint);
-    free();
+  // The canvas is a CPU raster (the card's), so the draw is done when drawRect returns: every
+  // per-call image, shader and paint is freed then (CanvasKit's wasm heap has no GC).
+  const bin = new Bin();
+  try {
+    bin.own(layer);
+    const occl = bin.own(gridImage(i.grid));
+    const fx = compositeEffect();
+    const u = compositeUniforms(setup, { pop: 0, on: layer ? 1 : 0, useGrid: !!i.grid, grain: i.grain, tint: i.tint });
+    const freq = i.grainFreq ?? GRAIN_FREQ;
+    const children = [
+      imageShader(i.photo, rect, TileMode.Clamp),
+      layer ? imageShader(layer, { x: 0, y: 0, width, height }, TileMode.Decal) : Skia.Shader.MakeColor(Skia.Color('transparent')),
+      // With the grain held back (0) the noise is never needed: a flat 0.5 grey costs nothing per pixel.
+      u.values.grain > 0 ? Skia.Shader.MakeFractalNoise(freq, freq, 2, (seed >>> 0) % 1000, 0, 0) : Skia.Shader.MakeColor(Skia.Color('#808080')),
+      occl ? imageShader(occl, rect, TileMode.Clamp) : Skia.Shader.MakeColor(Skia.Color('black')),
+    ].map((c) => bin.own(c));
+    const paint = bin.own(Skia.Paint());
+    paint.setShader(bin.own(fx.makeShaderWithChildren(processUniforms(fx, u.values), children)));
+    // With the grain held back, only the ghost's and the band's rectangle needs the full shader; the
+    // rest is the photo sample (see activeRect.ts). With grain every pixel takes the full shader.
+    if (u.values.grain > 0) {
+      canvas.drawRect(Skia.XYWHRect(0, 0, width, height), paint);
+      return setup;
+    }
+    const plain = bin.own(Skia.Paint());
+    const pv = u.values;
+    plain.setShader(bin.own(photoEffect().makeShaderWithChildren(processUniforms(photoEffect(), { gain: pv.gain, tintMix: pv.tintMix, tintLift: pv.tintLift, tintKnee: pv.tintKnee }), [children[0]!])));
+    canvas.drawRect(Skia.XYWHRect(0, 0, width, height), plain);
+    const active = activeRect([layer ? reach : null, bandRect(setup.ref.band)], width, height);
+    if (active) canvas.drawRect(Skia.XYWHRect(active.x0, active.y0, active.x1 - active.x0, active.y1 - active.y0), paint);
     return setup;
+  } finally {
+    bin.free();
   }
-  const plain = Skia.Paint();
-  const pv = u.values;
-  plain.setShader(photoEffect().makeShaderWithChildren(processUniforms(photoEffect(), { gain: pv.gain, tintMix: pv.tintMix, tintLift: pv.tintLift, tintKnee: pv.tintKnee }), [children[0]!]));
-  canvas.drawRect(Skia.XYWHRect(0, 0, width, height), plain);
-  const active = activeRect([layer ? reach : null, bandRect(setup.ref.band)], width, height);
-  if (active) canvas.drawRect(Skia.XYWHRect(active.x0, active.y0, active.x1 - active.x0, active.y1 - active.y0), paint);
-  free();
-  return setup;
 }

@@ -4,6 +4,7 @@ import type { Lang } from '../../i18n';
 import type { ScanRecord } from '../../state/scans';
 import { color } from '../../ui/tokens';
 import { mulberry32 } from '../../engine';
+import { Bin } from '../bin';
 import { drawComposite, imageShader } from '../compositor/offscreen';
 import type { Band } from '../compositor/blend';
 import type { RegionStats } from '../compositor/regionFromImage';
@@ -221,8 +222,11 @@ export function stripSize(L: CardLayout): number {
 /** LEDs lit per tier (Bible section 3: LED 1 is power, always on). */
 export const TIER_LEDS: Record<ScanRecord['outcome']['tier'], number> = { quiet: 1, trace: 2, active: 3, strong: 4, critical: 5 };
 
+/** Every Skia object one card allocates (paints, fonts, shaders, images), freed when `drawShareCard` returns. */
+const bin = new Bin();
+
 function paintOf(hex: string, alpha = 1) {
-  const p = Skia.Paint();
+  const p = bin.own(Skia.Paint());
   p.setAntiAlias(true);
   p.setColor(Skia.Color(hex));
   if (alpha < 1) p.setAlphaf(alpha);
@@ -230,12 +234,12 @@ function paintOf(hex: string, alpha = 1) {
 }
 
 function text(canvas: SkCanvas, s: string, x: number, y: number, face: SkTypeface, size: number, hex: string, alpha = 1): number {
-  const font = Skia.Font(face, size);
+  const font = bin.own(Skia.Font(face, size));
   canvas.drawText(s, x, y, paintOf(hex, alpha), font);
   return font.getTextWidth(s);
 }
 
-const width = (s: string, face: SkTypeface, size: number) => Skia.Font(face, size).getTextWidth(s);
+const width = (s: string, face: SkTypeface, size: number) => bin.own(Skia.Font(face, size)).getTextWidth(s);
 
 /** Boxes the card paints opaque over the housing (whole pixels): the photo surround and the reading box's straight-edged core. */
 export function housingCovered(L: CardLayout): Box[] {
@@ -252,9 +256,9 @@ export function housingCovered(L: CardLayout): Box[] {
 function drawHousing(canvas: SkCanvas, L: CardLayout, seed: number) {
   const fx = effect('housing', HOUSING_SKSL);
   const base = rgb(color.n3).map((v) => v / 255);
-  const noise = Skia.Shader.MakeFractalNoise(0.35, 0.35, 3, seed % 997, 0, 0);
-  const p = Skia.Paint();
-  p.setShader(fx.makeShaderWithChildren(processUniforms(fx, { size: [L.width, L.height], base, amp: HOUSING_NOISE, fall: HOUSING_FALL }), [noise]));
+  const noise = bin.own(Skia.Shader.MakeFractalNoise(0.35, 0.35, 3, seed % 997, 0, 0));
+  const p = bin.own(Skia.Paint());
+  p.setShader(bin.own(fx.makeShaderWithChildren(processUniforms(fx, { size: [L.width, L.height], base, amp: HOUSING_NOISE, fall: HOUSING_FALL }), [noise])));
   // P8-03: the texture is not shaded where opaque paint covers it later: the photo with its 4 px
   // surround, and the reading box inside its corner radius. Same bytes, about 60% fewer pixels
   // through the noise shader on the story card.
@@ -624,10 +628,10 @@ function drawLeds(canvas: SkCanvas, L: CardLayout, tier: ScanRecord['outcome']['
     canvas.drawCircle(cx, cy, r + 2, paintOf(color.n1));
     if (i < lit) {
       const hex = steps[i]!;
-      const bloom = Skia.Paint();
+      const bloom = bin.own(Skia.Paint());
       bloom.setAntiAlias(true);
       const [cr, cg, cb] = rgb(hex);
-      bloom.setShader(Skia.Shader.MakeRadialGradient({ x: cx, y: cy }, r + 6 * k, [Skia.Color(`rgba(${cr}, ${cg}, ${cb}, 0.35)`), Skia.Color(`rgba(${cr}, ${cg}, ${cb}, 0)`)], [r / (r + 6 * k), 1], TileMode.Clamp));
+      bloom.setShader(bin.own(Skia.Shader.MakeRadialGradient({ x: cx, y: cy }, r + 6 * k, [Skia.Color(`rgba(${cr}, ${cg}, ${cb}, 0.35)`), Skia.Color(`rgba(${cr}, ${cg}, ${cb}, 0)`)], [r / (r + 6 * k), 1], TileMode.Clamp)));
       canvas.drawCircle(cx, cy, r + 6 * k, bloom);
       canvas.drawCircle(cx, cy, r, paintOf(hex));
       canvas.drawCircle(cx - r * 0.35, cy - r * 0.35, Math.max(1.5, r * 0.18), paintOf(color.p5, 0.55));
@@ -640,6 +644,14 @@ function drawLeds(canvas: SkCanvas, L: CardLayout, tier: ScanRecord['outcome']['
 }
 
 export function drawShareCard(i: CardInput): CardRender {
+  try {
+    return drawCard(i);
+  } finally {
+    bin.free();
+  }
+}
+
+function drawCard(i: CardInput): CardRender {
   const L = LAYOUTS[i.format];
   const { record, fonts } = i;
   const t = cardText(record, i.store ?? STORE_NAME, i.locale);
@@ -707,7 +719,9 @@ export function drawShareCard(i: CardInput): CardRender {
   // so the scrim never boxes the figure.
   const right = !!placement && placement.x + placement.w / 2 < panel.w / 2;
   const sx = right ? P.w - scrimW : 0;
-  const under = photoSurface.makeImageSnapshot().readPixels(sx, scrimTop, { width: scrimW, height: scrimBottom - scrimTop, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul });
+  const before = photoSurface.makeImageSnapshot();
+  const under = before.readPixels(sx, scrimTop, { width: scrimW, height: scrimBottom - scrimTop, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul });
+  before.dispose();
   const maxRgb = [0, 0, 0];
   if (under) for (let p = 0; p < under.length; p += 4) for (let c = 0; c < 3; c++) maxRgb[c] = Math.max(maxRgb[c]!, under[p + c]!);
   else maxRgb.fill(255);
@@ -732,12 +746,14 @@ export function drawShareCard(i: CardInput): CardRender {
   canvas.translate(P.x, P.y);
   const gfx = effect('grain', GRAIN_SKSL);
   const freq = GRAIN_FREQ / k;
-  const gp = Skia.Paint();
+  const gp = bin.own(Skia.Paint());
   gp.setShader(
-    gfx.makeShaderWithChildren(processUniforms(gfx, { grain }), [
-      imageShader(photoImage, { x: 0, y: 0, width: P.w, height: P.h }, TileMode.Clamp),
-      Skia.Shader.MakeFractalNoise(freq, freq, 2, grainSeed % 1000, 0, 0),
-    ]),
+    bin.own(
+      gfx.makeShaderWithChildren(processUniforms(gfx, { grain }), [
+        bin.own(imageShader(photoImage, { x: 0, y: 0, width: P.w, height: P.h }, TileMode.Clamp)),
+        bin.own(Skia.Shader.MakeFractalNoise(freq, freq, 2, grainSeed % 1000, 0, 0)),
+      ]),
+    ),
   );
   canvas.drawRect(Skia.XYWHRect(0, 0, P.w, P.h), gp);
   // 4. The strip text after tint, scrim and grain: p3 at 100% over a 1 px n0 copy, never tinted.
@@ -759,6 +775,7 @@ export function drawShareCard(i: CardInput): CardRender {
   surface.flush();
   const image = surface.makeImageSnapshot();
   // Free the wasm heap now (CanvasKit has no GC for these): the card image keeps its own pixels.
+  // The paints, fonts and shaders go with the bin when drawShareCard returns.
   surface.dispose();
   photoImage.dispose();
 

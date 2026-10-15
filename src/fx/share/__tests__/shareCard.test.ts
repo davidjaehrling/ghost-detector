@@ -401,6 +401,7 @@ describe('card contents', () => {
         expect(figureLayout({ record, stats, panel, aspect: 4 / 3 })!.placement.opacity).toBe(screen.placement.opacity);
       }
     }
+    photo.dispose();
   });
 });
 
