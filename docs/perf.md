@@ -37,6 +37,11 @@ Scan, viewfinder and result specs at 390 against the new export: 42 passed, 11 f
 - Boot: cold load of `/viewfinder?fixture=cellar` at x2; interactive is the CAPTURE key present and enabled, timestamped in the page from navigation start. Budget under 2500 ms. Measured 1168 ms.
 - Bundle: the web export writes no `metadata.json`, so the script tags in `index.html` name the cold-start JS and the sizes are read from the served bytes. Baseline 2 986 773 bytes raw (727 082 gzip); the guard fails above 1.1x, 3 285 450 bytes. Head 082aa80 was 2 986 301.
 
+### Boot regression guard (P8-04 clause 7, D-046)
+- Measure: `e2e/web/perf-ui.spec.ts` "cold boot", 390 x 844, CPU x2, a fresh context per run, `/?fixture=cellar` with the belief answer stored; the page's MutationObserver stamps ACK live (key-acknowledge not aria-disabled) and CAPTURE enabled from navigation start; the guard is `interactive - ackLive`.
+- Baseline, three runs on the P8-04 tree: 2271, 2325, 2329 ms ACK live to CAPTURE (ACK live 921 to 1020 ms; total 3246 to 3349 ms). Recorded baseline 2325 ms (median).
+- Guard: at most 1.2x = 2790 ms; the total keeps the loose 5000 ms bound. It replaces the old 2500 ms budget, which was a harness number with no phone behind it; the phone budget stays phone check 3 item 3.
+
 ### Phone check 3 (from Part 1, three items)
 1. Scan theatre on the phone: p50 at 55 fps or better, no visible stutter on the sweep.
 2. Result print: draw plus encode against the 1.5 s budget (D-034); if over, cut card grain first.

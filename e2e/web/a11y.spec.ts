@@ -132,12 +132,14 @@ for (const step of STEPS) {
         if (h.w < 44 || h.h < 44) bad.push(`${lang} ${h.id}: hit area ${h.w} x ${h.h} < 44 at ${info.project.name}`);
       }
     }
+    // The fitted relay line is a control in both languages.
+    if (step.name === 'relay-fitted') for (const l of ['en', 'de']) expect(byLang[l]!.map((h) => h.id), `${l} has the result line`).toContain('relay-result-box');
     const en = new Map(byLang.en!.map((h) => [h.id, h.name]));
     for (const h of byLang.de!) {
       const e = en.get(h.id);
       if (e !== undefined && e === h.name && !KEPT.test(h.name) && /[A-Za-z]{4,}/.test(h.name)) bad.push(`de ${h.id}: name unchanged from en "${h.name}"`);
     }
-    console.log(`[a11y] ${step.name} ${info.project.name}: ${byLang.en!.map((h) => `${h.id}(${h.role})`).join(' ')}`);
+    console.log(`[a11y] ${step.name} ${info.project.name}: en ${byLang.en!.map((h) => `${h.id}(${h.role})`).join(' ')} | de ${byLang.de!.map((h) => `${h.id}:${h.name}`).join(' | ')}`);
     expect(bad).toEqual([]);
   });
 }

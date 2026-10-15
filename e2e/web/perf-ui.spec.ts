@@ -4,15 +4,20 @@ import { expect, test, type Page } from '@playwright/test';
 // P8-03, the Builder A half of the performance budget (D-046).
 // - Boot: a cold load of the boot route at CPU x2, ACK pressed once the key is live (a stored belief answer
 //   goes straight on), until the viewfinder's CAPTURE key is on the page and enabled, measured in the page
-//   from navigation start (performance.now() at the moment a MutationObserver sees the key). Budget: under
-//   2.5 s. The route a player takes, not a direct load of /viewfinder. The cache is cold: every test gets a fresh browser context.
+//   from navigation start (performance.now() at the moment a MutationObserver sees the key). Guard: at most
+//   1.2x the recorded baseline (D-046). The route a player takes, not a direct load of /viewfinder. The cache is cold: every test gets a fresh browser context.
 // - Bundle: the cold-start JS is the scripts index.html loads. The web export writes no
 //   metadata.json (that file exists for native exports only), so index.html is the export's metadata:
 //   its script tags name the files, and the sizes are read from the served bytes. Guard: raw size
 //   at most 1.1x the baseline recorded in docs/perf.md.
 // Numbers go to stdout as `[perf-ui] {...}` lines so the CI log carries them. 390 only.
 const BOOT_RATE = Number(process.env.UI_CPU_RATE ?? 2);
-const BOOT_MS_MAX = 2500;
+/** ACK live to an enabled CAPTURE, median of three runs at CPU x2 on the P8-04 tree (docs/perf.md, Part 2, boot guard). */
+const BOOT_BASELINE_MS = 2325;
+/** Regression guard (D-046): at most 1.2x the baseline. */
+const BOOT_MS_MAX = Math.round(1.2 * BOOT_BASELINE_MS);
+/** The total (navigation to CAPTURE, including the self-test theatre) keeps the loose 5 s bound. */
+const TOTAL_MS_MAX = 5000;
 /** Cold-start JS (entry bundle, raw bytes): 082aa80 was 2 986 301, with the P8-03 main-thread pass 2 986 773 (docs/perf.md). */
 const BUNDLE_BASELINE_BYTES = 2_986_773;
 const BUNDLE_BYTES_MAX = Math.round(1.1 * BUNDLE_BASELINE_BYTES);
@@ -27,7 +32,7 @@ async function throttle(page: Page, rate: number) {
   await cdp.send('Emulation.setCPUThrottlingRate', { rate });
 }
 
-test(`cold boot to an enabled CAPTURE key under ${BOOT_MS_MAX} ms at CPU x${BOOT_RATE}`, async ({ page }) => {
+test(`cold boot to an enabled CAPTURE key within 1.2x its baseline (${BOOT_MS_MAX} ms) at CPU x${BOOT_RATE}`, async ({ page }) => {
   test.setTimeout(60_000);
   const errors: string[] = [];
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -67,10 +72,10 @@ test(`cold boot to an enabled CAPTURE key under ${BOOT_MS_MAX} ms at CPU x${BOOT
   // The self-test types out before ACK goes live (about 1 s of designed theatre at x2); the budget is the
   // app's own cost: ACK live to an enabled CAPTURE. The total is printed and bounded loosely as a regression guard.
   const boot = total - ackLive;
-  console.log(`[perf-ui] boot ${JSON.stringify({ cpu: BOOT_RATE, route: 'boot+ack', ackLiveMs: ackLive, interactiveMs: total, ackToCaptureMs: boot, budgetMs: BOOT_MS_MAX })}`);
+  console.log(`[perf-ui] boot ${JSON.stringify({ cpu: BOOT_RATE, route: 'boot+ack', ackLiveMs: ackLive, interactiveMs: total, ackToCaptureMs: boot, baselineMs: BOOT_BASELINE_MS, maxMs: BOOT_MS_MAX })}`);
   expect(ackLive).toBeGreaterThan(0);
   expect(boot).toBeLessThan(BOOT_MS_MAX);
-  expect(total).toBeLessThan(2 * BOOT_MS_MAX);
+  expect(total).toBeLessThan(TOTAL_MS_MAX);
   expect(errors).toEqual([]);
 });
 
