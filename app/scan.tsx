@@ -136,10 +136,11 @@ function Scan({ params }: { params: ScanParams }) {
   );
   const glassLabel = useMemo(() => copy.glass, [locale]); // eslint-disable-line react-hooks/exhaustive-deps
   const cap = RATE_CAP[intensity];
-  const still = frozen || isStatic;
+  // Reduced motion freezes the trace and the sweep (still) and slows the readouts to 5 s steps (calm).
+  const still = frozen || isStatic || reduceMotion;
   const renderGlass = useCallback(
-    (size: GlassSize) => <TheatreGlass size={size} seed={draw.seed} clock={clock} cap={cap} still={still} />,
-    [draw.seed, clock, cap, still],
+    (size: GlassSize) => <TheatreGlass size={size} seed={draw.seed} clock={clock} cap={cap} still={still} calm={reduceMotion && !frozen && !isStatic} />,
+    [draw.seed, clock, cap, still, reduceMotion, frozen, isStatic],
   );
 
   return (

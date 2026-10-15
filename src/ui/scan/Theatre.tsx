@@ -53,7 +53,7 @@ const FAULT_INDENT = 'E-07 '.length * CH_S;
 // sweep stay where they stopped at p2, the last telemetry line stays dimmed at
 // p3, a block blinks where the percentage was, and the live rows go blank.
 // The fault beat flattens the trace, stalls the bar and blinks the E-07 line.
-export function TheatreGlass({ size, seed, clock, cap, still = false }: { size: GlassSize; seed: number; clock: ScanClock; cap: number; still?: boolean }) {
+export function TheatreGlass({ size, seed, clock, cap, still = false, calm = false }: { size: GlassSize; seed: number; clock: ScanClock; cap: number; still?: boolean; calm?: boolean }) {
   useLocale();
   const frame = useClockFrame(clock);
   const { w, h } = size;
@@ -72,7 +72,10 @@ export function TheatreGlass({ size, seed, clock, cap, still = false }: { size: 
   const hold = frame.kind === 'hold' || frame.kind === 'done';
   const fault = frame.kind === 'fault';
   const phase: Phase = hold ? 4 : frame.phase;
-  const live = hold || fault ? null : liveAt(seed, phase, frame.tick);
+  // Calm (OS reduced motion): the live value and the rate hold for 5 s at a time instead of stepping at 10 Hz.
+  const readTick = calm ? Math.floor(frame.tick / 50) * 50 : frame.tick;
+  const readFrac = calm ? Math.floor(frame.activeFrac * 20) / 20 : frame.activeFrac;
+  const live = hold || fault ? null : liveAt(seed, phase, readTick);
   // The hold and the fault beat keep the last thermal reading of phase 2 (the fault always lands in it),
   // dimmed to p3 and tagged HOLD; the tag blinks in the hold only.
   const held = hold ? heldThermal(seed, frame.t) : fault ? liveAt(seed, 2, Math.max(0, frame.tick - 1)) : null;
@@ -84,7 +87,7 @@ export function TheatreGlass({ size, seed, clock, cap, still = false }: { size: 
   const status = fault ? (faultVisible ? faultLine() : '') : phaseLine(seed, phase);
   const statusColor = hold ? color.p3 : frame.final || fault ? color.p5 : color.p4;
   // The fault line hangs its second row under the text after `E-07 ` on a narrow glass.
-  const rate = live ? rateAt(seed, frame.tick, frame.activeFrac, cap) : 0;
+  const rate = live ? rateAt(seed, readTick, readFrac, cap) : 0;
   const barLeft = gridLeft;
   const lit = barBlocks(frame.progress);
   const rateLit = live ? Math.max(1, Math.round((rate / cap) * BLOCKS)) : 0;
@@ -96,7 +99,7 @@ export function TheatreGlass({ size, seed, clock, cap, still = false }: { size: 
       {/* Trace, afterglow and sweep in Skia (src/fx/scope); the fault beat tears the grid and dips the glass. */}
       <ScopeLayer
         seed={seed}
-        frame={{ tick: frame.tick, sweep: frame.sweep, activeFrac: frame.activeFrac, faultT: frame.kind === 'fault' ? frame.faultT : -1 }}
+        frame={{ tick: readTick, sweep: calm ? 0.5 : frame.sweep, activeFrac: readFrac, faultT: frame.kind === 'fault' ? frame.faultT : -1 }}
         left={gridLeft}
         top={GRID_TOP}
         gw={gw}

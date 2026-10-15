@@ -142,7 +142,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
   // The transient varies per launch (A-11); the harness (static or peak) freezes it so goldens stay fixed.
   const [launchSeed] = useState(() => Date.now());
   const spikeParams = useMemo(() => bootSpike(launchSeed, isStatic || spike), [launchSeed, isStatic, spike]);
-  const transient = usePrimingTransient({ armed: warmDone, still: isStatic, peak: spike, fires: spikeParams.fires });
+  const transient = usePrimingTransient({ armed: warmDone, still: isStatic || reduceMotion, peak: spike, fires: spikeParams.fires });
 
   const goOn = () => router.push('/viewfinder');
   const onAcknowledge = () => {
