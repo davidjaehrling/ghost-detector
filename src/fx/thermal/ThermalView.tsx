@@ -1,12 +1,13 @@
 import { FilterMode, Group, Image, LinearGradient, MipmapMode, Path, Rect, Skia, Text, useFont, vec, type SkFont } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { color } from '../../ui/tokens';
 import { SnapshotCanvas } from '../glass/snapshotRegistry';
-import { barDeltas, displayPos, displayRange } from './encode';
+import { displayPos, displayRange } from './encode';
 import { PALETTE_NAME, PH_WHT } from './palette';
 import { makeLutEffect, renderThermalImage } from './render';
+import { BAR_W, POINTER, scaleGeometry, scaleLabels } from './scale';
 import { formatDelta, sampleField, type ThermalField } from './thermalField';
 
 // Bundled TTFs, loaded into Skia (RN `Text` fonts are not visible to a Skia canvas).
@@ -14,13 +15,8 @@ const VT323_TTF = require('@expo-google-fonts/vt323/400Regular/VT323_400Regular.
 
 /** Live view refresh, Hz (FLIR-class sensors export at about 9 Hz). */
 export const LIVE_HZ = 9;
-/** Bible section 3: scale bar 10 x 220 px. Shorter only when the panel cannot hold it. */
-export const BAR_W = 10;
-export const BAR_H = 220;
-const BAR_INSET = 8; // bar's right edge to the panel's right edge
-const LABEL_GAP = 6; // tick end to label (A-48: labels outside the bar, on its left)
+export { BAR_H, BAR_W } from './scale';
 const RETICLE = 15; // crosshair span, px (Bible section 3)
-const POINTER = 6; // cold-spot triangle, px
 
 export interface ThermalViewProps {
   field: ThermalField;
@@ -84,19 +80,15 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
   const y0 = top ?? defaultTop(height, imgH, spot ? spot.y : 0.5);
   const { lo, hi } = displayRange(field);
 
-  // Scale bar geometry.
-  const barH = Math.min(BAR_H, Math.max(60, height - 48));
-  const barX = width - BAR_INSET - BAR_W;
-  const barY = Math.round((height - barH) / 2);
+  // A-48: the bar reads in ΔT against the room, °C, so its bottom is the spot readout's value.
+  // Labels are numbers only in a compact column left of the bar; the unit is printed once above.
+  const labels = scaleLabels(field);
+  const labelW = Math.max(textW(vt, labels.hi), textW(vt, labels.lo), textW(vt, labels.amb), textW(vt, labels.unit));
+  const { barX, barY, barH, labelX, plate } = scaleGeometry(width, height, labelW);
   const posY = (c: number) => barY + barH - displayPos(field, c) * barH;
 
   const delta = deltaLabel(vt);
   const readout = spotReadout(field, delta);
-  // A-48: the bar reads in ΔT against the room, °C, so its bottom is the spot readout's value.
-  const ends = barDeltas(field);
-  const maxT = formatDelta(ends.hi);
-  const minT = formatDelta(ends.lo);
-  const ambT = formatDelta(0);
   const ambY = posY(field.ambientC);
 
   const marks = useMemo(() => {
@@ -135,9 +127,8 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
   }, [field, spot, lo, hi, barX, barY, barH, width, imgH, y0]);
 
   const readW = textW(vt, readout ?? '') + 10;
-  const labelX = barX - 4 - LABEL_GAP; // labels end here (right-aligned)
-  const labelW = Math.max(textW(vt, maxT), textW(vt, minT), textW(vt, ambT));
-  const plateX = Math.floor(labelX - labelW - 6);
+  // Web only: the plate box for the L2 layout checks (react-native-web turns dataSet into data-*).
+  const plateData = (Platform.OS === 'web' ? { dataSet: { plate: [plate.x, plate.y, plate.w, plate.h].join(',') } } : {}) as Record<string, unknown>;
 
   return (
     <View
@@ -145,6 +136,7 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
       role="img"
       accessibilityLabel={readout ? `Thermal view ${PALETTE_NAME}, ${readout}` : `Thermal view ${PALETTE_NAME}, no cold spot`}
       style={{ width, height, overflow: 'hidden', backgroundColor: color.n0 }}
+      {...plateData}
     >
       <SnapshotCanvas style={{ width, height }}>
         <Rect x={0} y={0} width={width} height={height} color={color.n0} />
@@ -164,8 +156,9 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
           </Group>
         ) : null}
 
-        {/* Scale bar: n0 plate, PH-WHT gradient warm at the top, 1 px n4 keyline. */}
-        <Rect x={plateX} y={barY - 12} width={width - plateX - 2} height={barH + 24} color={color.n0} />
+        {/* Scale bar at the right margin: PH-WHT gradient warm at the top, 1 px n4 keyline; the n0
+            plate holds only the label column, the ticks and the pointer, so the photo shows around it. */}
+        <Rect x={plate.x} y={plate.y} width={plate.w} height={plate.h} color={color.n0} />
         <Rect x={barX} y={barY} width={BAR_W} height={barH}>
           <LinearGradient start={vec(0, barY + barH)} end={vec(0, barY)} colors={[...PH_WHT]} />
         </Rect>
@@ -174,10 +167,11 @@ export function ThermalView({ field, width, height, top, static: isStatic = fals
         {spot ? <Path path={marks.pointer} color={color.p4} /> : null}
         {vt ? (
           <Group>
-            <Text x={labelX - textW(vt, maxT)} y={barY + 5} text={maxT} font={vt} color={color.p4} />
-            <Text x={labelX - textW(vt, minT)} y={barY + barH + 5} text={minT} font={vt} color={color.p4} />
+            <Text x={labelX - textW(vt, labels.unit)} y={barY - 9} text={labels.unit} font={vt} color={color.p3} />
+            <Text x={labelX - textW(vt, labels.hi)} y={barY + 5} text={labels.hi} font={vt} color={color.p4} />
+            <Text x={labelX - textW(vt, labels.lo)} y={barY + barH + 5} text={labels.lo} font={vt} color={color.p4} />
             {Math.abs(ambY - barY) > 14 && Math.abs(ambY - barY - barH) > 14 ? (
-              <Text x={labelX - textW(vt, ambT)} y={ambY + 5} text={ambT} font={vt} color={color.p3} />
+              <Text x={labelX - textW(vt, labels.amb)} y={ambY + 5} text={labels.amb} font={vt} color={color.p3} />
             ) : null}
           </Group>
         ) : null}
