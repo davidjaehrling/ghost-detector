@@ -15,11 +15,11 @@ export function UnitBlock({ testID = 'settings-unit' }: { testID?: string }) {
   return (
     <View style={s.unit} testID={testID}>
       <View style={s.unitRow}>
-        <Text style={s.unitText}>{copy.model}</Text>
-        <Text style={s.unitValue}>{unit.serial}</Text>
+        <Text style={s.unitText} maxFontSizeMultiplier={1}>{copy.model}</Text>
+        <Text style={s.unitValue} maxFontSizeMultiplier={1}>{unit.serial}</Text>
       </View>
-      <Text style={s.unitText}>{copy.firmware}</Text>
-      <Text style={s.unitText}>{`CAL ${unit.cal}  DUE ${dueFor(unit.cal)}  PRÜF ${unit.pruef}`}</Text>
+      <Text style={s.unitText} maxFontSizeMultiplier={1}>{copy.firmware}</Text>
+      <Text style={s.unitText} maxFontSizeMultiplier={1}>{`CAL ${unit.cal}  DUE ${dueFor(unit.cal)}  PRÜF ${unit.pruef}`}</Text>
     </View>
   );
 }

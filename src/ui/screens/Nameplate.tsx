@@ -16,9 +16,9 @@ export const Nameplate = memo(function Nameplate({ serial }: { serial: string })
   return (
     <View style={s.nameplate}>
       <View style={[s.rivet, { left: 8 }]} />
-      <Text style={[s.plateText, tight]} numberOfLines={1}>{MAKER}</Text>
+      <Text style={[s.plateText, tight]} numberOfLines={1} maxFontSizeMultiplier={1}>{MAKER}</Text>
       <View style={s.scuff} />
-      <Text style={[s.plateText, tight]} numberOfLines={1}>{plateSerial(serial, windowW)}</Text>
+      <Text style={[s.plateText, tight]} numberOfLines={1} maxFontSizeMultiplier={1}>{plateSerial(serial, windowW)}</Text>
       <View style={[s.rivet, { right: 8 }]} />
     </View>
   );

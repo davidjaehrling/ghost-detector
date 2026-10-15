@@ -14,6 +14,7 @@ import { AppState } from 'react-native';
 import { startCadence } from '../src/ui/interstitial';
 import { readHarness } from '../src/ui/harness';
 import { FaultScreen, reloadPage } from '../src/ui/screens/FaultScreen';
+import '../src/ui/fontScale';
 import { color } from '../src/ui/tokens';
 import { useSkiaGate } from '../src/ui/useSkiaGate';
 

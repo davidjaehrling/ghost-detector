@@ -613,7 +613,7 @@ function ProfileRow({ label, value, maskW, valueTestID, peak = false }: { label:
   const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(peak ? -2 : -0.8, Math.floor((boxW / (value?.length ?? 1) - (charW - (peak ? 0 : 0.5))) * 10) / 10) } : null;
   return (
     <View style={[s.profRow, peak && s.profRowPeak]} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
-      <Text style={s.profLabel}>{label}</Text>
+      <Text style={s.profLabel} maxFontSizeMultiplier={1}>{label}</Text>
       {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, peak && s.profilePeak, tight]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
     </View>
   );

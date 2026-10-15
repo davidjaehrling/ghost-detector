@@ -29,6 +29,8 @@ export type ReadoutProps = {
 };
 
 // Memoised: props are strings and numbers, so a row re-renders only when its text or tone changes.
+// A fixed-pitch field grid: its cells are sized in characters of the unscaled face, so the OS font scale
+// does not apply to it (the sentences around it, the rows and the lists do scale).
 export const Readout = memo(function Readout(props: ReadoutProps) {
   const { size = 'rdS', typed, testID } = props;
   const { labelColor = color.p3, valueColor = color.p4, unitColor = color.p3, statusColor = color.p4 } = props;
@@ -41,7 +43,7 @@ export const Readout = memo(function Readout(props: ReadoutProps) {
   });
   return (
     <View testID={testID} style={s.row}>
-      <Text style={[type[size], { height: ROW_H[size] }]} numberOfLines={1}>
+      <Text style={[type[size], { height: ROW_H[size] }]} numberOfLines={1} maxFontSizeMultiplier={1}>
         {parts.map((p, i) => (
           <Text key={i} style={{ color: tones[i] }}>
             {p}

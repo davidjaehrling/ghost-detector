@@ -348,7 +348,7 @@ export const Key = memo(function Key({ testID, label, legend, onPress, inert = f
       onPress={inert ? undefined : onPress}
       style={({ pressed }) => [st.key, keyIsLit({ primary, backlit }) && st.keyPrimary, pressed && !inert && st.keyDown]}
     >
-      <Text style={[st.keyLegend, fit, inert && st.keyLegendInert, keyIsLit({ primary, backlit }) && st.keyLegendPrimary]} numberOfLines={2}>
+      <Text style={[st.keyLegend, fit, inert && st.keyLegendInert, keyIsLit({ primary, backlit }) && st.keyLegendPrimary]} numberOfLines={2} maxFontSizeMultiplier={1}>
         {legend}
       </Text>
     </Pressable>

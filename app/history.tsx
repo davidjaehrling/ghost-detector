@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { type LayoutChangeEvent, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdBanner } from '../src/ads/Banner';
 import { formatWindowShort } from '../src/ui/boot/activity';
 import {
@@ -57,6 +57,7 @@ export default function History() {
   if (faultArmed('render')) throw new Error('E-60 injected render fault');
   useLocale();
   const router = useRouter();
+  const fs = Math.max(1, PixelRatio.getFontScale());
   // Harness: ?static=1&log=demo3 seeds three tags before the first read.
   const [records] = useState(() => {
     if (readHarness().isStatic && isDemoLog(window.location?.search ?? '')) seedDemoLog();
@@ -122,13 +123,15 @@ export default function History() {
             ) : null}
             {groups.map((g, gi) => (
               <View key={g.tag} testID={`history-group-${g.tag}`} style={gi > 0 ? s.group : null}>
-                <View style={s.tagRow} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
-                  <Text style={s.tagName}>{gap(`${tagWord(g.tag)}  ${casesWord(g.count)}`)}</Text>
-                  <Text style={s.tagPeak}>
+                <View style={[s.tagRow, { height: Math.ceil(PITCH * fs) * (fs > 1 ? 3 : 2) }]} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
+                  <Text style={[s.tagName, { height: Math.ceil(PITCH * fs) }]}>{gap(`${tagWord(g.tag)}  ${casesWord(g.count)}`)}</Text>
+                  <Text style={[s.tagPeak, { height: Math.ceil(PITCH * fs) }]}>
                     {t('history.peak', { spi: g.peak.outcome.spi })}
                     <Text style={tierStyle(g.peak)}>{tierWord(g.peak)}</Text>
-                    {gap(`  ${stamp(g.peak.createdAt)}`)}
+                    {fs > 1 ? null : gap(`  ${stamp(g.peak.createdAt)}`)}
                   </Text>
+                  {/* At a larger font scale the stamp drops to its own line instead of wrapping into the first row. */}
+                  {fs > 1 ? <Text style={[s.tagPeak, { height: Math.ceil(PITCH * fs) }]}>{stamp(g.peak.createdAt)}</Text> : null}
                 </View>
                 {g.cases.map((r) => {
                   const status = caseStatus(r);
@@ -144,18 +147,24 @@ export default function History() {
                           params: { id: r.id },
                         })
                       }
-                      style={s.row}
+                      style={[s.row, { height: Math.max(PITCH * 2, Math.ceil((status !== null && fs > 1 ? 58 : 40) * fs) + 4) }]}
                     >
                       <View style={s.rowText}>
-                        <Text style={s.rowMain} numberOfLines={1}>
+                        <Text style={[s.rowMain, { height: Math.ceil(22 * fs) }]} numberOfLines={1}>
                           {gap(`${r.id}  ${r.outcome.spi} `)}
                           <Text style={tierStyle(r)}>{tierWord(r)}</Text>
                         </Text>
-                        <Text style={s.rowClock} numberOfLines={1}>
+                        <Text style={[s.rowClock, { height: Math.ceil(18 * fs) }]} numberOfLines={1}>
                           {clock(r.createdAt)}
                         </Text>
+                        {/* At a larger font scale the status drops under the clock, so no column is squeezed. */}
+                        {status !== null && fs > 1 ? (
+                          <Text style={[s.rowClock, { height: Math.ceil(18 * fs), color: r.declined ? color.p3 : color.p4 }]} numberOfLines={1} testID={`history-status-${r.id}`}>
+                            {status}
+                          </Text>
+                        ) : null}
                       </View>
-                      {status === null ? null : (
+                      {status === null || fs > 1 ? null : (
                         <Text style={[s.rowOpen, r.declined && s.archived]} numberOfLines={1}>
                           {status}
                         </Text>
