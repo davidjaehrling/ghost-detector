@@ -259,5 +259,8 @@
   "viewfinder.window.open": "03:00 ABERTA",
   "viewfinder.window.inHours": "03:00 EM {h} H {m} MIN",
   "viewfinder.window.inMinutes": "03:00 EM {m} MIN",
-  "scan.hold": "HOLD"
+  "scan.hold": "HOLD",
+  "a11y.needle": "Agulha EMF",
+  "a11y.sweep": "Varredura",
+  "a11y.transient": "Impulso de arranque"
 }

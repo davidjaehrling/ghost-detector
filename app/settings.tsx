@@ -109,6 +109,7 @@ export default function Settings() {
               accessibilityRole={r.value ? 'button' : 'switch'}
               accessibilityLabel={r.value ? t('settings.rowLabel', { label: r.label, value: r.value }) : r.label}
               accessibilityState={r.value ? {} : { checked: r.on }}
+              aria-checked={r.value ? undefined : r.on}
               onPress={r.toggle}
               style={s.rowIn}
             >

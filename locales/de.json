@@ -259,5 +259,8 @@
   "viewfinder.window.open": "03:00 OFFEN",
   "viewfinder.window.inHours": "03:00 IN {h} H {m} MIN",
   "viewfinder.window.inMinutes": "03:00 IN {m} MIN",
-  "scan.hold": "HOLD"
+  "scan.hold": "HOLD",
+  "a11y.needle": "EMF-Nadel",
+  "a11y.sweep": "Suchstrahl",
+  "a11y.transient": "Anlaufimpuls"
 }

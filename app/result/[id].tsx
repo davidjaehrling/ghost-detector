@@ -662,7 +662,7 @@ function DeepLine({ state, armed }: { state: DeepState; armed: boolean }) {
 function DecodeBar({ pct }: { pct: number }) {
   const lit = Math.round((pct / 100) * 20);
   return (
-    <View style={s.decodeBar} testID="decode-bar" accessibilityLabel={t('result.decodedLabel', { pct })}>
+    <View style={s.decodeBar} testID="decode-bar" role="progressbar" accessibilityLabel={t('result.decodedLabel', { pct })}>
       {Array.from({ length: 20 }, (_, i) => (
         <View key={i} style={[s.block, { backgroundColor: i < lit ? color.p4 : color.p1 }]} />
       ))}
@@ -908,7 +908,7 @@ function DataStrip({ lines, width, height, font }: { lines: [string, string]; wi
   // Web only (`data-*`): the widest drawn line after scaling, so the layout goldens can assert the strip fits.
   const web = { dataSet: { textW: String(Math.ceil(Math.max(...widths) * k)) } } as object;
   return (
-    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={lines.join(' ')} aria-busy={font === null} {...web}>
+    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" role="img" aria-label={lines.join(' ')} aria-busy={font === null} {...web}>
       <SnapshotCanvas style={{ width, height: STRIP_H }} pointerEvents="none">
         {font ? (
           <>

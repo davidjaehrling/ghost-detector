@@ -1,7 +1,9 @@
 import { B612Mono_400Regular, B612Mono_700Bold } from '@expo-google-fonts/b612-mono';
 import { VT323_400Regular } from '@expo-google-fonts/vt323';
+import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useEffect } from 'react';
 import { ensureConsent } from '../src/ads';
 import { track } from '../src/analytics';
@@ -17,6 +19,9 @@ import { useSkiaGate } from '../src/ui/useSkiaGate';
 
 // A crash inside the layout or any route without its own boundary lands here.
 export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';
+
+// The document title on web (axe document-title); the name the manifest carries.
+const APP_TITLE = Constants.expoConfig?.name ?? 'Ghost Detector';
 
 // Latch the sticky harness params (static, fixture, speed) from the first URL.
 readHarness();
@@ -53,7 +58,24 @@ export default function RootLayout() {
     if (!ready) return;
     return listenForTaps((route) => router.navigate(route));
   }, [ready, router]);
-  if (skia === 'failed') return <FaultScreen kind="optics" onReset={reloadPage} />;
+  const title = (
+    <Head>
+      <title>{APP_TITLE}</title>
+    </Head>
+  );
+  if (skia === 'failed') {
+    return (
+      <>
+        {title}
+        <FaultScreen kind="optics" onReset={reloadPage} />
+      </>
+    );
+  }
   if (!ready) return null;
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.n3 } }} />;
+  return (
+    <>
+      {title}
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.n3 } }} />
+    </>
+  );
 }

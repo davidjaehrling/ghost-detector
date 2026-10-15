@@ -40,7 +40,7 @@ export const BlockBar = memo(function BlockBar({
   const gap = 2;
   const bw = (width - 4 - gap * (BLOCKS - 1)) / BLOCKS;
   return (
-    <View style={[s.bar, { left, width }, top !== undefined ? { top } : null, bottom !== undefined ? { bottom } : null]} testID={testID} accessibilityLabel={label}>
+    <View style={[s.bar, { left, width }, top !== undefined ? { top } : null, bottom !== undefined ? { bottom } : null]} testID={testID} role="progressbar" accessibilityLabel={label}>
       {Array.from({ length: BLOCKS }, (_, i) => {
         const on = i < lit && !(hideLast && i === lit - 1);
         return <View key={i} style={{ width: bw, height: 6, marginRight: i === BLOCKS - 1 ? 0 : gap, backgroundColor: on ? litColor : dimColor }} />;
@@ -72,7 +72,7 @@ function RateRamp({ lit, left, top, bottom, width, litColor, dimColor, testID, l
   const gap = 3;
   const cw = (width - gap * (BLOCKS - 1)) / BLOCKS;
   return (
-    <View style={[s.ramp, { left, width }, top !== undefined ? { top } : null, bottom !== undefined ? { bottom } : null]} testID={testID} accessibilityLabel={label}>
+    <View style={[s.ramp, { left, width }, top !== undefined ? { top } : null, bottom !== undefined ? { bottom } : null]} testID={testID} role="img" accessibilityLabel={label}>
       {Array.from({ length: BLOCKS }, (_, i) => (
         <View key={i} style={{ width: cw, height: rampHeight(i), marginRight: i === BLOCKS - 1 ? 0 : gap, backgroundColor: i < lit ? litColor : dimColor }} />
       ))}

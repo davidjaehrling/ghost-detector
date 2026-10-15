@@ -89,7 +89,7 @@ export function EmfDial({
   return (
     <View style={s.dial} pointerEvents="none">
       <Scale />
-      <View style={s.canvas} pointerEvents="none" testID="emf-needle" aria-valuetext={t('a11y.deg', { n: fmtFixed(target, 1, getLocale()) })}>
+      <View style={s.canvas} pointerEvents="none" testID="emf-needle" role="progressbar" aria-label={t('a11y.needle')} aria-valuetext={t('a11y.deg', { n: fmtFixed(target, 1, getLocale()) })}>
         <GeoArc />
         {frozen ? null : (
           <>

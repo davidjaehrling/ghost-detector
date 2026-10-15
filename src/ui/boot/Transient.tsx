@@ -78,7 +78,7 @@ export function PrimingTransient({
   const trail = usePersistence(Math.round(amp * 20) / 20, { tau: TAU.sweep, step: 5, static: still, reduceMotion });
   const x0 = Math.round(gw * spike.at);
   return (
-    <View style={{ position: 'absolute', left, top: cy - reach, width: gw, height: reach * 2 }} pointerEvents="none" testID="boot-transient" aria-valuetext={t('a11y.percent', { n: Math.round(amp * 100) })}>
+    <View style={{ position: 'absolute', left, top: cy - reach, width: gw, height: reach * 2 }} pointerEvents="none" testID="boot-transient" role="progressbar" aria-label={t('a11y.transient')} aria-valuetext={t('a11y.percent', { n: Math.round(amp * 100) })}>
       <SnapshotCanvas style={StyleSheet.absoluteFill} pointerEvents="none">
         <Bloom radius={3}>
           {trail.map((sample, i) => {

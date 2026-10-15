@@ -101,7 +101,7 @@ export function RelayModule({ bottom, line, printed, onDone }: { bottom: number;
           ))}
         </Text>
       ) : (
-        <Pressable onPress={onDone} testID="relay-result-box" accessibilityRole="button" accessibilityLabel={line}>
+        <Pressable onPress={onDone} testID="relay-result-box" accessibilityRole="button" accessibilityLabel={line} style={s.resultBox}>
           <Text style={s.result} testID="relay-result">
             {line}
           </Text>
@@ -127,5 +127,7 @@ const s = StyleSheet.create({
   body: { ...type.rdXS },
   sentence: { color: color.p3 },
   simulated: { color: color.p4 },
+  // A 44 dp hit area around the one-line result without growing the band: the box overlaps its padding.
+  resultBox: { minHeight: 44, marginVertical: -11, justifyContent: 'center' },
   result: { ...type.rdS, color: color.p5 },
 });

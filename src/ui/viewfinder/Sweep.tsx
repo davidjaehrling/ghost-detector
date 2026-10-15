@@ -75,7 +75,7 @@ export function Sweep({
   const spin = useAnimatedStyle(() => ({ transform: [{ rotate: `${rot.get()}deg` }] }));
 
   return (
-    <View style={[s.fill, { width, height }]} pointerEvents="none" testID="hud-sweep" aria-valuetext={t('a11y.deg', { n: shown })}>
+    <View style={[s.fill, { width, height }]} pointerEvents="none" testID="hud-sweep" role="progressbar" aria-label={t('a11y.sweep')} aria-valuetext={t('a11y.deg', { n: shown })}>
       <Rings cx={cx} cy={cy} r={r} />
       <Animated.View style={[s.abs, { left: cx - r - 2, top: cy - r - 2, width: 2 * r + 4, height: 2 * r + 4 }, spin]}>
         <Wedge r={r} sector={reduceMotion ? REDUCED_SECTOR_DEG : SWEEP_SECTOR_DEG} />

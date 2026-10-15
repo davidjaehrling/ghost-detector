@@ -277,7 +277,6 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                     accessibilityRole="button"
                     accessibilityLabel={copy.skipLabel}
                     onPress={() => onAnswer('unsure')}
-                    hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
                     style={s.skip}
                   >
                     <Text style={s.skipText}>{copy.skip}</Text>
@@ -313,7 +312,7 @@ const s = StyleSheet.create({
   cursorRow: { flexDirection: 'row', alignItems: 'center' },
   cursor: { width: 9, height: 14, marginLeft: 4, backgroundColor: color.p4 },
   answerRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
-  skip: { minWidth: 44, minHeight: 28, alignItems: 'flex-end', justifyContent: 'flex-end' },
+  skip: { minWidth: 44, minHeight: 44, marginTop: -16, alignItems: 'flex-end', justifyContent: 'flex-end' },
   skipText: { ...type.lbS, color: color.p3 },
   note: { ...type.rdXS, color: color.p3, marginTop: 6, height: 36 },
 });
