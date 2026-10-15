@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { type LayoutChangeEvent, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdBanner } from '../src/ads/Banner';
+import { formatWindowShort } from '../src/ui/boot/activity';
 import {
   bestOnFile,
   casesLabel,
@@ -22,8 +23,10 @@ import { listScans, moonsLogged, nightsLogged, type ScanRecord } from '../src/st
 import { sound } from '../src/ui/audio';
 import { readHarness } from '../src/ui/harness';
 import { isDemoLog, seedDemoLog } from '../src/ui/log/demo';
+import { faultArmed } from '../src/state/faults';
 import { Placeholder } from '../src/ui/screens/Placeholder';
 import { color, type } from '../src/ui/tokens';
+import { openViewfinder } from '../src/ui/log/nav';
 import { copyOf, t, useLocale } from '../src/i18n';
 
 // The investigation log (docs/p6-brief.md section 3): cases grouped by location tag, a record row per
@@ -40,15 +43,26 @@ const copy = copyOf({
 
 const tierWord = (r: ScanRecord) => tierWordOf(r.outcome.tier);
 // CRITICAL is red wherever a tier word shows, as on the result card.
-const tierStyle = (r: ScanRecord) => (r.outcome.tier === 'critical' ? s.crit : null);
+const crit = { color: color.red };
+const tierStyle = (r: ScanRecord) => (r.outcome.tier === 'critical' ? crit : null);
 // The harness pins the clock so the moon table is the same on every run.
 const HARNESS_NOW = new Date(2026, 9, 13, 12, 0).getTime();
 const tagWord = tagLabel;
+// Column gaps are two spaces (A-05). Non-breaking, so a nested Text on web does not collapse them.
+const NB = '\u00A0';
+const gap = (text: string) => text.replace(/ {2,}/g, (m) => NB.repeat(m.length));
 const casesWord = casesLabel;
 
 export default function History() {
+  // Harness: ?fault=render stops this screen until RESET (web only; native never arms it).
+  if (faultArmed('render')) throw new Error('E-60 injected render fault');
   useLocale();
   const router = useRouter();
+  const fs = Math.max(1, PixelRatio.getFontScale());
+  // One vertical pitch at this font scale: every height below is a whole number of it, so the scroll
+  // viewport ends on a row edge at 1.0 and 1.3 alike.
+  const P = Math.ceil(PITCH * fs);
+  const s = useMemo(() => makeStyles(P), [P]);
   // Harness: ?static=1&log=demo3 seeds three tags before the first read.
   const [records] = useState(() => {
     if (readHarness().isStatic && isDemoLog(window.location?.search ?? '')) seedDemoLog();
@@ -66,26 +80,25 @@ export default function History() {
   const empty = records.length === 0;
   // Nothing plays here; a scene left running from the result ends.
   useEffect(() => sound.stop(), []);
-  // The one banner in the app sits in a fixed slot under the key band, 24 dp clear of every control.
+  // The scroll viewport is a whole number of 22 dp rows tall, so no row is cut at the foot of the glass.
+  const [boxH, setBoxH] = useState(0);
+  const headRows = (best ? 1 : 0) + (best ? 1 : 0) + (nights > 0 ? 1 : 0);
+  const scrollH = boxH > 0 ? Math.max(P * 2, Math.floor((boxH - headRows * P) / P) * P) : undefined;
+  // The one banner in the app sits in a fixed slot between the window and the key row, 32 dp or more
+  // clear of every row and key. The window gives up the height.
   return (
-    <View style={s.root}>
+    <>
       <Placeholder
         testID="screen-history"
         code={copy.code}
         graticule={false}
+        slot={<AdBanner />}
         keys={[
-          ...(empty
-            ? [
-                {
-                  testID: 'key-viewfinder',
-                  label: copy.emptyKey,
-                  legend: copy.emptyLegend,
-                  onPress: () => router.replace('/viewfinder'),
-                },
-                null,
-                null,
-              ]
-            : []),
+          // Plain navigation back to the finder, in slot 1 whether or not the log is empty. It is never
+          // an interstitial break: only the explicit return from a result is (src/ui/interstitial.ts).
+          { testID: 'key-viewfinder', label: copy.emptyKey, legend: copy.emptyLegend, onPress: () => openViewfinder(router) },
+          null,
+          null,
           {
             testID: 'key-forward',
             label: copy.nextLabel,
@@ -94,33 +107,36 @@ export default function History() {
           },
         ]}
       >
-        <View style={s.list} testID="history-list-box">
-          {nights > 0 || best ? (
-            <View style={s.head} testID="history-head">
-              {nights > 0 ? <Text style={s.nights} testID="history-nights">{t('history.nightsLine', { n: nights })}</Text> : null}
+        <View style={[s.list, { bottom: CODE_BOTTOM + P + 10 }]} testID="history-list-box" onLayout={(e: LayoutChangeEvent) => setBoxH(Math.round(e.nativeEvent.layout.height))}>
+          {headRows > 0 ? (
+            <View style={[s.head, { height: headRows * P }]} testID="history-head">
               {best ? (
                 <Text style={s.best} testID="history-best">
                   {t('history.bestLine', { spi: best.outcome.spi })}
                   <Text style={tierStyle(best)}>{tierWord(best)}</Text>
                 </Text>
               ) : null}
+              {best ? <Text style={s.nights} testID="history-catalogue-line">{t('history.catalogueHead', { count: cat.count, total: cat.total })}</Text> : null}
+              {nights > 0 ? <Text style={s.nights} testID="history-nights">{t('history.nightsLine', { n: nights })}</Text> : null}
             </View>
           ) : null}
-          <ScrollView testID="history-list" style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+          <ScrollView testID="history-list" style={[s.scroll, scrollH ? { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', height: scrollH } : null]} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
             {empty ? (
               <Text style={s.empty} testID="history-empty" accessibilityLabel={copy.empty}>
                 {copy.empty}
               </Text>
             ) : null}
-            {groups.map((g) => (
-              <View key={g.tag} testID={`history-group-${g.tag}`} style={s.group}>
-                <View style={s.tagRow} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
-                  <Text style={s.tagName}>{`${tagWord(g.tag)} · ${casesWord(g.count)}`}</Text>
-                  <Text style={s.tagPeak}>
+            {groups.map((g, gi) => (
+              <View key={g.tag} testID={`history-group-${g.tag}`} style={gi > 0 ? s.group : null}>
+                <View style={[s.tagRow, { height: P * (fs > 1 ? 3 : 2) }]} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
+                  <Text style={[s.tagName, { height: P }]}>{gap(`${tagWord(g.tag)}  ${casesWord(g.count)}`)}</Text>
+                  <Text style={[s.tagPeak, { height: P }]}>
                     {t('history.peak', { spi: g.peak.outcome.spi })}
                     <Text style={tierStyle(g.peak)}>{tierWord(g.peak)}</Text>
-                    {` · ${stamp(g.peak.createdAt)}`}
+                    {fs > 1 ? null : gap(`  ${stamp(g.peak.createdAt)}`)}
                   </Text>
+                  {/* At a larger font scale the stamp drops to its own line instead of wrapping into the first row. */}
+                  {fs > 1 ? <Text style={[s.tagPeak, { height: P }]}>{stamp(g.peak.createdAt)}</Text> : null}
                 </View>
                 {g.cases.map((r) => {
                   const status = caseStatus(r);
@@ -136,15 +152,24 @@ export default function History() {
                           params: { id: r.id },
                         })
                       }
-                      hitSlop={{ top: 4, bottom: 4 }}
-                      style={s.row}
+                      style={[s.row, { height: P * (status !== null && fs > 1 ? 3 : 2) }]}
                     >
-                      <Text style={s.rowMain} numberOfLines={1}>
-                        {`${r.id} · ${r.outcome.spi} `}
-                        <Text style={tierStyle(r)}>{tierWord(r)}</Text>
-                        <Text style={s.rowClock}>{` ${clock(r.createdAt)}`}</Text>
-                      </Text>
-                      {status === null ? null : (
+                      <View style={s.rowText}>
+                        <Text style={[s.rowMain, { height: Math.ceil(22 * fs) }]} numberOfLines={1}>
+                          {gap(`${r.id}  ${r.outcome.spi} `)}
+                          <Text style={tierStyle(r)}>{tierWord(r)}</Text>
+                        </Text>
+                        <Text style={[s.rowClock, { height: Math.ceil(18 * fs) }]} numberOfLines={1}>
+                          {clock(r.createdAt)}
+                        </Text>
+                        {/* At a larger font scale the status drops under the clock, so no column is squeezed. */}
+                        {status !== null && fs > 1 ? (
+                          <Text style={[s.rowClock, { height: Math.ceil(18 * fs), color: r.declined ? color.p3 : color.p4 }]} numberOfLines={1} testID={`history-status-${r.id}`}>
+                            {status}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {status === null || fs > 1 ? null : (
                         <Text style={[s.rowOpen, r.declined && s.archived]} numberOfLines={1}>
                           {status}
                         </Text>
@@ -159,7 +184,7 @@ export default function History() {
               {(empty ? [] : cat.rows).map((c) => (
                 <View key={c.cls} style={s.catRow} testID={`history-cat-${c.cls}`}>
                   <Text style={c.last ? s.catOn : s.catOff}>{`${c.prefix} ${c.cls}`}</Text>
-                  <Text style={c.last ? s.catOn : s.catOff}>{c.last ? t('history.logged', { id: c.last.id }) : t('history.unlogged')}</Text>
+                  <Text style={c.last ? s.catOn : s.catOff}>{c.last ? gap(t('history.logged', { id: c.last.id })) : t('history.unlogged')}</Text>
                 </View>
               ))}
             </View>
@@ -172,17 +197,17 @@ export default function History() {
               </View>
               {table.map((n) => (
                 <View key={n.date} style={s.catRow} testID={`history-moon-${n.date}`}>
-                  <Text style={s.catOn}>{n.date}</Text>
-                  <Text style={s.catOn}>{`${n.moonPct}% · ${n.index}/5`}</Text>
+                  <Text style={n.date === nextMoon ? s.catOn : s.catOff}>{n.date}</Text>
+                  <Text style={n.date === nextMoon ? s.catOn : s.catOff}>{`${n.moonPct}%`}</Text>
                 </View>
               ))}
+              {empty ? <Text style={s.moons} testID="history-window">{formatWindowShort(new Date(nowMs))}</Text> : null}
               {moons > 0 ? <Text style={s.moons} testID="history-moons">{t('history.moonsLine', { n: moons })}</Text> : null}
             </View>
             <Pressable
               testID="history-relay"
               accessibilityRole="button"
               accessibilityLabel={t(relay ? 'history.relayLabelOn' : 'history.relayLabelOff')}
-              hitSlop={{ top: 4, bottom: 4 }}
               onPress={() => router.push('/settings')}
               style={[s.row, s.relayRow]}
             >
@@ -191,62 +216,70 @@ export default function History() {
           </ScrollView>
         </View>
       </Placeholder>
-      <AdBanner />
-    </View>
+    </>
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.n3 },
+// One vertical pitch for the whole list: every row is a multiple of 22 dp, so the scroll viewport can
+// end on a row edge.
+const PITCH = 22;
+// The text line height before font scaling (the Text itself scales it).
+const BASE = 22;
+// The screen code sits CODE_BOTTOM dp above the glass foot (Placeholder readoutBlock) and is one line of
+// 22 dp times the font scale tall; the list ends 10 dp above it at every scale.
+const CODE_BOTTOM = 20;
+
+const makeStyles = (P: number) => StyleSheet.create({
   // Leaves the screen code line free along the bottom of the glass.
   list: {
     position: 'absolute',
     left: 12,
     right: 12,
     top: 10,
-    bottom: 52,
+    bottom: 52, // 1.0 value; the view overrides it per font scale
     backgroundColor: color.n0,
   },
   empty: { ...type.rdM, color: color.p4, paddingTop: 4 },
-  head: { paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: color.p1 },
-  nights: { ...type.rdM, color: color.p4 },
-  best: { ...type.rdXS, color: color.p3 },
+  head: { borderBottomWidth: 1, borderBottomColor: color.p1 },
+  best: { ...type.rdS, height: P, color: color.p4 },
+  nights: { ...type.rdXS, lineHeight: BASE, height: P, color: color.p3 },
   scroll: { flex: 1 },
-  content: { paddingBottom: 4 },
-  group: { marginTop: 10 },
-  tagRow: { paddingBottom: 2 },
-  tagName: { ...type.rdS, color: color.p4 },
-  tagPeak: { ...type.rdXS, color: color.p3 },
+  content: { paddingBottom: 0 },
+  group: { marginTop: P },
+  tagRow: { height: P * 2 },
+  tagName: { ...type.rdS, height: P, color: color.p4 },
+  tagPeak: { ...type.rdXS, lineHeight: BASE, height: P, color: color.p3 },
   row: {
-    minHeight: 36,
-    paddingVertical: 2,
+    height: P * 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: color.p1,
   },
-  rowMain: { ...type.rdS, color: color.p4, flexShrink: 1 },
-  rowClock: { ...type.rdXS, color: color.p3 },
+  rowText: { flexShrink: 1 },
+  rowMain: { ...type.rdS, height: 22, color: color.p4 },
+  rowClock: { ...type.rdXS, lineHeight: 18, height: 18, color: color.p3 },
   // A fixed right column, so the status never wraps under the case at 360 dp.
   rowOpen: { ...type.rdXS, color: color.p4, width: 98, flexShrink: 0, textAlign: 'right' },
   archived: { color: color.p3 },
-  crit: { color: color.red },
   section: {
     ...type.rdS,
+    height: P,
     color: color.p4,
-    paddingBottom: 2,
     borderBottomWidth: 1,
     borderBottomColor: color.p1,
   },
   catRow: {
-    minHeight: 22,
+    height: P,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   catOn: { ...type.rdXS, color: color.p4 },
   catOff: { ...type.rdXS, color: color.p3 },
-  moons: { ...type.rdXS, color: color.p4, marginTop: 4 },
-  relayRow: { marginTop: 10 },
+  moons: { ...type.rdXS, lineHeight: BASE, height: P, color: color.p4 },
+  relayRow: { marginTop: P },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

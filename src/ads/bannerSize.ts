@@ -14,10 +14,10 @@ export function anchoredAdaptiveHeight(width: number, screenHeight?: number): nu
   return screenHeight ? Math.max(ADAPTIVE_MIN_HEIGHT, Math.min(h, Math.floor(screenHeight * ADAPTIVE_MAX_SHARE))) : h;
 }
 
-/** The slot: the adaptive height plus the bottom safe-area inset, so the ad clears the gesture bar. */
+/** The slot with a bottom safe-area inset added. The history slot sits above the key row, so the screen passes 0. */
 export function bannerSlotHeight(width: number, bottomInset: number, screenHeight?: number): number {
   return anchoredAdaptiveHeight(width, screenHeight) + Math.max(0, Math.round(bottomInset));
 }
 
-/** Least distance from the slot to the nearest row, button or control above it, in dp. */
-export const BANNER_GAP = 24;
+/** Least distance from the slot to the nearest row, key or control, above or below it, in dp (D-045). */
+export const BANNER_GAP = 32;

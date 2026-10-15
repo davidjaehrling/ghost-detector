@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { IMPRESSUM_URL, PRIVACY_POLICY_URL } from '../src/ui/legal';
 import { Placeholder } from '../src/ui/screens/Placeholder';
+import { UnitBlock } from '../src/ui/screens/UnitBlock';
 import { color, type } from '../src/ui/tokens';
 import { copyOf, useLocale } from '../src/i18n';
 
@@ -26,6 +27,7 @@ export default function Legal() {
   return (
     <Placeholder
       testID="screen-legal"
+      graticule={false}
       code={copy.code}
       keys={[{ testID: 'key-forward', label: copy.nextLabel, legend: copy.next, onPress: () => router.back() }]}
     >
@@ -46,6 +48,7 @@ export default function Legal() {
         <Text style={s.about} testID="legal-about">
           {copy.about}
         </Text>
+        <UnitBlock testID="legal-unit" />
       </View>
     </Placeholder>
   );
@@ -61,7 +64,10 @@ const s = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: color.p1,
   },
-  label: { ...type.rdM, color: color.p3 },
+  // The Settings row style: B612 label, VT323 state, 48 dp rows on a p1 rule.
+  label: { ...type.lbM, color: color.p3 },
   state: { ...type.rdM, color: color.p2 },
   about: { ...type.rdXS, color: color.p3, marginTop: 12 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

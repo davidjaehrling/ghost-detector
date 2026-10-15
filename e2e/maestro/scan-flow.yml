@@ -1,0 +1,32 @@
+# Full scan flow: boot, calibration, viewfinder, CAPTURE, scan theatre, result, back.
+appId: com.ghostdetector.app
+---
+- runFlow: lib/start.yml
+- assertVisible:
+    id: screen-viewfinder
+- takeScreenshot: ${MAESTRO_PROFILE}-scan-01-viewfinder
+- tapOn:
+    id: key-capture
+- extendedWaitUntil:
+    visible:
+      id: screen-scan
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: scan-bar
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-scan-02-theatre
+- extendedWaitUntil:
+    visible:
+      id: screen-result
+    timeout: 60000
+- waitForAnimationToEnd:
+    timeout: 8000
+- takeScreenshot: ${MAESTRO_PROFILE}-scan-03-result
+- tapOn:
+    id: key-back
+- extendedWaitUntil:
+    visible:
+      id: key-capture
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-scan-04-back

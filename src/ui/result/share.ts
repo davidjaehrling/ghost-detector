@@ -19,7 +19,7 @@ export const shareCopy = {
   get cancelLabel() {
     return t('share.cancelLabel');
   },
-  ready: (id: string) => t('share.ready', { id }),
+  ready: () => t('share.ready'),
   get updated() {
     return t('share.updated');
   },
@@ -31,6 +31,13 @@ export const shareCopy = {
   },
   get storySub() {
     return t('share.storySub');
+  },
+  /** Hardware key legend: `9:16 STORY`, wrapped on the space by the key. */
+  get storyKey() {
+    return `${t('share.story')} ${t('share.storySub')}`;
+  },
+  get squareKey() {
+    return `${t('share.square')} ${t('share.squareSub')}`;
   },
   get storyLabel() {
     return t('share.storyLabel');

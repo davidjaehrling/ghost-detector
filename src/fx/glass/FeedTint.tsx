@@ -2,8 +2,8 @@ import { ImageShader, Rect, Shader, Skia, useImage, type SkImage, type SkRuntime
 import { memo, useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { color, fx } from '../../ui/tokens';
-import { PHOSPHOR, hexToRgb, withAlpha } from './color';
-import { FEED_LIFT, FEED_MIX } from './feed';
+import { hexToRgb, withAlpha } from './color';
+import { FEED_KNEE, FEED_LIFT, FEED_MIX, TINT_SKSL_FN } from './feed';
 import { SnapshotCanvas } from './snapshotRegistry';
 
 // The camera feed seen through the tube (D-017): the picture's luma mapped onto the phosphor ramp
@@ -25,37 +25,17 @@ uniform float2 size;
 uniform float k;
 uniform float mixAmt;
 uniform float lift;
+uniform float knee;
 uniform float3 bg;
-uniform float3 c0;
-uniform float3 c1;
-uniform float3 c2;
-uniform float3 c3;
-uniform float3 c4;
-uniform float3 c5;
-
-const half3 W = half3(0.299, 0.587, 0.114);
-
-float3 ramp(float s) {
-  s = clamp(s, 0.0, 1.0) * 5.0;
-  if (s < 1.0) return mix(c0, c1, s);
-  if (s < 2.0) return mix(c1, c2, s - 1.0);
-  if (s < 3.0) return mix(c2, c3, s - 2.0);
-  if (s < 4.0) return mix(c3, c4, s - 3.0);
-  return mix(c4, c5, s - 4.0);
-}
-
+${TINT_SKSL_FN}
 half4 main(float2 xy) {
   float2 p = (xy / size) * 2.0 - 1.0;
   float2 q = p * (1.0 + k * dot(p, p));
   float2 uv = (q + 1.0) * 0.5 * size;
   float2 edge = min(uv, size - uv);
   float inside = clamp(min(edge.x, edge.y) + 0.5, 0.0, 1.0);
-  float3 c = float3(image.eval(clamp(uv, float2(0.5), size - 0.5)).rgb);
-  float l = dot(half3(c), W);
-  float3 o = mix(c, ramp(l), mixAmt);
-  float3 floorC = c0 * lift;
-  o = floorC + o * (1.0 - floorC);
-  return half4(half3(mix(bg, o, inside)), 1.0);
+  half3 o = feedTint(image.eval(clamp(uv, float2(0.5), size - 0.5)).rgb, mixAmt, lift, knee);
+  return half4(mix(half3(bg), o, half(inside)), 1.0);
 }`;
 
 export function makeFeedEffect(): SkRuntimeEffect {
@@ -106,8 +86,7 @@ const FeedCanvas = memo(function FeedCanvas({ image, w, h, mix, lift, barrel }: 
   // Cover crop, centred (as resizeMode="cover").
   const s = Math.max(w / img.width(), h / img.height());
   const rect = { x: (w - img.width() * s) / 2, y: (h - img.height() * s) / 2, width: img.width() * s, height: img.height() * s };
-  const ph = PHOSPHOR.map(hexToRgb);
-  const uniforms = { size: [w, h], k: barrel, mixAmt: mix, lift, bg: hexToRgb(color.n0), c0: ph[0]!, c1: ph[1]!, c2: ph[2]!, c3: ph[3]!, c4: ph[4]!, c5: ph[5]! };
+  const uniforms = { size: [w, h], k: barrel, mixAmt: mix, lift, knee: FEED_KNEE, bg: hexToRgb(color.n0) };
   return (
     <SnapshotCanvas style={{ width: w, height: h }} pointerEvents="none">
       <Rect x={0} y={0} width={w} height={h}>

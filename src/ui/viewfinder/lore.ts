@@ -33,9 +33,8 @@ export const TAG_LABEL: Record<LocationTag, string> = copyOf({
 // Harness photos map to the tag they were shot for.
 export const FIXTURE_TAG = { cellar: 'cellar', attic: 'attic', bright: 'hallway', black: 'cellar', outdoors: 'outdoors' } as const satisfies Record<string, LocationTag>;
 
-// Under this window width the long legends switch to their short forms so the tag
-// row keeps 12 px between its 44 dp hit areas.
-export const TAG_SHORT_BELOW = 380;
+// The tag row always uses the short legends (A-25): they keep 12 px between the 44 dp hit areas in every
+// language at every width. The long forms stay in TAG_LABEL for the accessibility label.
 const TAG_SHORT: Record<LocationTag, string> = copyOf({
   cellar: 'tag.short.cellar',
   attic: 'tag.short.attic',
@@ -44,19 +43,8 @@ const TAG_SHORT: Record<LocationTag, string> = copyOf({
   outdoors: 'tag.short.outdoors',
 });
 
-const ALL_TAGS = Object.keys(TAG_LABEL) as LocationTag[];
-
-// The long legends are used from TAG_SHORT_BELOW up, and only while they still leave 12 px between
-// the hit areas: a language with longer words (DACHBODEN, DORMITORIO) falls back to its short forms.
-export function longLegendsFit(windowW: number): boolean {
-  if (windowW < TAG_SHORT_BELOW) return false;
-  const widths = ALL_TAGS.map((tg) => Math.max(TAG_HIT, TAG_LABEL[tg].length * tagChWidth(windowW)));
-  const free = glassWidth(windowW) - TAG_ROW_PAD * 2 - widths.reduce((a, b) => a + b, 0);
-  return free / (ALL_TAGS.length - 1) >= TAG_GAP_MIN;
-}
-
-export function tagLegend(tag: LocationTag, windowW: number): string {
-  return longLegendsFit(windowW) ? TAG_LABEL[tag] : TAG_SHORT[tag];
+export function tagLegend(tag: LocationTag): string {
+  return TAG_SHORT[tag];
 }
 
 // B612 Mono 10 px advances 6.5 px; with 1 px tracking that is 7.5 px per character (measured). Under
@@ -76,7 +64,7 @@ export const glassWidth = (windowW: number) => windowW - 72;
 
 // Smallest gap between neighbouring hit areas when the five tags are spread across the row.
 export function tagRowGap(tags: readonly LocationTag[], windowW: number): number {
-  const widths = tags.map((tg) => Math.max(TAG_HIT, tagLegend(tg, windowW).length * tagChWidth(windowW)));
+  const widths = tags.map((tg) => Math.max(TAG_HIT, tagLegend(tg).length * tagChWidth(windowW)));
   const free = glassWidth(windowW) - TAG_ROW_PAD * 2 - widths.reduce((a, b) => a + b, 0);
   return free / (tags.length - 1);
 }

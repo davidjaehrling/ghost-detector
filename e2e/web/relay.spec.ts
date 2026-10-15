@@ -1,10 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
+import { RELAY_SCRIM } from '../../src/ui/relay/scrim';
+import { startClockAtEvening, waitPrinted } from './relay';
 
 // P6-05 part 1. The FIELD LOG RELAY opt-in on the viewfinder and the Settings RELAY row.
 // The log demo seeds six cases (session=1 lifts the first-session rule), so the first return from a
 // result is eligible. The web stub records every call in window.__notifyLog.
 
-const BODY = 'Fit the relay? At most one field-log line a night. Index, moon or an open case. 18:00 to 22:00. No sound. Lines are simulated.';
+const BODY = 'Fit the relay? At most one field-log line a night. Index, moon, an open case or the catalogue. 18:00 to 22:00, no sound. Lines are simulated.';
 
 // `getPermission` is the silent re-read of the stored permission on app open; it never asks. The
 // opt-in assertions are about what is asked and created, so it is left out of the list.
@@ -30,12 +32,32 @@ async function toSettings(page: Page) {
 const start = (page: Page, extra = '') => page.goto(`/history?static=1&log=demo3&session=1${extra}`);
 
 test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result line, once only', async ({ page }) => {
+  await startClockAtEvening(page);
   await start(page, '&notify=granted');
   await backFromACase(page);
   const mod = page.getByTestId('relay-module');
   await expect(mod).toBeVisible();
+  await waitPrinted(page);
   await expect(mod).toContainText('FIELD LOG RELAY');
-  await expect(page.getByTestId('relay-body')).toHaveText(BODY);
+  // The body prints one sentence per line; the text content is the whole body, in order.
+  expect(((await page.getByTestId('relay-body').textContent()) ?? '').replace(/\s+/g, ' ').trim()).toBe(BODY);
+  // The catalogue is named (A-82).
+  await expect(page.getByTestId('relay-body')).toContainText('the catalogue');
+  // Screen text, not a dialog (A-80): no keyline box, no radius, a p1 top rule, inside the glass and above the keys.
+  const glass = (await page.getByTestId('screen-viewfinder').last().getByTestId('screen-viewfinder-glass').boundingBox())!;
+  const mbox = (await mod.boundingBox())!;
+  expect(mbox.x).toBeGreaterThanOrEqual(glass.x - 0.5);
+  expect(mbox.x + mbox.width).toBeLessThanOrEqual(glass.x + glass.width + 0.5);
+  expect(mbox.y + mbox.height).toBeLessThanOrEqual(glass.y + glass.height);
+  const frame = await mod.evaluate((e) => {
+    const cs = getComputedStyle(e);
+    return { top: cs.borderTopWidth, topColor: cs.borderTopColor, left: cs.borderLeftWidth, right: cs.borderRightWidth, bottom: cs.borderBottomWidth, radius: cs.borderTopLeftRadius, anim: cs.animationName, transform: cs.transform };
+  });
+  expect(frame).toMatchObject({ top: '1px', topColor: 'rgb(28, 74, 42)', left: '0px', right: '0px', bottom: '0px', radius: '0px', anim: 'none', transform: 'none' });
+  // The simulated sentence is p4 (124, 232, 149); the other sentences p3 (79, 180, 106).
+  const colours = await page.getByTestId('relay-body').evaluate((e) => Array.from(e.children).map((c) => getComputedStyle(c).color));
+  expect(colours.at(-1)).toBe('rgb(124, 232, 149)');
+  expect(new Set(colours.slice(0, -1))).toEqual(new Set(['rgb(79, 180, 106)']));
   // Nothing has been requested yet: the dialog follows the tap.
   expect(await calls(page)).toEqual([]);
   // The keys sit on the hardware row, slots 1 and 2 (CAPTURE keeps slot 4), inside the key band and outside the module.
@@ -59,6 +81,22 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
       return [cs.color, cs.fontSize, cs.fontWeight, cs.fontFamily, bs.backgroundColor, bs.borderColor];
     });
   expect(await style('relay-fit')).toEqual(await style('relay-notnow'));
+  // Both are lit keys: the one lit treatment (p5 legend, 1 px p3 rim).
+  const rim = (id: string) => page.getByTestId(id).evaluate((e) => `${getComputedStyle(e).outlineWidth} ${getComputedStyle(e).outlineStyle} ${getComputedStyle(e).outlineColor}`);
+  expect(await rim('relay-fit')).toBe('1px solid rgb(79, 180, 106)');
+  expect(await rim('relay-notnow')).toBe('1px solid rgb(79, 180, 106)');
+  expect((await style('relay-fit'))[0]).toBe('rgb(212, 255, 220)');
+  // The band fill is the strip scrim alpha (p3 body text stays at 4.5:1, asserted in scrim.test.ts).
+  const fill = await mod.evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(Number(/rgba\(10, 15, 11, ([\d.]+)\)/.exec(fill)![1])).toBeCloseTo(RELAY_SCRIM, 2);
+  // The band is short enough that the feed's reticle stays whole: the crosshair is above its top rule and the
+  // lower corner brackets (22 px arms) are below its bottom edge, in the gap above the HUD band.
+  const reticle = (await page.getByTestId('screen-viewfinder').last().getByTestId('hud-reticle').boundingBox())!;
+  expect(mbox.y).toBeGreaterThanOrEqual(reticle.y + reticle.height / 2 + 9);
+  expect(mbox.y + mbox.height).toBeLessThanOrEqual(reticle.y + reticle.height - 22);
+  // The two-sentence merge: the window and the quiet promise are one printed line.
+  await expect(page.getByTestId('relay-body')).toContainText('18:00 to 22:00, no sound.');
+  expect(await page.getByTestId('relay-body').evaluate((e) => e.children.length)).toBe(5);
   // CAPTURE stays live in its usual slot (last, right of the relay keys, same row).
   const cap = (await page.getByTestId('key-capture').boundingBox())!;
   expect(cap.x).toBeGreaterThan(slots[1]!.x);
@@ -66,6 +104,8 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   await expect(page.getByTestId('key-capture')).toBeEnabled();
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot('relay-module.png', { maxDiffPixels: 150 });
+  // Nothing was scheduled or asked while the offer was up (only FIT RELAY schedules).
+  expect(await calls(page)).toEqual([]);
 
   await page.getByTestId('relay-fit').click();
   await expect(page.getByTestId('relay-result')).toHaveText('Relay fitted. Change in Settings.');
@@ -81,9 +121,29 @@ test('the opt-in: module copy, equal keys, permission only on FIT RELAY, result 
   expect((await calls(page)).filter((c) => c === 'requestPermission')).toHaveLength(1);
 });
 
+test('at 428 the module sits inside the glass, clear of the keys, and no sentence is clipped', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'android-428x926', '428 check');
+  await start(page, '&notify=granted');
+  await backFromACase(page);
+  const mod = page.getByTestId('relay-module');
+  await expect(mod).toBeVisible();
+  await waitPrinted(page);
+  const glass = (await page.getByTestId('screen-viewfinder').last().getByTestId('screen-viewfinder-glass').boundingBox())!;
+  const m = (await mod.boundingBox())!;
+  const fit = (await page.getByTestId('relay-fit').boundingBox())!;
+  const not = (await page.getByTestId('relay-notnow').boundingBox())!;
+  expect(m.x).toBeGreaterThanOrEqual(glass.x);
+  expect(m.x + m.width).toBeLessThanOrEqual(glass.x + glass.width + 0.5);
+  expect(m.y + m.height).toBeLessThan(Math.min(fit.y, not.y));
+  const clipped = await page.getByTestId('relay-body').evaluate((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1);
+  expect(clipped).toBe(false);
+  expect(Math.round(fit.width)).toBe(Math.round(not.width));
+});
+
 test('a system denial reports it, and the Settings row opens system settings without asking again', async ({ page }) => {
   await start(page, '&notify=denied');
   await backFromACase(page);
+  await waitPrinted(page);
   await page.getByTestId('relay-fit').click();
   await expect(page.getByTestId('relay-result')).toHaveText('Relay not fitted. Change in Settings.');
   await page.getByTestId('relay-result-box').click();
@@ -100,6 +160,7 @@ test('CAPTURE during the module counts as NOT NOW: no request, offered stays tru
   await start(page, '&notify=granted');
   await backFromACase(page);
   await expect(page.getByTestId('relay-module')).toBeVisible();
+  await waitPrinted(page);
   await page.getByTestId('key-capture').click();
   await expect(page.getByTestId('relay-module')).toHaveCount(0);
   expect(await calls(page)).toEqual([]);
@@ -113,6 +174,7 @@ test('CAPTURE during the module counts as NOT NOW: no request, offered stays tru
 test('NOT NOW is final: no request, no second module, a RELAY row in Settings', async ({ page }) => {
   await start(page, '&notify=granted');
   await backFromACase(page);
+  await waitPrinted(page);
   await page.getByTestId('relay-notnow').click();
   await expect(page.getByTestId('relay-module')).toHaveCount(0);
   expect(await calls(page)).toEqual([]);
@@ -242,4 +304,69 @@ test('a system denial schedules nothing', async ({ page }) => {
   await backFromACase(page);
   await page.waitForTimeout(500);
   expect((await log(page)).filter((e) => e.call === 'schedule' || e.call === 'cancel')).toEqual([]);
+});
+
+// A-80: the offer prints line by line at telemetry speed (under ?static=1 it is whole at once, so this walk
+// is not static: three stored cases, a real return from a result).
+test('the offer prints one line at a time and ends whole', async ({ page }) => {
+  const rec = (id: string, spi: number, tier: string) => ({
+    id, createdAt: Date.now() - 1000 * Number(id), tag: 'hall', seed: 95 + Number(id),
+    photoUri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+    outcome: { tier, spi, figureShown: false, smudge: false, jumpScare: false, scanDurationMs: 7000 },
+    profile: { class: 'KEEPER', era: 'Era est. 1905 to 1973', name: 'RSD-9', traits: [], signatureDecodedPct: 61 },
+  });
+  await page.addInitScript((r) => localStorage.setItem('fs4.scans.v1', JSON.stringify(r)), [rec('0003', 62, 'active'), rec('0002', 55, 'active'), rec('0001', 50, 'active')]);
+  await page.goto('/result/0001?session=1&notify=granted');
+  await expect(page.getByTestId('result-spi')).toHaveText('50', { timeout: 10_000 });
+  await page.waitForTimeout(600);
+  await page.getByTestId('key-back').click();
+  await expect(page.getByTestId('relay-module')).toBeVisible();
+  const printed = () => page.getByTestId('relay-body').evaluate((e) => Array.from(e.children).filter((c) => getComputedStyle(c).opacity === '1').length);
+  const seen: number[] = [];
+  for (let i = 0; i < 14; i++) {
+    seen.push(await printed());
+    await page.waitForTimeout(120);
+  }
+  const total = await page.getByTestId('relay-body').evaluate((e) => e.children.length);
+  // Monotonic, starting short of the whole body and ending with every sentence printed.
+  expect([...seen].sort((a, b) => a - b)).toEqual(seen);
+  expect(seen[0]).toBeLessThan(total);
+  expect(seen.at(-1)).toBe(total);
+  expect(new Set(seen).size).toBeGreaterThan(1);
+});
+
+// D-045 6, Compliance condition: FIT RELAY ignores presses until the simulated sentence has printed.
+test('FIT RELAY before the print completes asks nothing; a press after it does', async ({ page }) => {
+  const rec = (id: string, spi: number) => ({
+    id, createdAt: Date.now() - 1000 * Number(id), tag: 'hall', seed: 95 + Number(id),
+    photoUri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+    outcome: { tier: 'active', spi, figureShown: false, smudge: false, jumpScare: false, scanDurationMs: 7000 },
+    profile: { class: 'KEEPER', era: 'Era est. 1905 to 1973', name: 'RSD-9', traits: [], signatureDecodedPct: 61 },
+  });
+  await page.addInitScript((r) => localStorage.setItem('fs4.scans.v1', JSON.stringify(r)), [rec('0003', 62), rec('0002', 55), rec('0001', 50)]);
+  await page.goto('/result/0001?session=1&notify=granted');
+  await expect(page.getByTestId('result-spi')).toHaveText('50', { timeout: 10_000 });
+  await page.waitForTimeout(600);
+  await page.getByTestId('key-back').click();
+  const mod = page.getByTestId('relay-module');
+  await expect(mod).toBeVisible();
+  await expect(mod).toHaveAttribute('data-printed', '0');
+  await page.getByTestId('relay-fit').click({ force: true });
+  await page.waitForTimeout(100);
+  expect(await calls(page)).toEqual([]);
+  await expect(page.getByTestId('relay-result')).toHaveCount(0);
+  await waitPrinted(page);
+  await page.getByTestId('relay-fit').click();
+  await expect(page.getByTestId('relay-result')).toBeVisible();
+  expect(await calls(page)).toEqual(['createChannel:field-log', 'requestPermission']);
+});
+
+// D-045 6: nothing is scheduled without FIT RELAY, whichever way the offer is left.
+test('leaving the offer by CAPTURE or NOT NOW schedules nothing; only FIT RELAY does', async ({ page }) => {
+  await start(page, `&notify=granted&clock=${encodeURIComponent('2026-10-13T12:00:00')}`);
+  await backFromACase(page);
+  await waitPrinted(page);
+  await page.getByTestId('relay-notnow').click();
+  await page.waitForTimeout(500);
+  expect((await page.evaluate(() => (window.__notifyLog ?? []).filter((e) => e.call === 'schedule' || e.call === 'requestPermission'))).length).toBe(0);
 });

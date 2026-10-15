@@ -1390,6 +1390,70 @@
         }
       ],
       "passes": true
+    },
+    {
+      "id": "P8-01",
+      "phase": "P8",
+      "description": "Impeccable audit and polish sweep",
+      "acceptance": "The Art Director runs the Impeccable audit over boot, viewfinder, scan, result, history, settings, relay module and share card at 360, 390 and 428 and in all four locales, against docs/instrument-bible.md and plan §6; every finding is tagged fix-now or ruled out in docs/decisions.md; Builder A, FX and Copy apply the fix-now list inside their trees; goldens regenerated once at the end of the sweep; a panel round (Dr. Hollow x2, Art Director) scores every screen at 8 or above on the P2 rubric with no dimension under 7, within at most two rounds",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P8-02",
+      "phase": "P8",
+      "description": "Design-loop leftovers closed",
+      "acceptance": "The named leftovers from D-022 (boot sticker and transient, viewfinder feed tint and GEO arc, scan persistence and readout columns, result THERM ambient label and duplicate CASE band), D-029 (history key legend wrapping as SETTING S at 360), D-034 (card grain versus print time, LED plate on the square card) and D-035 (card strip order, footer size, housing plate, format keys on the hardware row, module keyline, two-night spacing) are each built or ruled out with a reason in docs/decisions.md; no new leftover list is opened",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P8-03",
+      "phase": "P8",
+      "description": "Performance budget",
+      "acceptance": "Measured on the L2 harness and recorded in docs/perf.md (Builder A folds in docs/perf-fx.md): boot to interactive viewfinder under 2.5 s from a cold web load at CPU throttle x2; scan theatre p50 at 55 fps or better at x2 (p50, p95 and mean at x4 reported in the CI log, not asserted); card print (draw plus encode) guarded against regression at no more than 1.5x the x1 baseline recorded in docs/perf-fx.md, with the 1.5 s phone budget from D-034 measured at phone check 3 (cut card grain first if over); cold-start JS bundle size reported and guarded at no more than 1.1x its recorded baseline; every guard is a Playwright or vitest assertion that fails CI on regression, with no test marked as expected to fail or skipped; the main-thread cost of the scan theatre (React re-renders on the 20 Hz scan clock and the per-redraw GPU read-back from P3-09) reduced in a joint FX and Builder A pass with before and after numbers at x4",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P8-04",
+      "phase": "P8",
+      "description": "Accessibility and system settings",
+      "acceptance": "Every interactive element carries an accessibilityRole and label in the active locale (hardware keys, glass keys, Settings rows, relay module, share keys); touch targets 44 dp or more; the app respects reduce-motion (sweep, grain flicker and transients fall to a steady state) and font scaling up to 1.3 without clipping on the key screens (goldens at fontScale 1.3 for result, settings and history at 390); contrast of every readout on the phosphor measured at 4.5:1 or better; a Playwright a11y scan (axe) reports no serious or critical issue on the key screens",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P8-05",
+      "phase": "P8",
+      "description": "Crash-free flows and error states",
+      "acceptance": "Every state transition in the flow spec runs under fault injection without an unhandled error: camera permission denied and revoked mid-session, storage read and write failure, ad load failure and consent timeout, notification permission denied, share sheet cancelled, Skia and CanvasKit load failure (fallback view with the instrument voice), locale missing; an ErrorBoundary per route renders an in-fiction FAULT screen with a RESET key and logs through the analytics allowlist; Playwright specs cover each injected fault; no console error in any e2e run",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P8-06",
+      "phase": "P8",
+      "description": "Three Maestro device profiles",
+      "acceptance": "The Release Manager extends .eas/workflows/e2e-android.yml to run the Maestro flows (boot, full scan flow, settings, share, relay) on three device profiles (small 360x800 at mdpi, medium 390x844 at xhdpi, large tablet or 428x926 at xxhdpi) with screenshots and a video per profile uploaded as artifacts; flows validated locally with maestro studio dry-run where possible; the first live run waits on the owner's EXPO_TOKEN (owner-blocked clause)",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P8-07",
+      "phase": "P8",
+      "description": "Believability loop on real photographs",
+      "acceptance": "With 5 to 8 owner-provided photographs in e2e/fixtures/real/ (licence recorded in assets/LICENSES.md), the compositor is tuned until the panel's believability mean reaches 8 on the real set without regressing the synthetic fixtures; findings logged; this claim is owner-blocked until the photographs arrive",
+      "evidence": [],
+      "passes": false
+    },
+    {
+      "id": "P8-08",
+      "phase": "P8",
+      "description": "Refuter sweep of P8 and phone check 3",
+      "acceptance": "The Refuter tries to disprove P8-01 to P8-06 from command outputs, goldens, perf numbers and the diff (including that the perf guards fail when the budget is exceeded and the a11y scan is not vacuous); HOLDs flipped by the Director; phone check 3 list prepared for the owner (FCM inert before consent per D-035, print time, ad test units, notification delivery)",
+      "evidence": [],
+      "passes": false
     }
   ]
 }

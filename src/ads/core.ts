@@ -24,6 +24,8 @@ export interface FullscreenAd {
 }
 
 export interface AdsBackend {
+  /** Optional cap on requestInfoUpdate in ms (default CONSENT_TIMEOUT_MS). Tests and the web harness shorten it. */
+  consentTimeoutMs?: number;
   /** UMP requestInfoUpdate. Runs on every launch. */
   requestInfoUpdate(): Promise<ConsentInfo>;
   /** UMP loadAndShowConsentFormIfRequired, then the refreshed info. Google's own form, never restyled. */
@@ -80,6 +82,9 @@ export type Ads = {
 /** A load that has not answered by now counts as failed (the slot may retry on the next request). */
 const LOAD_TIMEOUT_MS = 20_000;
 
+/** An info update that has not answered by now counts as no consent. The form itself is never timed. */
+export const CONSENT_TIMEOUT_MS = 15_000;
+
 const NO_CONSENT: ConsentSummary = { ...EMPTY_CONSENT, status: 'error' };
 
 export function createAds(backend: AdsBackend, store: ConsentStore): Ads {
@@ -122,7 +127,16 @@ export function createAds(backend: AdsBackend, store: ConsentStore): Ads {
 
   const run = async (): Promise<ConsentState> => {
     try {
-      let info = await backend.requestInfoUpdate();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('consent info update timed out')), backend.consentTimeoutMs ?? CONSENT_TIMEOUT_MS);
+      });
+      let info: ConsentInfo;
+      try {
+        info = await Promise.race([backend.requestInfoUpdate(), timeout]);
+      } finally {
+        clearTimeout(timer);
+      }
       info = await backend.loadAndShowConsentFormIfRequired();
       await commit(info);
     } catch {

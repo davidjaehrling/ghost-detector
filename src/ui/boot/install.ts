@@ -47,6 +47,12 @@ export function identityFromSeed(seed: number, date: Date): InstallIdentity {
   return { serial: serialFor(yy, ww, unit), cal: iso(date), pruef: String(pruef).padStart(2, '0') };
 }
 
+// DUE is CAL plus twelve months, month precision: `2026-10-13` -> `2027-10`.
+export function dueFor(cal: string): string {
+  const [y, m] = cal.split('-');
+  return `${Number(y) + 1}-${m}`;
+}
+
 // The install seed is created once and kept in the platform storage. Never throws.
 const KEY = 'install-seed';
 let memorySeed: number | null = null;

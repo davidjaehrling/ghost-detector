@@ -26,7 +26,7 @@ so it runs before Skia lands. P3 swaps the internals; the props stay.
     is sized to `TIER_EXTENT` of the frame: ACTIVE 11%, STRONG 13%, CRITICAL 14.5% (the panel
     asked for about 11, 14 and 17%; plan section 6 caps the ghost at 15%, so STRONG and CRITICAL
     are scaled into the cap: a ruling for the Director). QUIET and TRACE keep the region size.
-  - `echo` (CRITICAL only): a second copy of the whole figure 8 to 12 px off (`ECHO_PX`, round 3,
+  - `echo` (CRITICAL only): a second copy of the whole figure 12 to 16 px off (`ECHO_PX`, A-47 in P8; 8 to 12 in round 3,
     D-022; 6 to 10 in round 2), mostly sideways, direction seeded, at 45% of the main figure's
     alpha (`ECHO_ALPHA`; 0.15 in round 2, which vanished under the blur and smear). It takes
     `ECHO_SHARE` 0.15 out of the copies' `COPY_ALPHA_SUM` budget, so the stacked alpha is at most
@@ -723,9 +723,24 @@ comes from `text.ts` (`cardTexts` lists them; `CardRender.texts` lists the runs 
 lines); the renderer has no path, line or arc drawing.
 - Housing detail (D-034 b, Bible section 2), in the dead bands only (story: above the nameplate
   and beside the footer, outside the safe zone 250 to 1580; square: beside the nameplate and the
-  footer): four Phillips screws with seeded slot angles, one burred; seeded paint-wear streaks; a
-  textless calibration sticker rotated -1.5° with its bottom-right corner lifted over a shadow. One
-  hue (the n ramp), rects and circles only, no asset files.
+  footer): four Phillips screws with seeded slot angles, one burred; seeded paint-wear streaks; the
+  calibration sticker (A-92, below). Rects, circles and text only, no asset files.
+- Sticker and engraving (A-92, D-049 ruling), measured in `__tests__/hem.test.ts`:
+  - Story sticker: `paper` with `ink` print, `sticker.head1` without its ` ·` in B612 Mono Bold,
+    then `CAL 2026-10-13` and `PRÜF 07` in Regular, all at the footer's size (56 px, cap 42.6
+    against the 38.4 floor), pitch 1.4 cap, turned -1.5° about its centre at (580, 114) in the top
+    band, corner lifted. Bounds after the turn: EN 584 x 211 at (288, 8), DE 620 x 212, ES/PT 764 x
+    216 at (198, 6); inside the screws (71 to 1009) and above the nameplate (228). The calibration
+    stamp is the install's (`getInstallIdentity`, as the housing shows it); the probe and the tests
+    use the harness unit's `CAL 2026-10-13` / `PRÜF 07`.
+  - Story engraving: `FIELD SPECTROMETER` / `MADE IN W.-GERMANY`, B612 Mono Bold 28 px (lbXS at
+    390 scaled) in `n2` over a 30% `n6` lip 1.5 px down, right-aligned at 992, pitch 29 px, its
+    last baseline on the footer's first (1837): box 324 x 50 at (668, 1787). Footer line 1 ends at
+    520 (148 px clear), line 2's cap top is 1856 (19 px clear); the reading box ends at 1772. Drawn
+    only where it clears every footer line by 12 px.
+  - Square: the free space right of the footer run is 195 px wide (footer 48 to 825, right screw
+    at 1056); the head line alone needs 315 px plus padding at the floor size (32 px), so the square
+    carries no sticker and no engraving (its composition does not change, D-049).
 - Photo: the compositor drawn with no React tree (`compositor/offscreen.ts`, `drawComposite`) with
   the same set-up, ghost layer, shader and uniforms as `<Composite>` in its final state. The panel
   is laid out at half the card's photo size and drawn at 2x (HIRES_SCALE). `figure.ts` repeats the

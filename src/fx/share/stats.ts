@@ -14,8 +14,12 @@ export function statsFromImage(img: SkImage): RegionStats | null {
   if (!surface) return null;
   const p = Skia.Paint();
   surface.getCanvas().drawImageRect(img, Skia.XYWHRect(0, 0, img.width(), img.height()), Skia.XYWHRect(0, 0, w, h), p);
+  p.dispose();
   surface.flush();
-  const px = surface.makeImageSnapshot().readPixels(0, 0, { width: w, height: h, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul });
+  const snap = surface.makeImageSnapshot();
+  const px = snap.readPixels(0, 0, { width: w, height: h, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul });
+  snap.dispose();
+  surface.dispose();
   if (!px) return null;
   return statsFromRgba(px as Uint8Array, w, h);
 }

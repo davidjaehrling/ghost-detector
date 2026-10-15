@@ -23,8 +23,9 @@ export const STICKER_TILT = 9;
 export const CARD_BOTTOM = 12;
 
 export function bootRows({ h, div, calibrating, pinnedH }: { h: number; div: number; calibrating: boolean; pinnedH: number }): number {
+  // The calibration block sits on the glass bottom just above the answer keys; the grid takes the rest.
   const readout = calibrating ? READOUT_H_CALIB : READOUT_H_BOOT;
-  const pinned = pinnedH + (calibrating ? CARD_BOTTOM : STICKER_BOTTOM + STICKER_TILT);
+  const pinned = calibrating ? pinnedH + CARD_BOTTOM : pinnedH + STICKER_BOTTOM + STICKER_TILT;
   const rows = Math.floor((h - GRID_TOP - READOUT_GAP - readout - BLOCK_GAP - pinned) / div);
   return Math.max(BOOT_ROWS_MIN, Math.min(BOOT_ROWS_MAX, rows));
 }

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { showPrivacyOptions } from '../src/ads';
 import { notifyBackend } from '../src/state/notifyBackend';
 import { cycleIntensity, intensityWord } from '../src/state/intensity';
@@ -12,7 +12,9 @@ import { calmLine, setHaptics, setJumpScares, setSound } from '../src/state/sett
 import { useConsent } from '../src/state/useConsent';
 import { useSettings } from '../src/state/useSettings';
 import { sound } from '../src/ui/audio';
+import { faultArmed } from '../src/state/faults';
 import { Placeholder } from '../src/ui/screens/Placeholder';
+import { UnitBlock } from '../src/ui/screens/UnitBlock';
 import { color, type } from '../src/ui/tokens';
 import type { LangSetting } from '../src/i18n';
 import { copyOf, cycleLanguage, t, useLanguageSetting, useLocale } from '../src/i18n';
@@ -37,6 +39,8 @@ const copy = copyOf({
 });
 
 export default function Settings() {
+  // Harness: ?fault=render stops this screen until RESET (web only; native never arms it).
+  if (faultArmed('render')) throw new Error('E-60 injected render fault');
   useLocale();
   const languageSetting = useLanguageSetting();
   const router = useRouter();
@@ -97,7 +101,7 @@ export default function Settings() {
       graticule={false}
       keys={[{ testID: 'key-forward', label: copy.nextLabel, legend: copy.next, onPress: () => router.back() }]}
     >
-      <View style={s.list} testID="settings-list">
+      <ScrollView style={s.list} contentContainerStyle={s.listContent} testID="settings-list" showsVerticalScrollIndicator={false}>
         {rows.map((r) => (
           <View key={r.id} style={s.rowWrap}>
             <Pressable
@@ -105,6 +109,7 @@ export default function Settings() {
               accessibilityRole={r.value ? 'button' : 'switch'}
               accessibilityLabel={r.value ? t('settings.rowLabel', { label: r.label, value: r.value }) : r.label}
               accessibilityState={r.value ? {} : { checked: r.on }}
+              aria-checked={r.value ? undefined : r.on}
               onPress={r.toggle}
               style={s.rowIn}
             >
@@ -155,13 +160,17 @@ export default function Settings() {
             {calmLine()}
           </Text>
         ) : null}
-      </View>
+        {/* Below ABOUT, so the simulated line is never the part that scrolls out of view. */}
+        <UnitBlock />
+      </ScrollView>
     </Placeholder>
   );
 }
 
 const s = StyleSheet.create({
-  list: { position: 'absolute', left: 12, right: 12, top: 12, backgroundColor: color.n0, paddingHorizontal: 4 },
+  // Above the screen code line along the bottom of the glass.
+  list: { position: 'absolute', left: 12, right: 12, top: 12, bottom: 48, backgroundColor: color.n0 },
+  listContent: { paddingHorizontal: 4 },
   rowWrap: { borderBottomWidth: 1, borderBottomColor: color.p1 },
   rowIn: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   row: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: color.p1 },
@@ -172,3 +181,5 @@ const s = StyleSheet.create({
   about: { ...type.rdXS, color: color.p3, marginTop: 12 },
   note: { ...type.rdXS, color: color.p5, marginTop: 12 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

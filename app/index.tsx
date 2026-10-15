@@ -25,6 +25,7 @@ import {
 } from '../src/ui/boot/parts';
 import { dayKey } from '../src/ui/boot/seed';
 import { selfTestReadings } from '../src/ui/boot/selftest';
+import { bootSpike } from '../src/fx/scope';
 import { PrimingTransient, usePrimingTransient } from '../src/ui/boot/Transient';
 import { Readout } from '../src/ui/Readout';
 import { composeFields } from '../src/ui/readoutFields';
@@ -38,7 +39,6 @@ const copy = copyOf({
   trig: 'hud.trig',
   timebase: 'hud.timebase',
   selftestOk: 'boot.selftestOk',
-  transient: 'boot.transient',
   actIdx: 'boot.actIdx',
   moon: 'boot.moon',
   nextPeak: 'boot.nextPeak',
@@ -76,6 +76,7 @@ const CARD_H_GUESS = 167; // calibration card, until it has been measured
 const ACT_PAD = 8;
 const ACT_BASE = ACT_PAD + 22;
 const ACT_CH = 11.2;
+const ACT_PEAK_MS = 400;
 const CONFIRM_MS = 1400;
 const CONFIRM_MS_STATIC = 800; // the warp snapshot can hold the thread; the e2e must still see the note
 
@@ -127,9 +128,21 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
   // The ACT IDX and MOON rows draw once VT323 has loaded; the warped snapshot waits until both have.
   const [actRowsDrawn, setActRowsDrawn] = useState(0);
   const onActRowReady = useCallback(() => setActRowsDrawn((n) => n + 1), []);
-  const actFontReady = actRowsDrawn >= 2;
+  const actFontReady = actRowsDrawn >= 3;
+  // ACT IDX prints at p4, the brightest line on the glass. Only its value peaks at p5 for 400 ms
+  // when the line first draws, then settles (A-12); a harness run is the settled state.
+  const [peakDone, setPeakDone] = useState(false);
+  useEffect(() => {
+    if (!actFontReady || isStatic) return;
+    const id = setTimeout(() => setPeakDone(true), ACT_PEAK_MS);
+    return () => clearTimeout(id);
+  }, [actFontReady, isStatic]);
+  const actPeak = actFontReady && !isStatic && !peakDone;
   const [warmDone, setWarmDone] = useState(isStatic);
-  const transient = usePrimingTransient({ armed: warmDone, still: isStatic, peak: spike });
+  // The transient varies per launch (A-11); the harness (static or peak) freezes it so goldens stay fixed.
+  const [launchSeed] = useState(() => Date.now());
+  const spikeParams = useMemo(() => bootSpike(launchSeed, isStatic || spike), [launchSeed, isStatic, spike]);
+  const transient = usePrimingTransient({ armed: warmDone, still: isStatic || reduceMotion, peak: spike, fires: spikeParams.fires });
 
   const goOn = () => router.push('/viewfinder');
   const onAcknowledge = () => {
@@ -172,7 +185,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
         warp: WARP_BOOT,
         warmUp: true,
         onWarmUpDone: () => setWarmDone(true),
-        refreshKey: `${stage}-${typing ? 'typing' : 'typed'}-${answer ?? ''}-${transient.logged ? 'logged' : 'open'}-${actFontReady ? 'font' : 'nofont'}`,
+        refreshKey: `${stage}-${typing ? 'typing' : 'typed'}-${answer ?? ''}-${transient.logged ? 'logged' : 'open'}-${actFontReady ? 'font' : 'nofont'}-${actPeak ? 'peak' : 'rest'}`,
       }}
     >
       {({ w, h }) => {
@@ -180,13 +193,14 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
         const gridLeft = Math.round((w - div * GRID_COLS) / 2);
         const rows = bootRows({ h, div, calibrating, pinnedH: calibrating ? cardH : stickerH });
         const gridBottom = GRID_TOP + div * rows;
-        const activity = `${copy.actIdx} ${index}/5 · ${copy.moon} ${moonPct}%`;
-        const idxLen = `${copy.actIdx} ${index}/5`.length;
+        const activity = `${copy.actIdx} ${index}/5  ${copy.moon} ${moonPct}%`;
+        const valueX = ACT_PAD + (copy.actIdx.length + 1) * ACT_CH;
+        const moonX = valueX + (`${index}/5`.length + 2) * ACT_CH;
         return (
           <>
             <Graticule w={w} h={h} rows={rows} />
             <IdleTrace w={w} seed={dayKey(date) + 1} rows={rows} />
-            <PrimingTransient w={w} rows={rows} amp={transient.amp} still={isStatic} reduceMotion={reduceMotion} />
+            <PrimingTransient w={w} rows={rows} amp={transient.amp} still={isStatic} reduceMotion={reduceMotion} spike={spikeParams} />
             <GridLabels w={w} fw={copy.firmware} trig={copy.trig} tb={copy.timebase} rows={rows} />
 
             <View style={[s.readout, { left: snap4(gridLeft), top: snap4(gridBottom + READOUT_GAP) }]} testID="readout">
@@ -203,7 +217,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
               {calibrating ? null : <Text style={s.stM}>{copy.selftestOk.slice(0, Math.max(0, typed - lineLen.reduce((n, p) => n + p, 0)))}</Text>}
               {calibrating ? null : (
                 <Text style={[s.transient, { opacity: transient.logged ? 1 : 0 }]} testID="transient">
-                  {copy.transient}
+                  {t('boot.transient', { count: spikeParams.count })}
                 </Text>
               )}
               <View style={s.activity}>
@@ -213,10 +227,11 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                   {activity}
                 </Text>
                 <SnapshotCanvas style={s.activityCanvas} pointerEvents="none">
-                  <PhosphorText text={`${copy.actIdx} ${index}/5`} x={ACT_PAD} y={ACT_BASE} size={28} step={5} static={isStatic} reduceMotion={reduceMotion} onReady={onActRowReady} />
+                  <PhosphorText text={copy.actIdx} x={ACT_PAD} y={ACT_BASE} size={28} step={4} bloom={false} static={isStatic} reduceMotion={reduceMotion} onReady={onActRowReady} />
+                  <PhosphorText text={`${index}/5`} x={valueX} y={ACT_BASE} size={28} step={actPeak ? 5 : 4} bloom={actPeak} static={isStatic} reduceMotion={reduceMotion} onReady={onActRowReady} />
                   <PhosphorText
-                    text={`· ${copy.moon} ${moonPct}%`}
-                    x={ACT_PAD + (idxLen + 1) * ACT_CH}
+                    text={`${copy.moon} ${moonPct}%`}
+                    x={moonX}
                     y={ACT_BASE}
                     size={28}
                     step={3}
@@ -243,7 +258,7 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
 
             {calibrating ? (
               <View
-                style={[s.calib, { bottom: CARD_BOTTOM }]}
+                style={s.calib}
                 testID="calibration"
                 onLayout={(e: LayoutChangeEvent) => setCardH(Math.round(e.nativeEvent.layout.height))}
               >
@@ -262,7 +277,6 @@ function Boot({ params: { isStatic, date, dated, calib, spike } }: { params: Boo
                     accessibilityRole="button"
                     accessibilityLabel={copy.skipLabel}
                     onPress={() => onAnswer('unsure')}
-                    hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
                     style={s.skip}
                   >
                     <Text style={s.skipText}>{copy.skip}</Text>
@@ -291,14 +305,16 @@ const s = StyleSheet.create({
   peak: { ...type.rdS, color: color.p3, height: 24 },
   stickerSlot: { position: 'absolute', left: 10, right: 10, bottom: STICKER_BOTTOM },
   countdown: { ...type.rdS, color: color.p3, height: 24 },
-  calib: { position: 'absolute', left: 12, right: 12 },
+  calib: { position: 'absolute', left: 12, right: 12, bottom: CARD_BOTTOM },
   cardHead: { ...type.lbS, color: color.p3, height: 14 },
   rule: { height: 1, backgroundColor: color.p1, marginTop: 4, marginBottom: 8 },
   question: { ...type.rdS, color: color.p4 },
   cursorRow: { flexDirection: 'row', alignItems: 'center' },
   cursor: { width: 9, height: 14, marginLeft: 4, backgroundColor: color.p4 },
   answerRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
-  skip: { minWidth: 44, minHeight: 28, alignItems: 'flex-end', justifyContent: 'flex-end' },
+  skip: { minWidth: 44, minHeight: 44, marginTop: -16, alignItems: 'flex-end', justifyContent: 'flex-end' },
   skipText: { ...type.lbS, color: color.p3 },
   note: { ...type.rdXS, color: color.p3, marginTop: 6, height: 36 },
 });
+
+export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

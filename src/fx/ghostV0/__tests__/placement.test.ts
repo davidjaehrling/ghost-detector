@@ -307,9 +307,9 @@ describe('tier extent and the CRITICAL echo (D-017)', () => {
     }
   });
 
-  it('adds exactly one echo 8 to 12 px off the figure at 45% of its alpha, on CRITICAL only (D-022)', () => {
-    expect(ECHO_PX).toEqual([8, 12]);
-    expect(ECHO_ALPHA).toBe(0.45);
+  it('adds exactly one echo 12 to 16 px off the figure at 55% of its alpha, on CRITICAL only (D-022, A-47)', () => {
+    expect(ECHO_PX).toEqual([12, 16]);
+    expect(ECHO_ALPHA).toBe(0.55);
     const dirs = new Set<string>();
     for (let seed = 0; seed < 300; seed++) {
       const crit = placeGhost(null, FRAMES[2]!, seed, { tier: 'critical' });
@@ -324,6 +324,11 @@ describe('tier extent and the CRITICAL echo (D-017)', () => {
       // Alpha ratio to the main figure (Placement.opacity is the main figure's alpha).
       expect(crit.echo!.alpha).toBe(ECHO_ALPHA);
       dirs.add(`${Math.sign(crit.echo!.dx)}`);
+      // A-47: the copies stay asymmetric: no motion copy sits on the echo or on its mirror image.
+      for (const c of crit.offsetCopies) {
+        expect(Math.hypot(c.dx - crit.echo!.dx, c.dy - crit.echo!.dy)).toBeGreaterThan(2);
+        expect(Math.hypot(c.dx + crit.echo!.dx, c.dy + crit.echo!.dy)).toBeGreaterThan(2);
+      }
       for (const tier of ['quiet', 'trace', 'active', 'strong'] as const) expect(placeGhost(null, FRAMES[2]!, seed, { tier }).echo).toBeUndefined();
       expect(placeGhost(null, FRAMES[2]!, seed).echo).toBeUndefined();
     }

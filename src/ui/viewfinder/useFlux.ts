@@ -10,17 +10,19 @@ const TICK_MS = 100;
 // The flux the viewfinder shows. Native: the device magnetometer at 10 Hz, converted to mG.
 // Web, a device without the sensor, and ?static=1: the seeded walk (Bible section 3), so goldens
 // and the browser harness stay deterministic. `active` false (blurred or backgrounded) stops both.
+// `calm` (the OS reduced-motion setting) holds the seeded walk where it is: that walk is decoration. A real
+// sensor reading is the player moving the phone, not motion the app adds, so it still comes through.
 // Returns the sample and whether it comes from the sensor.
-export function useFlux({ seed, isStatic, active }: { seed: number; isStatic: boolean; active: boolean }): { sample: FluxSample; fromSensor: boolean } {
+export function useFlux({ seed, isStatic, active, calm = false }: { seed: number; isStatic: boolean; active: boolean; calm?: boolean }): { sample: FluxSample; fromSensor: boolean } {
   const [walk] = useState(() => createFluxWalk(seed));
   const [sample, setSample] = useState<FluxSample>(() => walk.next());
   const [fromSensor, setFromSensor] = useState(false);
 
   useEffect(() => {
-    if (isStatic || !active || fromSensor) return;
+    if (isStatic || calm || !active || fromSensor) return;
     const id = setInterval(() => setSample(walk.next()), TICK_MS);
     return () => clearInterval(id);
-  }, [isStatic, active, fromSensor, walk]);
+  }, [isStatic, calm, active, fromSensor, walk]);
 
   useEffect(() => {
     if (isStatic || !active || Platform.OS === 'web') return;

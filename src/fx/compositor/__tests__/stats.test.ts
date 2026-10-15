@@ -251,7 +251,7 @@ describe('motion copies and blur', () => {
     }
   });
 
-  it('draws one visible second copy on CRITICAL: 8 to 12 px off, 45% of the main alpha (D-022)', () => {
+  it('draws one visible second copy on CRITICAL: 12 to 16 px off, 55% of the main alpha (D-022, A-47)', () => {
     for (let seed = 1; seed < 400; seed++) {
       const crit = placeGhost(null, { w: 318, h: 303 }, seed, { tier: 'critical' });
       const layers = layerCopies(crit);
@@ -260,10 +260,10 @@ describe('motion copies and blur', () => {
       expect(layers.length).toBe(m.length + 2);
       expect(layers.at(-1)).toEqual({ dx: 0, dy: 0, alpha: 1 });
       const echo = layers[0]!;
-      expect(echo.alpha / layers.at(-1)!.alpha).toBeCloseTo(0.45, 9);
+      expect(echo.alpha / layers.at(-1)!.alpha).toBeCloseTo(0.55, 9);
       const d = Math.hypot(echo.dx, echo.dy);
-      expect(d).toBeGreaterThanOrEqual(8);
-      expect(d).toBeLessThanOrEqual(12);
+      expect(d).toBeGreaterThanOrEqual(12);
+      expect(d).toBeLessThanOrEqual(16);
       // It is the strongest copy after the figure, so it reads as a second exposure, not a smear step.
       for (const c of layers.slice(1, -1)) expect(c.alpha).toBeLessThan(echo.alpha / 2);
       // Union box (figure, copies and echo) within 15% of the panel.

@@ -1,3 +1,4 @@
+import { fault } from '../state/faults';
 import type { AdKind, AdsBackend, ConsentInfo, FullscreenAd, FullscreenKind } from './core';
 
 // Web no-op. Never loads the native module; records every call in window.__adsLog for the L2 harness
@@ -10,6 +11,8 @@ import type { AdKind, AdsBackend, ConsentInfo, FullscreenAd, FullscreenKind } fr
 //   ?purpose1=0|1          TCF Purpose 1 (default 1)
 //   ?privacyOptions=1      the PRIVACY entry is required
 //   ?adReady=0             the rewarded ad never loads (DEEP SCAN OFFLINE)
+//   ?fault=ad-load         every fullscreen ad fails to load
+//   ?fault=consent-timeout the consent info update never answers
 //   ?reward=1|0            whether the fake rewarded show earns the reward (default 1)
 
 export type AdsLogEntry = { t: number; /** epoch ms */ at: number; call: string; args: unknown[] };
@@ -65,8 +68,11 @@ function info(): ConsentInfo {
 }
 
 export const backend: AdsBackend = {
+  // Short under the fault so the spec need not wait out the production timeout.
+  consentTimeoutMs: fault('consent-timeout') ? 800 : undefined,
   async requestInfoUpdate() {
     record('requestInfoUpdate');
+    if (fault('consent-timeout')) return new Promise<ConsentInfo>(() => {});
     return info();
   },
   async loadAndShowConsentFormIfRequired() {
@@ -94,6 +100,7 @@ export const backend: AdsBackend = {
     return {
       async load() {
         record(`${kind}Load`);
+        if (fault('ad-load')) return false;
         return kind === 'interstitial' || query().get('adReady') !== '0';
       },
       async show() {

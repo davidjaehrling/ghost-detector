@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { color, font, radius, size, space, type } from '../tokens';
-import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyLayout, legendFit } from '../keyLayout';
+import { KEY_GUTTER, KEY_SLOTS, KEY_W, keyIsLit, keyLayout, legendFit } from '../keyLayout';
 import { stickerShowsSerial } from '../serial';
 import { GRID_TOP } from './layout';
 import { mulberry32 } from './seed';
-import { copyOf } from '../../i18n';
+import { copyOf, useLocale } from '../../i18n';
 
 // ---------- typed self-test ----------
 
@@ -45,7 +45,7 @@ const screwAngles = [0, 38, 14, 62];
 
 // 10 px bezel screw. Placed by the parent in the bezel margin so it clears the
 // glass and the nameplate.
-export function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burred?: boolean }) {
+export const Screw = memo(function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burred?: boolean }) {
   const a = burred ? 24 : screwAngles[corner];
   return (
     <View style={[st.screw, corner === 0 && st.tl, corner === 1 && st.tr, corner === 2 && st.bl, corner === 3 && st.br]}>
@@ -56,23 +56,23 @@ export function Screw({ corner, burred = false }: { corner: 0 | 1 | 2 | 3; burre
       {burred ? <View style={st.notch} /> : null}
     </View>
   );
-}
+});
 
 const PLATE_SCREW = 6;
 
-export function PlateScrew({ style }: { style: object }) {
+export const PlateScrew = memo(function PlateScrew({ style }: { style: object }) {
   return (
     <View style={[st.tiny, style]}>
       <View style={st.tinySlot} />
     </View>
   );
-}
+});
 
 // ---------- thumb wear ----------
 
 // Paint rubbed through to n4 where thumbs grip: a tapered 1 to 2 px streak,
 // low alpha. `side` picks the housing edge.
-export function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${number}%`; length: number }) {
+export const Wear = memo(function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${number}%`; length: number }) {
   const end = Math.round(length * 0.25);
   const mid = length - end * 2;
   return (
@@ -82,7 +82,7 @@ export function Wear({ side, top, length }: { side: 'left' | 'right'; top: `${nu
       <View style={[st.wearSeg, { height: end, width: 1, opacity: 0.12 }]} />
     </View>
   );
-}
+});
 
 // ---------- graticule ----------
 
@@ -177,13 +177,16 @@ export function GridLabels({ w, fw, trig, tb, sens, rows = GRID_ROWS }: { w: num
 
 // Bible section 3: lit LEDs differ by brightness only (p3, p4, p4, p5, then red
 // for CRITICAL). `lit` counts from the bottom; boot shows only the power LED.
+// Module-level so the memoised PlateScrew sees the same style object on every render.
+const TOP_SCREW = { top: 2 };
+const BOTTOM_SCREW = { bottom: 2 };
 const LED_COLORS = [color.p3, color.p4, color.p4, color.p5, color.red] as const;
 
-export function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
+export const LedLadder = memo(function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
   const leds = [0, 1, 2, 3, 4];
   return (
     <View style={st.plate}>
-      <PlateScrew style={{ top: 2 }} />
+      <PlateScrew style={TOP_SCREW} />
       <View style={st.ledCol}>
         {leds.map((i) => {
           const lit = i < Math.max(1, litCount);
@@ -198,10 +201,10 @@ export function LedLadder({ lit: litCount = 1 }: { lit?: number }) {
           );
         })}
       </View>
-      <PlateScrew style={{ bottom: 2 }} />
+      <PlateScrew style={BOTTOM_SCREW} />
     </View>
   );
-}
+});
 
 // ---------- calibration sticker ----------
 
@@ -263,24 +266,22 @@ export function Sticker({
 // the paper is as wide as its longest line.
 export const MINI_STICKER_H = 41;
 
-export function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string; pruef: string; bg?: string; style?: object }) {
+export const MiniSticker = memo(function MiniSticker({ cal, pruef, bg = color.n3, style }: { cal: string; pruef: string; bg?: string; style?: object }) {
+  useLocale(); // memoised: re-render on a language change only
+  // The paper is as wide as its longest line and never wider than the strip under the window (clear of the
+  // window's corner screw); a line longer than that wraps whole instead of running to the edge (A-53).
+  const { width } = useWindowDimensions();
   const meta = `CAL ${cal} · PRÜF ${pruef}`;
   return (
-    <View style={[st.mini, style]} pointerEvents="none" testID="sticker-mini" accessibilityLabel={`${copy.head1} ${copy.head2} ${meta}`}>
-      <Text style={st.miniHead} numberOfLines={1}>
-        {copy.head1}
-      </Text>
-      <Text style={st.miniHead} numberOfLines={1}>
-        {copy.head2}
-      </Text>
-      <Text style={st.miniMeta} numberOfLines={1}>
-        {meta}
-      </Text>
+    <View style={[st.mini, { maxWidth: width - 100 }, style]} pointerEvents="none" testID="sticker-mini" accessibilityLabel={`${copy.head1} ${copy.head2} ${meta}`}>
+      <Text style={st.miniHead}>{copy.head1}</Text>
+      <Text style={st.miniHead}>{copy.head2}</Text>
+      <Text style={st.miniMeta}>{meta}</Text>
       <View style={[st.miniCut, { borderBottomColor: bg }]} />
       <View style={st.miniFlap} />
     </View>
   );
-}
+});
 
 // ---------- key row ----------
 
@@ -295,13 +296,12 @@ export type KeySlot = {
   onPress: () => void;
   /** Engraved but not live: n4 legend, press does nothing. */
   inert?: boolean;
-  /** The one offered action: p5 backlit legend and a 1 px p3 keyline. */
+  /** Lit key (bible section 2): p5 legend with a 1 px p3 rim. `primary` and `backlit` are the same treatment. */
   primary?: boolean;
-  /** Backlit legend: p5 text, no keyline. */
   backlit?: boolean;
 };
 
-export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
+export const KeyRow = memo(function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
   const { width } = useWindowDimensions();
   const { gap, left } = keyLayout(width - KEY_GUTTER * 2);
   return (
@@ -314,23 +314,30 @@ export function KeyRow({ slots }: { slots: readonly (KeySlot | null)[] }) {
       </View>
     </View>
   );
-}
+});
 
-// Engraved dummy cap: same footprint as a live key and a blank seat, no legend. The engraving is
-// one shallow ring (a dark groove with a light lower edge), which reads as a pressed-in mark and
-// never as a dash or a dotted label.
-export function DummyCap() {
+// Blank moulded cap: same footprint as a live key, no legend and no glyph. The only mark is a 1 px
+// recess ring inset from the edge, which reads as moulding and never as a dash, a dot or an icon.
+// It is not focusable, has no label and takes no press.
+export const DummyCap = memo(function DummyCap() {
   return (
-    <View testID="key-dummy" style={st.dummy} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={st.ringLip} />
+    <View
+      testID="key-dummy"
+      style={st.dummy}
+      pointerEvents="none"
+      focusable={false}
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       <View style={st.ring} />
     </View>
   );
-}
+});
 
 // Rubber key: darker n2 face, 1 px n4 top highlight. Legend is lbM (Bible
 // section 5 sets key legends at 13 px). Long legends wrap on the space.
-export function Key({ testID, label, legend, onPress, inert = false, primary = false, backlit = false }: KeySlot) {
+export const Key = memo(function Key({ testID, label, legend, onPress, inert = false, primary = false, backlit = false }: KeySlot) {
   const fit = legendFit(legend);
   return (
     <Pressable
@@ -339,14 +346,14 @@ export function Key({ testID, label, legend, onPress, inert = false, primary = f
       accessibilityLabel={label}
       accessibilityState={{ disabled: inert }}
       onPress={inert ? undefined : onPress}
-      style={({ pressed }) => [st.key, primary && st.keyPrimary, pressed && !inert && st.keyDown]}
+      style={({ pressed }) => [st.key, keyIsLit({ primary, backlit }) && st.keyPrimary, pressed && !inert && st.keyDown]}
     >
-      <Text style={[st.keyLegend, fit, inert && st.keyLegendInert, (primary || backlit) && st.keyLegendPrimary]} numberOfLines={2}>
+      <Text style={[st.keyLegend, fit, inert && st.keyLegendInert, keyIsLit({ primary, backlit }) && st.keyLegendPrimary]} numberOfLines={2} maxFontSizeMultiplier={1}>
         {legend}
       </Text>
     </Pressable>
   );
-}
+});
 
 const st = StyleSheet.create({
   screw: {
@@ -459,7 +466,8 @@ const st = StyleSheet.create({
   mini: {
     alignSelf: 'flex-start',
     backgroundColor: color.paper,
-    paddingHorizontal: 7,
+    paddingLeft: 9,
+    paddingRight: 11, // the lifted corner takes 7 px of the last line
     paddingTop: 4,
     paddingBottom: 4,
     transform: [{ rotate: '-1.5deg' }],
@@ -510,6 +518,5 @@ const st = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ring: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n1 },
-  ringLip: { position: 'absolute', width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: color.n4, opacity: 0.55, transform: [{ translateY: 1 }] },
+  ring: { position: 'absolute', left: 5, right: 5, top: 5, bottom: 5, borderRadius: 3, borderWidth: 1, borderColor: color.n1 },
 });

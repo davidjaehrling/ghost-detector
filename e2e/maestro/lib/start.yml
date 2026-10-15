@@ -1,0 +1,27 @@
+# Fresh install state to the viewfinder. Used by every flow except boot.
+# Camera is denied on purpose: the viewfinder then uses the stored frame (VF · STORED), CAPTURE stays live,
+# no camera hardware is needed and the interstitial gate stays closed (src/ui/interstitialParams.ts),
+# so nothing interrupts a flow. UMP consent cannot appear on a build with test ad IDs and no
+# google-services.json (src/ads); with a real consent setup it would show here, before the ACK key.
+appId: com.ghostdetector.app
+---
+- launchApp:
+    clearState: true
+    permissions:
+      camera: deny
+      notifications: unset
+- extendedWaitUntil:
+    visible: ".*SELFTEST OK.*"
+    timeout: 30000
+- tapOn:
+    id: key-acknowledge
+- extendedWaitUntil:
+    visible:
+      id: key-calib-yes
+    timeout: 10000
+- tapOn:
+    id: key-calib-yes
+- extendedWaitUntil:
+    visible:
+      id: key-capture
+    timeout: 15000

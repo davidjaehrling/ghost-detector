@@ -35,13 +35,18 @@ Backstory, ten lines:
 ## 2. Physical form on a phone
 
 Frame at 390 × 844 (scale linearly for 360 and 428):
+- One chassis on every screen (boot, viewfinder, scan, result, history, settings, legal, the FAULT screen): the same housing, nameplate, window position and width, screws, LED plate and key row. A mode never changes the shape of the hardware; only the glass content changes. The one geometry exception is the history banner slot below.
 - Housing fills the whole screen behind the status bar. Colour `n3` with a 1 px `n4` top-edge highlight and a 2 px `n1` bottom shadow line. No gradients beyond a 6% lightness falloff toward the corners (cast metal, lit from above).
 - Nameplate: riveted aluminium strip, 358 × 28 px, top of the housing, 16 px side gutter. Fill `n5`, engraved text `n2`, two 4 px rivets at 8 px from each end. Text: `VELDEN  FS-4/87-P` left, serial right.
 - Screen window: one rounded rectangle, 362 × 420 px on the main views, corner radius 18 px, inset 14 px from the housing edge. The glass shows 2 px of `n1` inner shadow on the top and left (the tube sits recessed), plus a barrel curvature of 1.5% applied by the CRT shader.
 - Fasteners: four Phillips screws on the bezel at the window's corners, 10 px heads, slots rotated to fixed seeded angles (never all aligned). One screw per install is seeded as slightly burred: a 1 px brighter notch.
-- LED ladder plate: bolted to the right of the window on the scan and result views, see §3.
-- Key row: rubber keys 72 × 44 px, radius 6 px, legend in B612 Mono caps, 88 px band at the bottom above the gesture area. Keys are Pressable views on a Skia-drawn key face.
-- Calibration sticker: bottom-left of the housing, rotated -1.5°, one corner lifted 2 px with a shadow.
+- LED ladder plate: bolted to the right of the window on every screen, see §3. Outside scan and result only LED 1 (power) is lit.
+- Key row: rubber keys 72 × 44 px, radius 6 px, legend in B612 Mono caps, 88 px band at the bottom above the gesture area. Keys are Pressable views on a Skia-drawn key face. The row never moves between screens. A slot with no function is a blank moulded cap: no glyph, no legend, not focusable, no accessibility label.
+  - Lit key: a key that waits for a second press, or is the one way on (FIT RELAY, NOT NOW, RESET), shows its legend at `p5`-bright with a 1 px `p3` rim. One lit treatment for every key.
+  - DEEP SCAN is hardware key 4 on the result (STRONG and CRITICAL, and ACTIVE where offered; QUIET and TRACE put `LOG` or a blank cap there). It is a two-step key: the first press arms it (key lit) and prints the arm line on the glass directly above key 4, right-aligned at key width, `p4` or brighter, legend size or larger, two lines where a locale needs it, never clipped: `Resolves class, era, EVP. Sponsored video plays first. DEEP SCAN again to run.` The second press runs it; any other key disarms. A press within 500 ms of the result appearing does nothing. Key and line are hidden in share, format, printing and fault, and the key goes blank once the deep scan has run (`DEEP SCAN COMPLETE.` prints in its place).
+  - Share format: after SHARE the row reads `CANCEL` / `9:16 STORY` / `1:1 SQUARE` / blank cap, legends localised; THERM is dark while choosing. The glass keeps one line, `Print field card. Format?`. No format boxes on the glass.
+- History banner slot: the only ad position in the app. A fixed-height strip of plain housing paint between the window bottom and the key row, at least 32 dp clear of every key and list row; the window shortens to make room, the gap never does. Empty (web, before consent, no fill) it shows no seam, outline or tint; filled, the banner carries a 1 px boundary and is never tinted to the phosphor.
+- Calibration sticker: bottom-left of the housing, rotated -1.5°, one corner lifted 2 px with a shadow. Present on every screen once the first-launch sticker has been acknowledged.
 - Wear: paint rubbed through to `n4` on both long edges where thumbs grip (two 40 to 70 px streaks, seeded), legend on the most-used key 15% fainter, a 6 px scuff on the nameplate. Wear is fixed per install and never changes during use.
 
 Drawn in Skia: housing, bezel, screws, nameplate, sticker, screen glass, graticule, needle, LED ladder, scale bars, all phosphor text inside the screen, and every effect in §6. One Canvas per screen, one shader stack for the glass.
@@ -89,12 +94,13 @@ K-II style LED ladder:
 - Lit LEDs differ by brightness, never hue: `p3`, `p4`, `p4`, `p5`. LED 5 is the only coloured part of the device: `red`, lit for CRITICAL only.
 - Unlit LEDs: lens `n2` with a 1 px `n4` specular dot at 10 o'clock. Lit LEDs add a 6 px bloom at 35% alpha.
 - Live mode: the ladder follows the flux deviation from the GEO band. LED 5 never lights in live mode, only on a CRITICAL result.
+- Field card (share story and square): the same plate, scaled, bolted to the right of the reading row with two screws, lit to the tier exactly as on the device (LED 5 red on CRITICAL only). It is the device part that reads at thumbnail size.
 
 FLIR-style scale bar (thermal view):
 - Vertical bar on the right edge of the thermal image, 10 × 220 px, with 1 px `n4` keyline.
 - Palette `PH-WHT` (phosphor white-hot): coldest `p0`, then `p1` to `p5` for the warmest. The ironbow palette in the digest is not used; it would add five hues.
 - Max temperature label at the top, min at the bottom, both in `p4` VT323 16 px. A 6 px triangle pointer on the left edge marks the cold-spot value.
-- Centre crosshair 15 px with a spot readout box (`SP1 -5.9 °C`) top-left of the image, palette name bottom-left.
+- Centre crosshair 15 px with a spot readout box (`SP1 -5.9 °C`) top-left of the image. No palette-name label: the data strip (case, SPI, time, ΔT MIN, `SIMULATED`) stays on the thermal view and covers that corner, and the disclosure wins the corner.
 
 ## 4. Colour
 

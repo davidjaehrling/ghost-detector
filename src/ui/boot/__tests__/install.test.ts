@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIXED_SEED, getInstallIdentity, identityFromSeed, luhnCheckDigit, luhnValid, serialFor } from '../install';
+import { FIXED_SEED, dueFor, getInstallIdentity, identityFromSeed, luhnCheckDigit, luhnValid, serialFor } from '../install';
 import { formatSelfTest, selfTestReadings } from '../selftest';
 
 describe('luhn', () => {
@@ -69,5 +69,12 @@ describe('selfTestReadings', () => {
     expect(lines[0]).toMatch(/^FLUX {2}\s*\d+ mG {3}OK$/);
     expect(lines[1]).toMatch(/^THERM [ ]*[+-]\d\.\d °C {3}OK$/);
     expect(lines[2]).toMatch(/^ACOUST [ ]*-\d+ dBFS OK$/);
+  });
+});
+
+describe('dueFor', () => {
+  it('is CAL plus twelve months at month precision', () => {
+    expect(dueFor('2026-10-13')).toBe('2027-10');
+    expect(dueFor('2026-01-01')).toBe('2027-01');
   });
 });

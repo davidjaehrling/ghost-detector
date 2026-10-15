@@ -1,3 +1,4 @@
+import { fault } from './faults';
 import { type NotifyBackend, type ScheduleBackend, type SystemPermission } from './relay';
 
 // Web stub: no notification API is touched. Every call lands in window.__notifyLog for the L2
@@ -27,7 +28,7 @@ const record = (call: string, extra: Partial<NotifyLogEntry> = {}) => {
 
 // Read once at load: the router drops the query on a navigation, and the flag must outlive that.
 const flag = new URLSearchParams(typeof window !== 'undefined' ? (window.location?.search ?? '') : '').get('notify');
-const answer = (): 'granted' | 'denied' | null => (flag === 'granted' || flag === 'denied' ? flag : null);
+const answer = (): 'granted' | 'denied' | null => (fault('notify-denied') ? 'denied' : flag === 'granted' || flag === 'denied' ? flag : null);
 
 let asked = false;
 

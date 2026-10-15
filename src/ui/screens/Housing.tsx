@@ -1,15 +1,14 @@
-import { type ReactNode, useMemo, useState } from 'react';
-import { type LayoutChangeEvent, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { type ReactNode, memo, useMemo, useState } from 'react';
+import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Glass, type GlassProps } from '../../fx/glass';
 import { FIXED_SEED, type InstallIdentity, getInstallIdentity, readInstallSeed } from '../boot/install';
 import { Key, type KeySlot, KeyRow, LedLadder, MiniSticker, Screw, Wear } from '../boot/parts';
 import { readHarness } from '../harness';
-import { plateSerial } from '../serial';
-import { color, font, radius, space, type } from '../tokens';
+import { SLOT_GAP_BELOW } from '../keyLayout';
+import { Nameplate } from './Nameplate';
+import { color } from '../tokens';
 import { useReduceMotion } from '../useReduceMotion';
-
-export const MAKER = 'VELDEN  FS-4/87-P';
 
 export type GlassSize = { w: number; h: number };
 
@@ -20,15 +19,16 @@ export type HousingGlass = Partial<Pick<GlassProps, 'warp' | 'refreshKey' | 'war
 // Bible section 2 housing for the live screens: nameplate with serial, screen
 // window with four screws, LED ladder plate on the right, key band below.
 // `children` draws on the glass and receives its measured size.
-export function Housing({
+export const Housing = memo(function Housing({
   testID,
   leds,
   fixedIdentity,
   glassLabel,
   keys,
   identity: given,
-  glass = {},
+  glass = NO_GLASS,
   sticker = true,
+  slot,
   children,
 }: {
   testID: string;
@@ -44,6 +44,8 @@ export function Housing({
   glass?: HousingGlass;
   /** The calibration sticker stuck on the housing, bottom-left. Boot leaves it off until ACK. */
   sticker?: boolean;
+  /** A fixed-height strip between the window and the key row (the history banner). The window gives up the height. */
+  slot?: ReactNode;
   children: (size: GlassSize) => ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -70,7 +72,8 @@ export function Housing({
             testID={`${testID}-glass`}
             style={s.glass}
             seed={seed}
-            static={isStatic}
+            // Reduced motion settles the glass layers (grain frozen at the seed, no timers), as the harness freeze does.
+            static={isStatic || reduceMotion}
             reduceMotion={reduceMotion}
             {...glass}
           >
@@ -88,27 +91,16 @@ export function Housing({
           <LedLadder lit={leds} />
         </View>
       </View>
+      {slot ? <View style={s.slot}>{slot}</View> : null}
       <View style={s.keyBand}>
         {sticker ? <MiniSticker cal={identity.cal} pruef={identity.pruef} style={s.sticker} /> : null}
         <KeyRow slots={keys} />
       </View>
     </View>
   );
-}
+});
 
-// The riveted aluminium strip: maker left, serial right (one rule for every screen, src/ui/serial.ts).
-export function Nameplate({ serial }: { serial: string }) {
-  const { width: windowW } = useWindowDimensions();
-  return (
-    <View style={s.nameplate}>
-      <View style={[s.rivet, { left: 8 }]} />
-      <Text style={s.plateText}>{MAKER}</Text>
-      <View style={s.scuff} />
-      <Text style={s.plateText}>{plateSerial(serial, windowW)}</Text>
-      <View style={[s.rivet, { right: 8 }]} />
-    </View>
-  );
-}
+const NO_GLASS: HousingGlass = {};
 
 export { Key };
 
@@ -125,27 +117,6 @@ const s = StyleSheet.create({
     paddingHorizontal: GUTTER,
     overflow: 'hidden',
   },
-  nameplate: {
-    marginHorizontal: space.gutter - GUTTER,
-    height: 28,
-    backgroundColor: color.n5,
-    borderRadius: radius.plate,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  plateText: {
-    ...type.lbS,
-    fontFamily: font.labelBold,
-    color: color.n2,
-    textShadowColor: color.n6,
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0,
-  },
-  rivet: { position: 'absolute', top: 12, width: 4, height: 4, borderRadius: 2, backgroundColor: color.n4 },
-  // The scuff sits in the left half of the plate, under the maker text's baseline, never on a letter.
-  scuff: { position: 'absolute', left: 64, top: 22, width: 6, height: 2, backgroundColor: color.n4, opacity: 0.5 },
   windowRow: { flex: 1, flexDirection: 'row', marginTop: 18, marginBottom: 18 },
   windowWrap: { flex: 1 },
   glassBox: { flex: 1 },
@@ -155,6 +126,9 @@ const s = StyleSheet.create({
     backgroundColor: color.n0,
   },
   ledWrap: { width: 28, marginLeft: 14, alignSelf: 'flex-start' },
+  // Full screen width (the housing pads 14 per side). Bottom margin: at least 32 dp to the key caps,
+  // which sit 6 px inside their plate in the 56 px at the bottom of the 88 px key band.
+  slot: { marginHorizontal: -GUTTER, marginBottom: SLOT_GAP_BELOW },
   keyBand: { height: 88, justifyContent: 'flex-end' },
   // Under the window's lower edge and clear of its corner screw, above the key plate.
   sticker: { position: 'absolute', left: 10, top: -15 },

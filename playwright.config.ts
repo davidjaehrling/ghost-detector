@@ -22,8 +22,9 @@ export default defineConfig({
     url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
   },
-  projects: sizes.map(({ name, width, height }) => ({
+  projects: [...sizes.map(({ name, width, height }) => ({
     name,
+    testIgnore: /perf-ui\.spec\.ts/,
     use: {
       ...devices['Desktop Chrome'],
       browserName: 'chromium' as const,
@@ -36,4 +37,24 @@ export default defineConfig({
       },
     },
   })),
+  // The UI budgets (cold boot at CPU x2) measure the app, not the host: they run after the three size projects
+  // have finished, so no other worker shares the CPU (two workers under load put the same bytes at 2.8 to 4.7 s,
+  // alone at 2.2 to 2.4 s).
+  {
+    name: 'perf-ui-390x844',
+    testMatch: /perf-ui\.spec\.ts/,
+    dependencies: sizes.map((s) => s.name),
+    use: {
+      ...devices['Desktop Chrome'],
+      browserName: 'chromium' as const,
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 1,
+      isMobile: true,
+      hasTouch: true,
+      launchOptions: {
+        args: ['--font-render-hinting=none', '--disable-font-subpixel-positioning', '--disable-lcd-text'],
+      },
+    },
+  },
+  ],
 });

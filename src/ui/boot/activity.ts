@@ -60,3 +60,10 @@ export function formatWindowCountdown(date: Date): string {
 export function msToNextMinute(date: Date): number {
   return 60_000 - (date.getSeconds() * 1000 + date.getMilliseconds());
 }
+
+/** The window line the viewfinder's top strip and the empty log print: `03:00 IN 4 H 12 MIN`. */
+export function formatWindowShort(date: Date): string {
+  const c = windowCountdown(date);
+  if (c.open) return t('viewfinder.window.open');
+  return c.hours > 0 ? t('viewfinder.window.inHours', { h: c.hours, m: c.minutes }) : t('viewfinder.window.inMinutes', { m: c.minutes });
+}

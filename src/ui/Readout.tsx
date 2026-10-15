@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { composeFields } from './readoutFields';
 import { color, type } from './tokens';
@@ -27,7 +28,10 @@ export type ReadoutProps = {
   testID?: string;
 };
 
-export function Readout(props: ReadoutProps) {
+// Memoised: props are strings and numbers, so a row re-renders only when its text or tone changes.
+// A fixed-pitch field grid: its cells are sized in characters of the unscaled face, so the OS font scale
+// does not apply to it (the sentences around it, the rows and the lists do scale).
+export const Readout = memo(function Readout(props: ReadoutProps) {
   const { size = 'rdS', typed, testID } = props;
   const { labelColor = color.p3, valueColor = color.p4, unitColor = color.p3, statusColor = color.p4 } = props;
   const fields = composeFields(props);
@@ -39,7 +43,7 @@ export function Readout(props: ReadoutProps) {
   });
   return (
     <View testID={testID} style={s.row}>
-      <Text style={[type[size], { height: ROW_H[size] }]} numberOfLines={1}>
+      <Text style={[type[size], { height: ROW_H[size] }]} numberOfLines={1} maxFontSizeMultiplier={1}>
         {parts.map((p, i) => (
           <Text key={i} style={{ color: tones[i] }}>
             {p}
@@ -48,7 +52,7 @@ export function Readout(props: ReadoutProps) {
       </Text>
     </View>
   );
-}
+});
 
 // Row heights on the 4 px grid.
 const ROW_H: Record<Size, number> = { rdXS: 20, rdS: 24, rdM: 28, rdL: 44 };

@@ -32,21 +32,25 @@ for (const [name, phase] of [
     await expect(page.getByTestId('key-cancel')).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     if (phase === 'hold') {
-      // The hold blanks only the live row and the percentage; the last telemetry stays.
-      await expect(page.getByTestId('scan-percent')).toHaveText('');
-      // The live row keeps the last ΔT of the thermal phase, dimmed to p2, with a block blinking after it.
-      await expect(page.getByTestId('scan-live')).toContainText(/^ΔT\s+-\d\.\d\s+°C$/);
-      await expect(page.getByTestId('scan-held-block')).toHaveCount(1);
-      const held = page.getByTestId('scan-held').locator('div[dir="auto"] > span').first();
-      expect(await held.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(47, 122, 69)');
-      expect(await page.getByTestId('scan-held-block').evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgb(79, 180, 106)');
+      // The hold blanks only the live row; the percentage stays at 100%, the last telemetry stays.
+      await expect(page.getByTestId('scan-percent')).toHaveText(/^\s*100%$/);
+      // The live row keeps the last ΔT of the thermal phase, dimmed to p3 (never p2), with a HOLD tag after it.
+      await expect(page.getByTestId('scan-live')).toContainText(/^ΔT\s*-\d\.\d\s*°C\s*HOLD$/);
+      await expect(page.getByTestId('scan-held-tag')).toHaveText('HOLD');
+      for (const part of await page.getByTestId('scan-held').locator('div[dir="auto"]').all()) {
+        expect(await part.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(79, 180, 106)');
+      }
       // The rate label stays through the hold; the value is a dash pair.
       await expect(page.getByTestId('scan-rate')).toHaveText(/^RATE\s+--\s+c\/s$/);
       await expect(page.getByTestId('scan-status')).toHaveText('DECODE 2048 BLOCKS');
       await expect(page.getByTestId('scan-readout')).toContainText('ACOUSTIC');
     } else if (phase === 'fault') {
       await expect(page.getByTestId('scan-status')).toHaveText(/^E-07 SENSOR DRIFT\.\s*RECALIBRATING\.$/);
-      await expect(page.getByTestId('scan-live')).toHaveText('');
+      // The fault beat keeps the last ΔT with a HOLD tag, held lines at p3 (A-30): no hole where the block was.
+      await expect(page.getByTestId('scan-live')).toContainText(/^ΔT\s*-\d\.\d\s*°C\s*HOLD$/);
+      for (const part of await page.getByTestId('scan-held').locator('div[dir="auto"]').all()) {
+        expect(await part.evaluate((e) => getComputedStyle(e).color)).toBe('rgb(79, 180, 106)');
+      }
       await expect(page.getByTestId('scan-rate')).toHaveText(/^RATE\s+--\s+c\/s$/);
     } else {
       // The pinned live row is the only thermal value; the log line carries none.
@@ -68,7 +72,8 @@ test('scan runs to the end, saves one record and opens the result', async ({ pag
   const check = watch(page);
   await page.goto(`/scan?static=1&speed=40&seed=${SEED}`);
   await expect(page.getByTestId('screen-result')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('CASE 0001')).toBeVisible();
+  // The case id lives in the data strip since A-42 dropped the top-left CASE band.
+  await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-label', /CASE 0001/);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('fs4.scans.v1') ?? '[]'));
   expect(saved).toHaveLength(1);
   expect(saved[0].id).toBe('0001');
@@ -89,15 +94,15 @@ test('cancel returns to the viewfinder and saves nothing', async ({ page }) => {
   check();
 });
 
-// A live run (nothing frozen): in the 1.2 s hold the block after the held ΔT blinks at 1 Hz. The page
-// records the block's opacity itself every 25 ms (a test round trip is too slow under load).
-test('the block after the held ΔT blinks', async ({ page }) => {
+// A live run (nothing frozen): in the 1.2 s hold the HOLD tag after the held ΔT blinks at 1 Hz. The page
+// records the tag's opacity itself every 25 ms (a test round trip is too slow under load).
+test('the HOLD tag after the held ΔT blinks', async ({ page }) => {
   test.setTimeout(45_000);
   await page.addInitScript(() => {
     const w = window as unknown as { __blink: string[] };
     w.__blink = [];
     setInterval(() => {
-      const e = document.querySelector('[data-testid="scan-held-block"]');
+      const e = document.querySelector('[data-testid="scan-held-tag"]');
       if (e) w.__blink.push(getComputedStyle(e).opacity);
     }, 25);
   });

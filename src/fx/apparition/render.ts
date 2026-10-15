@@ -18,6 +18,7 @@ import {
 } from '@shopify/react-native-skia';
 import { Platform } from 'react-native';
 
+import { Bin } from '../bin';
 import {
   DENSITY_CYCLES,
   DENSITY_CYCLES_X,
@@ -122,6 +123,13 @@ export function snapshot(surface: SkSurface): SkImage {
   return Platform.OS === 'web' ? img : (img.makeNonTextureImage() ?? img);
 }
 
+/** `snapshot` for a surface that is not drawn again: the surface is freed (CanvasKit's wasm heap has no GC). */
+export function snapshotFree(surface: SkSurface): SkImage {
+  const img = snapshot(surface);
+  surface.dispose();
+  return img;
+}
+
 /** Polygons (normalised) to one Skia path in pixels; nonzero fill draws their union. */
 export function polysToPath(polys: readonly (readonly Pt[])[], w: number, h: number): SkPath {
   const b = Skia.PathBuilder.Make();
@@ -129,7 +137,9 @@ export function polysToPath(polys: readonly (readonly Pt[])[], w: number, h: num
     poly.forEach(([u, v], i) => (i ? b.lineTo(u * w, v * h) : b.moveTo(u * w, v * h)));
     b.close();
   }
-  return b.detach();
+  const path = b.detach();
+  b.dispose();
+  return path;
 }
 
 export interface ApparitionRequest {
@@ -150,56 +160,71 @@ export function drawSilhouette(sil: Silhouette, width: number, height: number): 
   const H = Math.max(16, Math.round(height));
   const surface = makeSurface(W, H);
   if (!surface) return null;
+  // Every intermediate (paints, paths, filters, shaders, the pass images, the surface) is freed once
+  // the figure is snapshot (CanvasKit's wasm heap has no GC); only the returned image lives on.
+  const bin = new Bin();
+  try {
+    return drawPasses(sil, surface, W, H, bin);
+  } finally {
+    bin.free();
+    surface.dispose();
+  }
+}
+
+function drawPasses(sil: Silhouette, surface: SkSurface, W: number, H: number, bin: Bin): SkImage {
   const canvas = surface.getCanvas();
   const clear = Skia.Color('transparent');
 
   // Pass 1: union of the parts minus the cut, displaced by FractalNoise, then feathered.
   const sigma = Math.max(0.5, sil.feather * W);
-  const dispNoise = Skia.Shader.MakeFractalNoise(NOISE_CYCLES / W, NOISE_CYCLES / W, 2, sil.seed * 7 + 11, 0, 0);
+  const dispNoise = bin.own(Skia.Shader.MakeFractalNoise(NOISE_CYCLES / W, NOISE_CYCLES / W, 2, sil.seed * 7 + 11, 0, 0));
+  const path = (polys: readonly (readonly Pt[])[]) => bin.own(polysToPath(polys, W, H));
   const drawShape = (blur: number): SkImage => {
-    const filter = Skia.ImageFilter.MakeBlur(
-      blur,
-      blur,
-      TileMode.Decal,
-      Skia.ImageFilter.MakeDisplacementMap(ColorChannel.R, ColorChannel.G, sil.displace * W, Skia.ImageFilter.MakeShader(dispNoise), null),
+    const filter = bin.own(
+      Skia.ImageFilter.MakeBlur(
+        blur,
+        blur,
+        TileMode.Decal,
+        bin.own(Skia.ImageFilter.MakeDisplacementMap(ColorChannel.R, ColorChannel.G, sil.displace * W, bin.own(Skia.ImageFilter.MakeShader(dispNoise)), null)),
+      ),
     );
-    const layer = Skia.Paint();
+    const layer = bin.own(Skia.Paint());
     layer.setImageFilter(filter);
     canvas.clear(clear);
     canvas.saveLayer(layer);
-    const paint = Skia.Paint();
+    const paint = bin.own(Skia.Paint());
     paint.setAntiAlias(true);
     paint.setColor(Skia.Color('white'));
     // Soft parts (an arm hint) first; full-weight parts over them give max(weights), as in metrics.
     for (const p of sil.parts.filter((q) => q.weight < 1)) {
       paint.setAlphaf(p.weight);
-      canvas.drawPath(polysToPath([p.poly], W, H), paint);
+      canvas.drawPath(path([p.poly]), paint);
     }
     paint.setAlphaf(1);
-    canvas.drawPath(polysToPath(sil.parts.filter((q) => q.weight >= 1).map((q) => q.poly), W, H), paint);
+    canvas.drawPath(path(sil.parts.filter((q) => q.weight >= 1).map((q) => q.poly)), paint);
     if (sil.cut) {
-      const erase = Skia.Paint();
+      const erase = bin.own(Skia.Paint());
       erase.setAntiAlias(true);
       erase.setBlendMode(BlendMode.DstOut);
-      canvas.drawPath(polysToPath([sil.cut], W, H), erase);
+      canvas.drawPath(path([sil.cut]), erase);
     }
     canvas.restore();
-    return snapshot(surface);
+    return bin.own(snapshot(surface));
   };
   const shape = drawShape(sigma);
 
   // Pass 2: noise alpha mask (ragged edge, edge erosion, ragged hem, interior density floor).
   canvas.clear(clear);
-  const nEdge = Skia.Shader.MakeFractalNoise(NOISE_CYCLES / W, NOISE_CYCLES / W, 2, sil.seed * 13 + 5, 0, 0);
-  const nDen = Skia.Shader.MakeFractalNoise((NOISE_CYCLES * 0.7) / W, (NOISE_CYCLES * 0.7) / W, 2, sil.seed * 13 + 8, 0, 0);
+  const nEdge = bin.own(Skia.Shader.MakeFractalNoise(NOISE_CYCLES / W, NOISE_CYCLES / W, 2, sil.seed * 13 + 5, 0, 0));
+  const nDen = bin.own(Skia.Shader.MakeFractalNoise((NOISE_CYCLES * 0.7) / W, (NOISE_CYCLES * 0.7) / W, 2, sil.seed * 13 + 8, 0, 0));
   // Low-frequency density patches (D-017): 1.6 cycles per width down the body, 3.2 across it.
-  const nLow = Skia.Shader.MakeFractalNoise(DENSITY_CYCLES_X / W, DENSITY_CYCLES / W, 2, sil.seed * 17 + 3, 0, 0);
+  const nLow = bin.own(Skia.Shader.MakeFractalNoise(DENSITY_CYCLES_X / W, DENSITY_CYCLES / W, 2, sil.seed * 17 + 3, 0, 0));
   // Ragged edge (D-022): isotropic high-frequency displacement, then erosion and hem noise
   // stretched down the body (streaks: teeth, notches and wisps).
-  const nDisp = Skia.Shader.MakeFractalNoise(RAG_CYCLES / W, RAG_CYCLES / W, 2, sil.seed * 19 + 7, 0, 0);
-  const nRag = Skia.Shader.MakeFractalNoise(RAG_CYCLES / W, (RAG_CYCLES * RAG_STRETCH) / W, 2, sil.seed * 19 + 8, 0, 0);
-  const nHem = Skia.Shader.MakeFractalNoise(HEM_RAG_CYCLES / W, (HEM_RAG_CYCLES * RAG_STRETCH) / W, 2, sil.seed * 19 + 9, 0, 0);
-  const shader = mask().makeShaderWithChildren(
+  const nDisp = bin.own(Skia.Shader.MakeFractalNoise(RAG_CYCLES / W, RAG_CYCLES / W, 2, sil.seed * 19 + 7, 0, 0));
+  const nRag = bin.own(Skia.Shader.MakeFractalNoise(RAG_CYCLES / W, (RAG_CYCLES * RAG_STRETCH) / W, 2, sil.seed * 19 + 8, 0, 0));
+  const nHem = bin.own(Skia.Shader.MakeFractalNoise(HEM_RAG_CYCLES / W, (HEM_RAG_CYCLES * RAG_STRETCH) / W, 2, sil.seed * 19 + 9, 0, 0));
+  const shader = bin.own(mask().makeShaderWithChildren(
     [
       sil.erode,
       sil.densityFloor,
@@ -225,18 +250,18 @@ export function drawSilhouette(sil: Silhouette, width: number, height: number): 
       RAG_CORE[1],
       HEM_RAG * 0.5,
     ],
-    [shape.makeShaderOptions(TileMode.Decal, TileMode.Decal, FilterMode.Linear, MipmapMode.None), nEdge, nDen, nLow, nDisp, nRag, nHem],
-  );
-  const fill = Skia.Paint();
+    [bin.own(shape.makeShaderOptions(TileMode.Decal, TileMode.Decal, FilterMode.Linear, MipmapMode.None)), nEdge, nDen, nLow, nDisp, nRag, nHem],
+  ));
+  const fill = bin.own(Skia.Paint());
   fill.setShader(shader);
   canvas.drawRect(Skia.XYWHRect(0, 0, W, H), fill);
-  const masked = snapshot(surface);
+  const masked = bin.own(snapshot(surface));
 
   // Pass 3: a second, fine feather, so the ragged cut is soft at the pixel but stays ragged.
   canvas.clear(clear);
   const s2 = Math.max(0.3, FEATHER2 * W);
-  const soft = Skia.Paint();
-  soft.setImageFilter(Skia.ImageFilter.MakeBlur(s2, s2, TileMode.Decal, null));
+  const soft = bin.own(Skia.Paint());
+  soft.setImageFilter(bin.own(Skia.ImageFilter.MakeBlur(s2, s2, TileMode.Decal, null)));
   canvas.drawImage(masked, 0, 0, soft);
   return snapshot(surface);
 }

@@ -1,0 +1,26 @@
+# Result, SHARE, format picker, print, system share sheet (title "Send field card · CASE n"), back out.
+appId: com.ghostdetector.app
+---
+- runFlow: lib/start.yml
+- runFlow: lib/capture.yml
+# SHARE is inert until the SPI digit has landed; retry the press until the format picker opens.
+- retry:
+    maxRetries: 4
+    commands:
+      - tapOn:
+          id: key-share
+      - assertVisible:
+          id: share-916
+- takeScreenshot: ${MAESTRO_PROFILE}-share-01-format
+- tapOn:
+    id: share-916
+- extendedWaitUntil:
+    visible: "Send field card.*"
+    timeout: 30000
+- takeScreenshot: ${MAESTRO_PROFILE}-share-02-sheet
+- pressKey: back
+- extendedWaitUntil:
+    visible:
+      id: screen-result
+    timeout: 10000
+- takeScreenshot: ${MAESTRO_PROFILE}-share-03-after

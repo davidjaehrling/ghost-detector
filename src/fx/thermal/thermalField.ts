@@ -51,6 +51,12 @@ export const SMUDGE_SHARE = 0.75;
 export const SMUDGE_W = 0.55;
 /** With the smudge, the round rest of the dip tightens to this share of its sigma. */
 export const SMUDGE_CORE = 0.6;
+/**
+ * A-46 (P8): the smudge is a figure-height column, its vertical sigma at least this share of the
+ * field height (about 45% of the frame tall from end to end at 2 sigma), so the crosshair sits on
+ * a cold body, not a dot. It reaches p0 to p1 in the PH-WHT palette (the coldest steps).
+ */
+export const COLUMN_SIGMA_H = 0.11;
 
 /** Cold-spot depth in °C by tier (QUIET has none). */
 export const TIER_DEPTH: Readonly<Record<Tier, number>> = {
@@ -103,6 +109,8 @@ export interface ThermalField {
    * Null on QUIET. This is the one reading the screen should print next to the view.
    */
   coldSpotC: number | null;
+  /** Coldest room pixel without the cold spot's dip, °C (A-46: the display keeps the band below it for the cold body). */
+  roomMinC?: number;
 }
 
 export interface ThermalOptions {
@@ -280,13 +288,14 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
   const inv2s2 = 1 / (2 * sigma * sigma);
   const smudge = depth > 0 && SMUDGE_FROM.includes(opts.tier);
   const sx = SMUDGE_W * sigma;
-  const sy = SMUDGE_ASPECT * sx;
+  const sy = Math.max(SMUDGE_ASPECT * sx, COLUMN_SIGMA_H * h);
   // A slight seeded lean and a narrower top (the head end), so it is not a clean ellipse.
   const lean = (spotRnd() * 2 - 1) * 0.25;
 
   const data = new Float32Array(w * h);
   let minC = Infinity;
   let maxC = -Infinity;
+  let roomMinC = Infinity;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
@@ -304,6 +313,7 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
         dip = depth * ((1 - SMUDGE_SHARE) * core + SMUDGE_SHARE * Math.exp(-(ux * ux) / (2 * wx * wx) - (dy * dy) / (2 * sy * sy)));
       } else if (depth > 0) dip = depth * round;
       data[i] = ambientC + base + edge + noise - dip;
+      roomMinC = Math.min(roomMinC, Math.fround(ambientC + base + edge + noise));
       const t = data[i]!; // min and max of the stored float32 values
       if (t < minC) minC = t;
       if (t > maxC) maxC = t;
@@ -311,7 +321,7 @@ export function buildThermalField(grid: LumaGrid, region: ThermalRegion | null, 
   }
 
   const coldSpot = depth > 0 ? { x: centre.x, y: centre.y, radius, depthC: depth } : null;
-  return { width: w, height: h, data, ambientC, minC, maxC, coldSpot, coldSpotC: coldSpot ? -depth : null };
+  return { width: w, height: h, data, ambientC, minC, maxC, coldSpot, coldSpotC: coldSpot ? -depth : null, roomMinC };
 }
 
 /** Temperature at a normalised point (nearest sensor pixel). */

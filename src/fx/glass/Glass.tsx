@@ -5,6 +5,7 @@ import { BurnIn, type BurnInLabels } from './BurnIn';
 import { GlassOverlay, type GlassLayerFlags } from './GlassOverlay';
 import { GlassWarp } from './GlassWarp';
 import { WarmUp } from './WarmUp';
+import '../perf/frameCounter'; // installs window.__fxFrames on web (idle until a harness starts it)
 
 export type GlassProps = GlassLayerFlags & {
   children: ReactNode;

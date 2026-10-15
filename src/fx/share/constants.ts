@@ -3,7 +3,7 @@
 /** Store name, filled at Gate 1. The only place the store name appears on the card (footer). */
 export const STORE_NAME = '[STORE NAME]';
 
-/** The housing's nameplate text (docs/instrument-bible.md section 2). No serial on the card. */
+/** The housing's nameplate maker text (docs/instrument-bible.md section 2); the install's serial sits right of it, as on screen. */
 export const NAMEPLATE = 'VELDEN  FS-4/87-P';
 
 // The SIMULATED mark (Compliance launch blocker, D-026, D-032) and the footer sentence are
@@ -34,8 +34,14 @@ export interface CardLayout {
   plate: Box;
   photo: Box;
   reading: Box;
+  /** The 5-LED plate bolted beside the reading window (A-93), lit to the tier. */
+  leds: Box;
   /** Cap top of the footer's first line. */
   footerTop: number;
+  /** Left edge of the footer (left-aligned, clear of the band's screws, A-91); it runs to width - footerX. */
+  footerX: number;
+  /** Right limit of the footer's lines (story: clear of the band's right screw; square: the card edge less 16 px). */
+  footerRight: number;
   /** Where the photo, the strip and its SIMULATED token must stay (story safe zone), or null. */
   safe: { top: number; bottom: number } | null;
 }
@@ -43,7 +49,8 @@ export interface CardLayout {
 /**
  * Pixel positions: docs/p6-brief.md section 1.4 as amended by D-034 (b). The story photo is 1240
  * tall (was 1250) and starts at 300 so the reading row (1558 to 1772) and the two-line footer at the
- * mark's size (1794 to 1899) both fit under it; the square nameplate is inset 24 px.
+ * mark's size (1794 to 1899) both fit under it; the square nameplate is inset 24 px. P8 (A-93): the
+ * reading window gives 76 / 70 px on its right to the LED plate; the photo and the figure are unchanged.
  */
 export const LAYOUTS: Record<CardFormat, CardLayout> = {
   story: {
@@ -51,8 +58,11 @@ export const LAYOUTS: Record<CardFormat, CardLayout> = {
     height: 1920,
     plate: { x: 40, y: 228, w: 1000, h: 56 },
     photo: { x: 40, y: 300, w: 1000, h: 1240 },
-    reading: { x: 40, y: 1558, w: 1000, h: 214 },
+    reading: { x: 40, y: 1558, w: 924, h: 214 },
+    leds: { x: 976, y: 1558, w: 64, h: 214 },
     footerTop: 1794,
+    footerX: 88,
+    footerRight: 992,
     safe: { top: 250, bottom: 1580 },
   },
   square: {
@@ -60,8 +70,11 @@ export const LAYOUTS: Record<CardFormat, CardLayout> = {
     height: 1080,
     plate: { x: 64, y: 24, w: 952, h: 56 },
     photo: { x: 0, y: 96, w: 1080, h: 704 },
-    reading: { x: 24, y: 816, w: 1032, h: 192 },
+    reading: { x: 24, y: 816, w: 962, h: 192 },
+    leds: { x: 996, y: 816, w: 60, h: 192 },
     footerTop: 1024,
+    footerX: 48,
+    footerRight: 1064,
     safe: null,
   },
 };

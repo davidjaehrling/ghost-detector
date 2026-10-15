@@ -14,7 +14,7 @@ const SEEDS = Array.from({ length: 500 }, (_, i) => seedFrom(`seed-${i}`, i * 79
 describe('en table', () => {
   it('is the JSON file, with the documented key scheme only', () => {
     expect(en).toBe(enJson);
-    const ok = /^(profile\.(class|prefix|temperament|attachment|behaviour|timing|detail)\.\d{2}|profile\.era|notify\.prefix|notify\.t[1-5]\.(title|body(\.one|\.other)?)|notify\.t5\.last|notify\.lore\.[a-z0-9 -]+)$/;
+    const ok = /^(profile\.(class|prefix|temperament|attachment|behaviour|timing|detail)\.\d{2}|profile\.era|notify\.prefix|notify\.t[1-5]\.(title|body(\.one|\.other|\.untagged)?)|notify\.t5\.last|notify\.lore\.[a-z0-9 -]+)$/;
     expect(Object.keys(en).filter((k) => !ok.test(k))).toEqual([]);
   });
   it('banks are contiguous and class/prefix are index-matched', () => {

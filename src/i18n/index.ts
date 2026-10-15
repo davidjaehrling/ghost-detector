@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from 'react';
+import { fault } from '../state/faults';
 import { platformStorage } from '../state/storage';
 import {
   type Lang,
+  LANGS,
+  clearResources,
   type LangSetting,
   LANG_SETTINGS,
   type Params,
@@ -12,6 +15,10 @@ import {
   translate,
 } from './core';
 import './resources';
+
+// Harness (web only): `?fault=locale-missing` drops every table but `en`, so a chosen language
+// falls back per key as it does when a locale file is absent.
+if (fault('locale-missing')) for (const l of LANGS) if (l !== 'en') clearResources(l);
 
 export { hasKey, LANGS, LANG_SETTINGS, ENGINE_PREFIX, tableFor as tableForLocale, type Lang, type LangSetting, type Params } from './core';
 export { eraValue, profileFor } from './profile';

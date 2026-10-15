@@ -80,9 +80,12 @@ export const TIER_EXTENT: Readonly<Partial<Record<Tier, number>>> = { active: 0.
  * the stacked alpha stays under `opacity * (1 + COPY_ALPHA_SUM - ECHO_SHARE + ECHO_ALPHA)` =
  * 1.65 x opacity, 0.297 at the CRITICAL cap of 0.18; the per-pixel clamp bounds the light anyway.
  */
-export const ECHO_PX: readonly [number, number] = [8, 12];
-export const ECHO_ALPHA = 0.45;
+export const ECHO_PX: readonly [number, number] = [12, 16];
+/** A-47 (P8): 12 to 16 px (about 14) and 0.55, so the doubled CRITICAL figure reads at 390; the stacked alpha stays at or under 0.3. */
+export const ECHO_ALPHA = 0.55;
 export const ECHO_SHARE = 0.15;
+/** Least angle between the echo and the drift line, radians (A-47). */
+export const ECHO_SEP = (15 * Math.PI) / 180;
 
 /** Default opacity ceilings by tier (D-009). QUIET only ever shows a smudge, so it shares TRACE's. */
 export const TIER_OPACITY_CAP: Readonly<Record<Tier, number>> = {
@@ -191,7 +194,12 @@ export function placeGhost(
       ? (() => {
           const d = lerp(ECHO_PX[0], ECHO_PX[1], er());
           // Mostly sideways, never along the drift (that is what the copies already do).
-          const a = (er() * 2 - 1) * (25 * Math.PI) / 180 + (er() < 0.5 ? Math.PI : 0);
+          let a = (er() * 2 - 1) * (25 * Math.PI) / 180 + (er() < 0.5 ? Math.PI : 0);
+          // A-47: keep the copies asymmetric. The echo stays at least ECHO_SEP off the drift line
+          // (either way along it), so it never lands on a motion copy or on a copy's mirror image.
+          const wrap = (v: number) => Math.atan2(Math.sin(v), Math.cos(v));
+          const near = [angle, angle + Math.PI].map((r) => wrap(a - r)).sort((p, q) => Math.abs(p) - Math.abs(q))[0]!;
+          if (Math.abs(near) < ECHO_SEP) a += (near >= 0 ? 1 : -1) * ECHO_SEP - near;
           return { dx: Math.cos(a) * d, dy: Math.sin(a) * d };
         })()
       : null;

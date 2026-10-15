@@ -1,10 +1,12 @@
-import { AlphaType, ClipOp, ColorType, ImageFormat, PaintStyle, processUniforms, Skia, TileMode, type SkCanvas, type SkImage, type SkRuntimeEffect, type SkTypeface } from '@shopify/react-native-skia';
+import { AlphaType, ClipOp, ColorType, ImageFormat, processUniforms, Skia, TileMode, type SkCanvas, type SkImage, type SkRuntimeEffect, type SkTypeface } from '@shopify/react-native-skia';
 
 import type { Lang } from '../../i18n';
 import type { ScanRecord } from '../../state/scans';
 import { color } from '../../ui/tokens';
 import { mulberry32 } from '../../engine';
+import { Bin } from '../bin';
 import { drawComposite, imageShader } from '../compositor/offscreen';
+import type { Band } from '../compositor/blend';
 import type { RegionStats } from '../compositor/regionFromImage';
 import { GRAIN_FREQ } from '../compositor/setup';
 import {
@@ -29,8 +31,12 @@ import { cardText, type CardText } from './text';
 // footer. Nothing else: no key, no QR code, no arrow or box near the figure.
 //
 // D-034 (a): every strip run is drawn at the mark's size, so the strip and SIMULATED read as one
-// burned record. Where the record does not fit on one line (the story card), the case data breaks
-// at its ` · ` joints and SIMULATED takes the last line, left-aligned, on the same baseline grid.
+// record. A-90: the strip prints like a camera data back, three left-aligned lines on one baseline
+// grid (time and date, case and ΔT, SIMULATED last), at the mark's floor size.
+//
+// A-08 (D-045 ruling 2): the photo takes the viewfinder's phosphor tint inside the composite; the
+// scrim goes on the tinted photo, then the grain, and only then the strip text and the mark, so the
+// mark and the footer are never tinted or grained and print at 100%.
 
 export interface CardFonts {
   /** VT323 (readouts: strip, reading row). */
@@ -38,6 +44,13 @@ export interface CardFonts {
   /** B612 Mono Regular (footer) and Bold (nameplate, the Bible's lbM). */
   b612: SkTypeface;
   b612Bold: SkTypeface;
+}
+
+/** The install identity the card prints: serial on the nameplate, CAL and PRÜF on the sticker. */
+export interface CardIdentity {
+  serial: string;
+  cal: string;
+  pruef: string;
 }
 
 export interface CardInput {
@@ -53,6 +66,10 @@ export interface CardInput {
   store?: string;
   /** Locale override for the card's strings (probe and tests); default the locale in force. */
   locale?: Lang;
+  /** The install's serial (nameplate) and calibration stamp (housing sticker, A-92); default the harness unit's (`CARD_IDENTITY`). */
+  identity?: CardIdentity;
+  /** Test switches: `tint: false` draws the photo's own colour, `ghost: false` the photo without the figure (same layout). */
+  fx?: { tint?: boolean; ghost?: boolean };
 }
 
 /** Where a SIMULATED token was drawn, in card pixels. */
@@ -95,19 +112,32 @@ export interface CardRender {
   readingLines: ReadingLine[];
   /** The figure as placed on the card (logical panel pixels), or null when the record shows none. */
   figure: FigureLayout | null;
+  /** The LED plate (A-93): LEDs lit (the tier's count), whether LED 5 is red, each lens in card pixels (LED 1 first, at the bottom). */
+  leds: { lit: number; red: boolean; lenses: { cx: number; cy: number; r: number }[] };
+  /** Auto-gain applied to the photo, dB (A-45; 0 unless near-black). */
+  gainDb: number;
+  /** Phosphor tint mix used on the photo (0 with `fx.tint` false). */
+  tintMix: number;
+  tintLift: number;
+  /** The housing sticker (A-92): its axis-aligned bounds after the -1.5° turn, lines and font size; null where it does not fit. */
+  sticker: (Box & { lines: string[]; fontSize: number }) | null;
+  /** Footer line boxes as drawn (cap top to baseline), card pixels. */
+  footerBoxes: Box[];
+  /** The bottom band's engraving (A-92, story only): bounds, lines and font size; null where it does not fit. */
+  engraving: (Box & { lines: string[]; fontSize: number }) | null;
+  /** The compositor's foreground mass (A-98 hem test) in photo-window pixels (add layout.photo's x and y for card pixels), or null. */
+  band: Band | null;
 }
 
 /** Cap height per em, measured on the bundled TTFs (CanvasKit, glyph rows of `EHILT`). */
 export const CAP_EM = { vt323: 0.56, b612: 0.76 } as const;
-/** On-screen strip: VT323 16 px across a 366 px glass, scaled to the card's photo width (the strip's size where that clears the mark floor). */
-export const STRIP_EM_PER_W = 16 / 366;
 /** Baseline pitch of the strip's and the footer's lines, as a multiple of the cap height. */
 const STRIP_PITCH = 1.5;
 const FOOTER_PITCH = 1.45;
 /** Reading row: [SPI and tier, line, detail] font sizes and the gap between cap boxes (D-034 b). */
 const READING = {
   story: { sizes: [96, 62, 42], gap: 24 },
-  square: { sizes: [80, 62, 36], gap: 18 },
+  square: { sizes: [96, 62, 36], gap: 16 },
 } as const;
 /** Housing texture: signed noise amplitude and the corner falloff (Bible section 2: 6%). */
 const HOUSING_NOISE = 0.025;
@@ -184,13 +214,19 @@ export function markSize(h: number, capEm: number): number {
   return Math.ceil((MARK_CAP_FRAC * h * MARK_SAFETY) / capEm);
 }
 
-/** One size for every strip run: the mark floor, or the on-screen strip scaled to the photo if larger (square: 47 px, cap 27). */
+/** One size for every strip run: the mark's floor size (A-90; story 76 px, square 43 px). */
 export function stripSize(L: CardLayout): number {
-  return Math.max(markSize(L.height, CAP_EM.vt323), Math.round(STRIP_EM_PER_W * L.photo.w));
+  return markSize(L.height, CAP_EM.vt323);
 }
 
+/** LEDs lit per tier (Bible section 3: LED 1 is power, always on). */
+export const TIER_LEDS: Record<ScanRecord['outcome']['tier'], number> = { quiet: 1, trace: 2, active: 3, strong: 4, critical: 5 };
+
+/** Every Skia object one card allocates (paints, fonts, shaders, images), freed when `drawShareCard` returns. */
+const bin = new Bin();
+
 function paintOf(hex: string, alpha = 1) {
-  const p = Skia.Paint();
+  const p = bin.own(Skia.Paint());
   p.setAntiAlias(true);
   p.setColor(Skia.Color(hex));
   if (alpha < 1) p.setAlphaf(alpha);
@@ -198,20 +234,38 @@ function paintOf(hex: string, alpha = 1) {
 }
 
 function text(canvas: SkCanvas, s: string, x: number, y: number, face: SkTypeface, size: number, hex: string, alpha = 1): number {
-  const font = Skia.Font(face, size);
+  const font = bin.own(Skia.Font(face, size));
   canvas.drawText(s, x, y, paintOf(hex, alpha), font);
   return font.getTextWidth(s);
 }
 
-const width = (s: string, face: SkTypeface, size: number) => Skia.Font(face, size).getTextWidth(s);
+const width = (s: string, face: SkTypeface, size: number) => bin.own(Skia.Font(face, size)).getTextWidth(s);
+
+/** Boxes the card paints opaque over the housing (whole pixels): the photo surround and the reading box's straight-edged core. */
+export function housingCovered(L: CardLayout): Box[] {
+  const P = L.photo;
+  const b = L.reading;
+  const r = Math.ceil(6 * (L.width / 390)); // the reading box's corner radius (drawReading), rounded up
+  return [
+    { x: P.x - 4, y: P.y - 4, w: P.w + 8, h: P.h + 8 },
+    { x: b.x + r, y: b.y, w: b.w - 2 * r, h: b.h },
+    { x: b.x, y: b.y + r, w: b.w, h: b.h - 2 * r },
+  ];
+}
 
 function drawHousing(canvas: SkCanvas, L: CardLayout, seed: number) {
   const fx = effect('housing', HOUSING_SKSL);
   const base = rgb(color.n3).map((v) => v / 255);
-  const noise = Skia.Shader.MakeFractalNoise(0.35, 0.35, 3, seed % 997, 0, 0);
-  const p = Skia.Paint();
-  p.setShader(fx.makeShaderWithChildren(processUniforms(fx, { size: [L.width, L.height], base, amp: HOUSING_NOISE, fall: HOUSING_FALL }), [noise]));
+  const noise = bin.own(Skia.Shader.MakeFractalNoise(0.35, 0.35, 3, seed % 997, 0, 0));
+  const p = bin.own(Skia.Paint());
+  p.setShader(bin.own(fx.makeShaderWithChildren(processUniforms(fx, { size: [L.width, L.height], base, amp: HOUSING_NOISE, fall: HOUSING_FALL }), [noise])));
+  // P8-03: the texture is not shaded where opaque paint covers it later: the photo with its 4 px
+  // surround, and the reading box inside its corner radius. Same bytes, about 60% fewer pixels
+  // through the noise shader on the story card.
+  canvas.save();
+  for (const r of housingCovered(L)) canvas.clipRect(Skia.XYWHRect(r.x, r.y, r.w, r.h), ClipOp.Difference, false);
   canvas.drawRect(Skia.XYWHRect(0, 0, L.width, L.height), p);
+  canvas.restore();
   // Cast edge: 1 px n4 highlight on top, 2 px n1 shadow at the bottom (Bible section 2).
   canvas.drawRect(Skia.XYWHRect(0, 0, L.width, 2), paintOf(color.n4));
   canvas.drawRect(Skia.XYWHRect(0, L.height - 4, L.width, 4), paintOf(color.n1));
@@ -243,29 +297,51 @@ function drawScrew(canvas: SkCanvas, cx: number, cy: number, rad: number, angle:
   canvas.restore();
 }
 
-/** Calibration sticker: textless printed fields, rotated -1.5°, one corner lifted with a shadow. */
-function drawSticker(canvas: SkCanvas, x: number, y: number, w: number, h: number) {
+/** The harness unit's identity (Bible section 11, `identityFromSeed` at the fixed seed), the card's default. */
+export const CARD_IDENTITY: Readonly<CardIdentity> = { serial: 'FS4-8711-00417-9', cal: '2026-10-13', pruef: '07' };
+/** Sticker turn (Bible section 2) and its paper padding as shares of the cap height. */
+const STICKER_DEG = -1.5;
+const STICKER_PAD = { x: 0.45, y: 0.4 } as const;
+const STICKER_PITCH = 1.4;
+/** Bottom-band engraving (A-92, story): two lines of B612 Mono Bold n2 at lbXS scaled (10 px at 390), right-aligned in footer line 1's band. */
+export const ENGRAVING = { lines: ['FIELD SPECTROMETER', 'MADE IN W.-GERMANY'], size: 28, pitch: 1.35 } as const;
+
+/** Paper size of a sticker for its lines at `size` (B612 Mono Bold head, Regular below). */
+function stickerSize(lines: string[], fonts: CardFonts, size: number): { w: number; h: number } {
+  const cap = CAP_EM.b612 * size;
+  const tw = Math.max(...lines.map((l, i) => width(l, i === 0 ? fonts.b612Bold : fonts.b612, size)));
+  return { w: Math.ceil(tw + 2 * STICKER_PAD.x * cap), h: Math.ceil(cap * (1 + STICKER_PITCH * (lines.length - 1)) + 2 * STICKER_PAD.y * cap) };
+}
+
+/** Axis-aligned bounds of a w x h box turned STICKER_DEG about its centre (cx, cy). */
+function turnedBounds(cx: number, cy: number, w: number, h: number): Box {
+  const a = (Math.abs(STICKER_DEG) * Math.PI) / 180;
+  const bw = w * Math.cos(a) + h * Math.sin(a);
+  const bh = w * Math.sin(a) + h * Math.cos(a);
+  return { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh };
+}
+
+/**
+ * Calibration sticker (A-92): paper with ink print, the head line in B612 Mono Bold and the CAL and
+ * PRÜF lines in Regular, all at the card's floor size; turned -1.5° about its centre, the
+ * bottom-right corner lifted over a shadow.
+ */
+function drawSticker(canvas: SkCanvas, cx: number, cy: number, lines: string[], fonts: CardFonts, size: number) {
+  const { w, h } = stickerSize(lines, fonts, size);
+  const cap = CAP_EM.b612 * size;
   canvas.save();
-  canvas.translate(x, y);
-  canvas.rotate(-1.5, 0, 0);
+  canvas.translate(cx, cy);
+  canvas.rotate(STICKER_DEG, 0, 0);
+  canvas.translate(-w / 2, -h / 2);
   canvas.drawRect(Skia.XYWHRect(2, 3, w, h), paintOf(color.n1, 0.55));
-  // The lifted bottom-right corner throws a longer shadow.
-  canvas.drawRect(Skia.XYWHRect(w - h * 0.3, h - h * 0.3 + 2, h * 0.3 + 3, h * 0.3 + 3), paintOf(color.n1, 0.5));
-  canvas.drawRect(Skia.XYWHRect(0, 0, w, h), paintOf(color.n6, 0.62));
-  const u = h / 10;
-  // Printed header band and ruled fields, faded to the housing's ramp (no legible text).
-  canvas.drawRect(Skia.XYWHRect(u, u, w - 2 * u, 2.2 * u), paintOf(color.n3, 0.75));
-  for (let i = 0; i < 3; i++) canvas.drawRect(Skia.XYWHRect(u, 4.6 * u + i * 1.8 * u, w * 0.62, Math.max(1, u * 0.22)), paintOf(color.n3, 0.6));
-  const box = Skia.Paint();
-  box.setAntiAlias(true);
-  box.setStyle(PaintStyle.Stroke);
-  box.setStrokeWidth(Math.max(1, u * 0.22));
-  box.setColor(Skia.Color(color.n3));
-  box.setAlphaf(0.6);
-  for (let i = 0; i < 3; i++) canvas.drawRect(Skia.XYWHRect(w * 0.72 + i * 1.7 * u, 4.4 * u, 1.3 * u, 1.3 * u), box);
-  canvas.drawRect(Skia.XYWHRect(w * 0.72, 7.2 * u, 1.3 * u, 1.3 * u), paintOf(color.n3, 0.6));
+  const c = Math.min(h * 0.3, 18);
+  canvas.drawRect(Skia.XYWHRect(w - c, h - c + 2, c + 3, c + 3), paintOf(color.n1, 0.5));
+  canvas.drawRect(Skia.XYWHRect(0, 0, w, h), paintOf(color.paper));
+  lines.forEach((l, i) => {
+    const base = STICKER_PAD.y * cap + cap + i * STICKER_PITCH * cap;
+    text(canvas, l, STICKER_PAD.x * cap, Math.round(base), i === 0 ? fonts.b612Bold : fonts.b612, size, color.ink);
+  });
   // The lifted corner: a folded triangle, lit, clipped to the sticker's corner.
-  const c = h * 0.3;
   canvas.save();
   canvas.clipRect(Skia.XYWHRect(w - c, h - c, c, c), ClipOp.Intersect, true);
   canvas.drawRect(Skia.XYWHRect(w - c, h - c, c, c), paintOf(color.n3));
@@ -275,6 +351,8 @@ function drawSticker(canvas: SkCanvas, x: number, y: number, w: number, h: numbe
   canvas.restore();
   canvas.restore();
 }
+
+const overlaps = (a: Box, b: Box, gap = 0) => a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap;
 
 /** Wear streaks: thin paint rubs to n4 in a band, seeded, never in the safe zone. */
 function drawWear(canvas: SkCanvas, r: () => number, x0: number, x1: number, y0: number, y1: number, n: number) {
@@ -287,13 +365,31 @@ function drawWear(canvas: SkCanvas, r: () => number, x0: number, x1: number, y0:
   }
 }
 
-/** Fasteners, sticker and wear in the housing's dead bands (Bible section 2), outside the safe zone. */
-function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: { top: number; bottom: number; x0: number; x1: number }, seed: number) {
+/** Footer line boxes as drawn (cap top to baseline), for the sticker and engraving placement. */
+interface FooterGeom {
+  top: number;
+  bottom: number;
+  x0: number;
+  x1: number;
+  boxes: Box[];
+  mark: Box;
+}
+
+/**
+ * Fasteners, sticker, engraving and wear in the housing's dead bands (Bible section 2), outside the
+ * safe zone. A-92: the story's sticker sits in the top band between the screws; on the square it
+ * takes the free space right of the footer only where it fits clear of the footer run and the mark
+ * (head and CAL line, else the head alone, else none). The engraving is story-only.
+ */
+function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: FooterGeom, seed: number, fonts: CardFonts, sticker: string[], avoid: Box[]): Pick<CardRender, 'sticker' | 'engraving'> {
   const r = mulberry32((seed ^ 0x5c3e) >>> 0);
   const story = L.height > L.width;
   const burred = Math.floor(r() * 4);
   const angle = () => 15 + r() * 150;
   const fy = (footer.top + footer.bottom) / 2;
+  const size = markSize(L.height, CAP_EM.b612);
+  let placed: CardRender['sticker'] = null;
+  let engraving: CardRender['engraving'] = null;
   if (story) {
     const top = L.plate.y; // band 0 to the nameplate, above the safe zone
     drawWear(canvas, r, 24, L.width - 24, 14, top - 30, 7);
@@ -306,7 +402,15 @@ function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: { top: numbe
       [L.width - 56, fy],
     ] as const;
     screws.forEach(([x, y], i) => drawScrew(canvas, x, y, 15, angle(), i === burred));
-    drawSticker(canvas, L.width - 300, top * 0.3, 168, 70);
+    const { w, h } = stickerSize(sticker, fonts, size);
+    const cx = L.width / 2 + 40;
+    const cy = top / 2;
+    const b = turnedBounds(cx, cy, w, h);
+    if (b.x > 56 + 15 + 8 && b.x + b.w < L.width - 56 - 15 - 8 && b.y > 4 && b.y + b.h < top - 6) {
+      drawSticker(canvas, cx, cy, sticker, fonts, size);
+      placed = { ...b, lines: sticker, fontSize: size };
+    }
+    engraving = drawEngraving(canvas, L, footer, fonts);
   } else {
     drawWear(canvas, r, 90, L.width - 90, 6, L.plate.y - 6, 4);
     drawWear(canvas, r, 60, L.width - 60, footer.bottom + 8, L.height - 8, 3);
@@ -317,11 +421,52 @@ function drawHousingDetail(canvas: SkCanvas, L: CardLayout, footer: { top: numbe
       [L.width - 24, fy],
     ] as const;
     screws.forEach(([x, y], i) => drawScrew(canvas, x, y, 12, angle(), i === burred));
-    drawSticker(canvas, footer.x1 + 26, fy - 18, 78, 36);
+    // Free space right of the footer: clear of its run and the mark by 16 px, of the right screw, the reading box and the card edge.
+    const x0 = footer.x1 + 16;
+    const x1 = L.width - 24 - 12 - 8;
+    const y0 = L.reading.y + L.reading.h + 4;
+    const y1 = L.height - 6;
+    for (const lines of [sticker, sticker.slice(0, 1)]) {
+      const { w, h } = stickerSize(lines, fonts, size);
+      const b = turnedBounds((x0 + x1) / 2, (y0 + y1) / 2, w, h);
+      if (b.x >= x0 && b.x + b.w <= x1 && b.y >= y0 && b.y + b.h <= y1 && ![...footer.boxes, footer.mark, ...avoid].some((o) => overlaps(b, o, 8))) {
+        drawSticker(canvas, (x0 + x1) / 2, (y0 + y1) / 2, lines, fonts, size);
+        placed = { ...b, lines, fontSize: size };
+        break;
+      }
+    }
   }
+  return { sticker: placed, engraving };
 }
 
-function drawNameplate(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, label: string, seed: number) {
+/**
+ * The story's engraving (A-92): `FIELD SPECTROMETER` / `MADE IN W.-GERMANY` in n2 over a faint lit
+ * lip (as the nameplate), right-aligned at the footer's right limit, its last baseline on the
+ * footer's first baseline; drawn only where it clears every footer line by 12 px and the reading box.
+ */
+function drawEngraving(canvas: SkCanvas, L: CardLayout, footer: FooterGeom, fonts: CardFonts): CardRender['engraving'] {
+  const first = footer.boxes[0];
+  if (!first || footer.boxes.length < 2) return null;
+  const size = ENGRAVING.size;
+  const cap = CAP_EM.b612 * size;
+  const pitch = Math.round(cap * ENGRAVING.pitch);
+  const lines = [...ENGRAVING.lines];
+  const w = Math.max(...lines.map((l) => width(l, fonts.b612Bold, size)));
+  const base1 = first.y + first.h;
+  const box: Box = { x: L.footerRight - w, y: base1 - pitch - cap, w, h: pitch + cap };
+  if (box.y < L.reading.y + L.reading.h + 6) return null;
+  if (footer.boxes.some((b) => overlaps(box, b, 12))) return null;
+  lines.forEach((l, i) => {
+    const y = base1 - (lines.length - 1 - i) * pitch;
+    const x = L.footerRight - width(l, fonts.b612Bold, size);
+    text(canvas, l, x, y + 1.5, fonts.b612Bold, size, color.n6, 0.3);
+    text(canvas, l, x, y, fonts.b612Bold, size, color.n2);
+  });
+  return { ...box, lines, fontSize: size };
+}
+
+/** Nameplate: maker left, the install's full serial right (the screen's Nameplate, src/ui/screens/Nameplate.tsx). Returns the runs drawn. */
+function drawNameplate(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, label: string, serial: string, seed: number): string[] {
   const b = L.plate;
   const k = L.width / 390;
   canvas.drawRect(Skia.XYWHRect(b.x + 2, b.y + 3, b.w, b.h), paintOf(color.n1, 0.6));
@@ -345,15 +490,19 @@ function drawNameplate(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, label:
       canvas.drawCircle(cx - 1.5, cy + dy - 1.5, 0.7 * k, paintOf(color.n6, 0.7));
     }
   }
-  // A 6 px scuff on the plate (Bible section 2), seeded.
-  const r = mulberry32((seed ^ 0x5c0f) >>> 0);
-  canvas.drawRect(Skia.XYWHRect(b.x + b.w * (0.55 + r() * 0.3), cy + (r() - 0.5) * b.h * 0.5, 6 * k, 1.2 * k), paintOf(color.n4, 0.7));
   // Engraved: the n2 text over a faint lit lower lip. lbM (13 px at 390), B612 Mono Bold.
   const size = Math.round(13 * k * 0.85);
   const base = cy + (CAP_EM.b612 * size) / 2;
   const x = b.x + 18 * k;
-  text(canvas, label, x, base + 1.5, fonts.b612Bold, size, color.n6, 0.45);
-  text(canvas, label, x, base, fonts.b612Bold, size, color.n2);
+  const sx = b.x + b.w - 18 * k - width(serial, fonts.b612Bold, size);
+  // A 6 px scuff (Bible section 2), seeded, in the maker text's span under its baseline, never on a letter.
+  const r = mulberry32((seed ^ 0x5c0f) >>> 0);
+  canvas.drawRect(Skia.XYWHRect(x + width(label, fonts.b612Bold, size) * (0.2 + r() * 0.6), base + 3 * k, 6 * k, 1.2 * k), paintOf(color.n4, 0.7));
+  for (const [run, rx] of [[label, x], [serial, sx]] as const) {
+    text(canvas, run, rx, base + 1.5, fonts.b612Bold, size, color.n6, 0.45);
+    text(canvas, run, rx, base, fonts.b612Bold, size, color.n2);
+  }
+  return [label, serial];
 }
 
 /** Reading row: SPI and tier near 96 px, the EVP or decoded line in p5, class and era in p3. */
@@ -394,49 +543,52 @@ function drawReading(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, t: CardT
   return { runs, lines };
 }
 
-/** Breaks `parts` (joined by ` · `) into the fewest lines no wider than `avail`, balanced. */
-function breakRuns(parts: string[], fits: (s: string) => boolean): string[] {
-  for (let n = 1; n <= parts.length; n++) {
-    let best: string[] | null = null;
-    let bestW = Infinity;
-    const walk = (from: number, left: number, acc: string[]) => {
-      if (left === 1) {
-        const lines = [...acc, parts.slice(from).join(' · ')];
-        const w = Math.max(...lines.map((l) => l.length));
-        if (lines.every(fits) && w < bestW) {
-          best = lines;
-          bestW = w;
-        }
-        return;
-      }
-      for (let i = from + 1; i <= parts.length - left + 1; i++) walk(i, left - 1, [...acc, parts.slice(from, i).join(' · ')]);
-    };
-    walk(0, n, []);
-    if (best) return best;
+/** Greedy word wrap of one run into lines no wider than `avail` (a single word wider than that keeps its own line). */
+function wrapWords(run: string, fits: (s: string) => boolean): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const w of run.split(' ')) {
+    const next = line ? `${line} ${w}` : w;
+    if (!line || fits(next)) line = next;
+    else {
+      out.push(line);
+      line = w;
+    }
   }
-  return parts;
+  if (line) out.push(line);
+  return out;
 }
 
 /**
- * Footer: `[STORE NAME] · READINGS ARE SIMULATED` (localised), one run at the mark's size, centred;
- * where it does not fit (story) it breaks at the dot. `markWord` is the localised mark word in the
- * sentence (text.ts `footerMark`); its box is the one the cap-height and contrast test measures.
+ * Footer lines (A-91): the whole sentence as one run where it fits, else broken at its ` · `, and
+ * any part still too wide at its spaces. Never truncated: every character of `footer` is drawn.
  */
-function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: string, markWord: string): { mark: MarkBox; lines: string[]; x0: number; x1: number; bottom: number } {
+export function footerLines(footer: string, fits: (s: string) => boolean): string[] {
+  if (fits(footer)) return [footer];
+  return footer.split(' · ').flatMap((part) => (fits(part) ? [part] : wrapWords(part, fits)));
+}
+
+/**
+ * Footer: `[STORE NAME] · READINGS ARE SIMULATED` (localised) at the mark's floor size, left-aligned
+ * at `footerX` (A-91), on two or more lines only where it does not fit. Drawn last over the housing,
+ * untinted. `markWord` is the localised mark word in the sentence (text.ts `footerMark`); its box is
+ * the one the cap-height and contrast test measures.
+ */
+function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: string, markWord: string): { mark: MarkBox; lines: string[]; x0: number; x1: number; bottom: number; boxes: Box[] } {
   const size = markSize(L.height, CAP_EM.b612);
   const capPx = CAP_EM.b612 * size;
-  const avail = L.width - 2 * 24;
-  const lines = width(footer, fonts.b612, size) <= avail ? [footer] : footer.split(' · ');
+  const avail = L.footerRight - L.footerX;
+  const lines = footerLines(footer, (l) => width(l, fonts.b612, size) <= avail);
   const pitch = Math.round(capPx * FOOTER_PITCH);
-  let x0 = L.width;
+  const x = L.footerX;
   let x1 = 0;
   let mark: MarkBox | null = null;
+  const boxes: Box[] = [];
   lines.forEach((line, i) => {
     const baseline = Math.round(L.footerTop + capPx + i * pitch);
     const w = width(line, fonts.b612, size);
-    const x = Math.round((L.width - w) / 2);
+    boxes.push({ x, y: baseline - capPx, w, h: capPx });
     text(canvas, line, x, baseline, fonts.b612, size, color.n6);
-    x0 = Math.min(x0, x);
     x1 = Math.max(x1, x + w);
     if (i === lines.length - 1) {
       const at = line.lastIndexOf(markWord);
@@ -445,10 +597,61 @@ function drawFooter(canvas: SkCanvas, L: CardLayout, fonts: CardFonts, footer: s
       mark = { kind: 'footer', x: mx, y: baseline - capPx, w: width(markWord, fonts.b612, size), h: capPx, baseline, fontSize: size, capPx };
     }
   });
-  return { mark: mark!, lines, x0, x1, bottom: mark!.baseline };
+  return { mark: mark!, lines, x0: x, x1, bottom: mark!.baseline, boxes };
+}
+
+/**
+ * The K-II style LED plate (Bible section 3, A-93) beside the reading window: five round lenses,
+ * bottom to top, on a plate with two screws. Lit to the tier's count in p3, p4, p4, p5; LED 5 red,
+ * on CRITICAL only. Unlit: n2 lens with an n4 specular dot at 10 o'clock. Lit: a bloom at 35%.
+ */
+function drawLeds(canvas: SkCanvas, L: CardLayout, tier: ScanRecord['outcome']['tier']): CardRender['leds'] {
+  const b = L.leds;
+  const k = L.width / 390;
+  canvas.drawRect(Skia.XYWHRect(b.x + 2, b.y + 3, b.w, b.h), paintOf(color.n1, 0.6));
+  canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(b.x, b.y, b.w, b.h), 2 * k, 2 * k), paintOf(color.n2));
+  canvas.drawRect(Skia.XYWHRect(b.x, b.y, b.w, 2), paintOf(color.n4, 0.8));
+  const screwR = Math.round(b.w * 0.13);
+  const pad = screwR * 2 + 10;
+  const d = Math.min(b.w * 0.5, (b.h - 2 * pad) / 4.6);
+  const pitch = (b.h - 2 * pad - d) / 4;
+  const cx = b.x + b.w / 2;
+  for (const cy of [b.y + pad / 2, b.y + b.h - pad / 2]) drawScrew(canvas, cx, cy, screwR, 35 + (cy % 50), false);
+  const lit = TIER_LEDS[tier];
+  const red = tier === 'critical';
+  const steps = [color.p3, color.p4, color.p4, color.p5, color.red];
+  const lenses: CardRender['leds']['lenses'] = [];
+  for (let i = 0; i < 5; i++) {
+    const cy = b.y + b.h - pad - d / 2 - i * pitch;
+    const r = d / 2;
+    lenses.push({ cx, cy, r });
+    canvas.drawCircle(cx, cy, r + 2, paintOf(color.n1));
+    if (i < lit) {
+      const hex = steps[i]!;
+      const bloom = bin.own(Skia.Paint());
+      bloom.setAntiAlias(true);
+      const [cr, cg, cb] = rgb(hex);
+      bloom.setShader(bin.own(Skia.Shader.MakeRadialGradient({ x: cx, y: cy }, r + 6 * k, [Skia.Color(`rgba(${cr}, ${cg}, ${cb}, 0.35)`), Skia.Color(`rgba(${cr}, ${cg}, ${cb}, 0)`)], [r / (r + 6 * k), 1], TileMode.Clamp)));
+      canvas.drawCircle(cx, cy, r + 6 * k, bloom);
+      canvas.drawCircle(cx, cy, r, paintOf(hex));
+      canvas.drawCircle(cx - r * 0.35, cy - r * 0.35, Math.max(1.5, r * 0.18), paintOf(color.p5, 0.55));
+    } else {
+      canvas.drawCircle(cx, cy, r, paintOf(color.n2));
+      canvas.drawCircle(cx - r * 0.45, cy - r * 0.3, Math.max(1.5, r * 0.12), paintOf(color.n4));
+    }
+  }
+  return { lit, red, lenses };
 }
 
 export function drawShareCard(i: CardInput): CardRender {
+  try {
+    return drawCard(i);
+  } finally {
+    bin.free();
+  }
+}
+
+function drawCard(i: CardInput): CardRender {
   const L = LAYOUTS[i.format];
   const { record, fonts } = i;
   const t = cardText(record, i.store ?? STORE_NAME, i.locale);
@@ -462,7 +665,7 @@ export function drawShareCard(i: CardInput): CardRender {
   const k = CARD_HIRES;
   const grainSeed = fig ? fig.seed : record.seed >>> 0;
 
-  // 1. The composite at the card's photo size, grain held back.
+  // 1. The composite at the card's photo size, tinted (A-08), grain held back.
   const photoSurface = Skia.Surface.Make(P.w, P.h);
   if (!photoSurface) throw new Error('share card: no raster surface');
   const pc = photoSurface.getCanvas();
@@ -491,84 +694,90 @@ export function drawShareCard(i: CardInput): CardRender {
     placement: scaled ?? { x: 0, y: 0, w: 1, h: 1, matte: 1, opacity: 0.08, flipX: false, offsetCopies: [] },
     tier: record.outcome.tier,
     seed: grainSeed,
-    disabled: !scaled,
+    disabled: !scaled || i.fx?.ghost === false,
     grain: 0,
+    tint: i.fx?.tint,
   });
   if (!setup) throw new Error('share card: ghost layer failed');
   const grain = setup.grain;
 
-  // 2. The data strip, bottom-left of the photo, burned in before the grain: every run at the
-  // mark's size; on two or more lines where it does not fit on one, SIMULATED last, left-aligned.
+  // 2. The data strip's scrim, bottom-left of the photo, on the tinted composite (before the grain):
+  // three data-back lines at the mark's floor size, SIMULATED last, left-aligned (A-90).
   const pad = Math.round(P.w * 0.02);
   const size = stripSize(L);
   const capPx = CAP_EM.vt323 * size;
   const sw = (s: string) => width(s, fonts.vt323, size);
-  const oneLine = `${t.strip.data} · `;
-  const oneFits = sw(oneLine) + sw(t.strip.mark) <= P.w - 3 * pad;
-  const stripLines: string[][] = oneFits
-    ? [[oneLine, t.strip.mark]]
-    : [...breakRuns(t.strip.data.split(' · '), (l) => sw(l) <= P.w - 3 * pad).map((l) => [l]), [t.strip.mark]];
+  const stripLines = [t.strip.lines[0], t.strip.lines[1], t.strip.mark];
   const pitch = Math.round(capPx * STRIP_PITCH);
   const padY = Math.round(capPx * 0.35);
   const scrimBottom = P.h - pad;
   const lastBaseline = Math.round(scrimBottom - Math.max(padY, 0.2 * size));
-  const baselines = stripLines.map((_, i) => lastBaseline - (stripLines.length - 1 - i) * pitch);
+  const baselines = stripLines.map((_, n) => lastBaseline - (stripLines.length - 1 - n) * pitch);
   const scrimTop = Math.floor(baselines[0]! - capPx - padY);
-  const lineW = stripLines.map((runs) => runs.reduce((a, r) => a + sw(r), 0));
-  const scrimW = Math.min(P.w, Math.ceil(Math.max(...lineW) + 2 * pad));
+  const scrimW = Math.min(P.w, Math.ceil(Math.max(...stripLines.map(sw)) + 2 * pad));
   // The strip sits bottom-left (brief), or bottom-right when the figure stands in the left half,
   // so the scrim never boxes the figure.
   const right = !!placement && placement.x + placement.w / 2 < panel.w / 2;
   const sx = right ? P.w - scrimW : 0;
-  const under = photoSurface.makeImageSnapshot().readPixels(sx, scrimTop, { width: scrimW, height: scrimBottom - scrimTop, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul });
+  const before = photoSurface.makeImageSnapshot();
+  const under = before.readPixels(sx, scrimTop, { width: scrimW, height: scrimBottom - scrimTop, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Unpremul });
+  before.dispose();
   const maxRgb = [0, 0, 0];
   if (under) for (let p = 0; p < under.length; p += 4) for (let c = 0; c < 3; c++) maxRgb[c] = Math.max(maxRgb[c]!, under[p + c]!);
   else maxRgb.fill(255);
   const stripColor = rgb(color.p3);
   const alpha = scrimAlpha(maxRgb, stripColor, grain * 255);
   pc.drawRect(Skia.XYWHRect(sx, scrimTop, scrimW, scrimBottom - scrimTop), paintOf(color.n0, alpha));
-  const drop = Math.max(1, Math.round(P.w / 366));
-  let markX = sx + pad;
-  stripLines.forEach((runs, i) => {
-    let x = sx + pad;
-    for (const run of runs) {
-      if (run === t.strip.mark && i === stripLines.length - 1) markX = x;
-      text(pc, run, x + drop, baselines[i]! + drop, fonts.vt323, size, color.n0);
-      x += text(pc, run, x, baselines[i]!, fonts.vt323, size, color.p3);
-    }
-  });
-  const markW = sw(t.strip.mark);
-  const baseline = lastBaseline;
   const photoImage = photoSurface.makeImageSnapshot();
+  photoSurface.dispose();
 
   // 3. The card.
   const surface = Skia.Surface.Make(L.width, L.height);
   if (!surface) throw new Error('share card: no raster surface');
   const canvas = surface.getCanvas();
   drawHousing(canvas, L, record.seed >>> 0);
-  drawNameplate(canvas, L, fonts, t.nameplate, record.seed >>> 0);
+  const id = i.identity ?? CARD_IDENTITY;
+  const plateRuns = drawNameplate(canvas, L, fonts, t.nameplate, id.serial, record.seed >>> 0);
   // The photo sits recessed: a 4 px n1 surround.
   canvas.drawRect(Skia.XYWHRect(P.x - 4, P.y - 4, P.w + 8, P.h + 8), paintOf(color.n1));
-  // Grain after compositing, over the photo, the figure and the strip together (COMPOSITE_SKSL's step).
+  // Grain after compositing, over the tinted photo, the figure and the scrim together (COMPOSITE_SKSL's step).
   canvas.save();
   canvas.clipRect(Skia.XYWHRect(P.x, P.y, P.w, P.h), ClipOp.Intersect, false);
   canvas.translate(P.x, P.y);
   const gfx = effect('grain', GRAIN_SKSL);
   const freq = GRAIN_FREQ / k;
-  const gp = Skia.Paint();
+  const gp = bin.own(Skia.Paint());
   gp.setShader(
-    gfx.makeShaderWithChildren(processUniforms(gfx, { grain }), [
-      imageShader(photoImage, { x: 0, y: 0, width: P.w, height: P.h }, TileMode.Clamp),
-      Skia.Shader.MakeFractalNoise(freq, freq, 2, grainSeed % 1000, 0, 0),
-    ]),
+    bin.own(
+      gfx.makeShaderWithChildren(processUniforms(gfx, { grain }), [
+        bin.own(imageShader(photoImage, { x: 0, y: 0, width: P.w, height: P.h }, TileMode.Clamp)),
+        bin.own(Skia.Shader.MakeFractalNoise(freq, freq, 2, grainSeed % 1000, 0, 0)),
+      ]),
+    ),
   );
   canvas.drawRect(Skia.XYWHRect(0, 0, P.w, P.h), gp);
+  // 4. The strip text after tint, scrim and grain: p3 at 100% over a 1 px n0 copy, never tinted.
+  const drop = Math.max(1, Math.round(P.w / 366));
+  const markX = sx + pad;
+  stripLines.forEach((run, n) => {
+    text(canvas, run, sx + pad + drop, baselines[n]! + drop, fonts.vt323, size, color.n0);
+    text(canvas, run, sx + pad, baselines[n]!, fonts.vt323, size, color.p3);
+  });
   canvas.restore();
+  const markW = sw(t.strip.mark);
+  const baseline = lastBaseline;
   const reading = drawReading(canvas, L, fonts, t.reading, record.outcome.tier === 'critical');
+  const leds = drawLeds(canvas, L, record.outcome.tier);
   const footer = drawFooter(canvas, L, fonts, t.footer, t.footerMark);
-  drawHousingDetail(canvas, L, { top: L.footerTop, bottom: footer.bottom, x0: footer.x0, x1: footer.x1 }, record.seed >>> 0);
+  const stickerLines = L.height > L.width ? [t.stickerHead, `CAL ${id.cal}`, `PRÜF ${id.pruef}`] : [t.stickerHead, `CAL ${id.cal} · PRÜF ${id.pruef}`];
+  const avoid: Box[] = [L.leds, L.reading, { x: P.x, y: P.y, w: P.w, h: P.h }];
+  const housing = drawHousingDetail(canvas, L, { top: L.footerTop, bottom: footer.bottom, x0: footer.x0, x1: footer.x1, boxes: footer.boxes, mark: footer.mark }, record.seed >>> 0, fonts, stickerLines, avoid);
   surface.flush();
   const image = surface.makeImageSnapshot();
+  // Free the wasm heap now (CanvasKit has no GC for these): the card image keeps its own pixels.
+  // The paints, fonts and shaders go with the bin when drawShareCard returns.
+  surface.dispose();
+  photoImage.dispose();
 
   const stripMark: MarkBox = { kind: 'strip', x: P.x + markX, y: P.y + baseline - capPx, w: markW, h: capPx, baseline: P.y + baseline, fontSize: size, capPx };
   return {
@@ -578,12 +787,20 @@ export function drawShareCard(i: CardInput): CardRender {
     image,
     fileName: cardFileName(record.id),
     text: t,
-    texts: [t.nameplate, ...stripLines.flat(), ...reading.runs, ...footer.lines],
+    texts: [...plateRuns, ...stripLines, ...reading.runs, ...footer.lines],
     marks: [stripMark, footer.mark],
     strip: { x: P.x + sx, y: P.y + scrimTop, w: scrimW, h: scrimBottom - scrimTop, alpha },
     layout: L,
     readingLines: reading.lines,
     figure: fig,
+    leds,
+    gainDb: setup.gain.db,
+    tintMix: i.fx?.tint === false ? 0 : setup.tintMix,
+    tintLift: setup.tintLift,
+    band: setup.ref.band ?? null,
+    sticker: housing.sticker,
+    footerBoxes: footer.boxes,
+    engraving: housing.engraving,
   };
 }
 

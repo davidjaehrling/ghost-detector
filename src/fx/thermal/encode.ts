@@ -13,11 +13,37 @@ import type { ThermalField } from './thermalField';
 /** Sensor shimmer in the live (non-static) view, °C peak. */
 export const SHIMMER_C = 0.12;
 
-/** Display range of a field, never narrower than 1 °C. */
-export function displayRange(field: ThermalField): { lo: number; hi: number } {
-  const lo = field.minC;
+/**
+ * Share of the display scale (the palette's p0 to p1) kept for the cold body under the room's own
+ * coldest pixel (A-46). Full equalisation gave the dark room the same p0 as the column, so the
+ * column vanished into it at the crosshair; now the room starts at p1 and the column alone goes darker.
+ */
+export const COLD_BAND = 0.2;
+
+/**
+ * Display range of a field, never narrower than 1 °C. `lo` is the bar's bottom (A-48): the cold
+ * spot's ΔT where it is colder than the room (so `SP1 ΔT` is the coldest value the bar shows),
+ * else the room's coldest pixel; anything colder clamps to it. `room` is the room's coldest pixel
+ * without the dip, where the cold band ends.
+ */
+export function displayRange(field: ThermalField): { lo: number; hi: number; room: number } {
+  const spot = field.coldSpotC === null ? Infinity : field.ambientC + field.coldSpotC;
+  const roomMin = field.roomMinC ?? field.minC;
+  const lo = field.coldSpotC === null ? field.minC : Math.min(roomMin, spot);
   const hi = Math.max(field.maxC, lo + 1);
-  return { lo, hi };
+  return { lo, hi, room: Math.min(hi, Math.max(lo, roomMin)) };
+}
+
+/** The scale bar's ends as ΔT against the room's ambient, °C, 0.1 °C (bottom first). */
+export function barDeltas(field: ThermalField): { lo: number; hi: number } {
+  const { lo, hi } = displayRange(field);
+  const r = (v: number) => Math.round(v * 10) / 10;
+  return { lo: field.coldSpotC !== null && lo === field.ambientC + field.coldSpotC ? field.coldSpotC : r(lo - field.ambientC), hi: r(hi - field.ambientC) };
+}
+
+/** True when the field has a cold body under the room (the scale keeps COLD_BAND for it). */
+function hasBand(lo: number, room: number): boolean {
+  return room - lo > 0.5;
 }
 
 /** Normalised position of a temperature on the display range, 0..1. */
@@ -39,12 +65,17 @@ const cdfCache = new WeakMap<ThermalField, Float32Array>();
 function cdfOf(field: ThermalField): Float32Array {
   let cdf = cdfCache.get(field);
   if (cdf) return cdf;
-  const { lo, hi } = displayRange(field);
+  const { lo: lo0, hi, room } = displayRange(field);
+  const lo = hasBand(lo0, room) ? room : lo0;
   const hist = new Uint32Array(CDF_BINS);
-  const n = field.data.length;
-  for (let i = 0; i < n; i++) {
-    hist[Math.min(CDF_BINS - 1, Math.floor(rangePos(field.data[i]!, lo, hi) * CDF_BINS))]!++;
+  let n = 0;
+  for (let i = 0; i < field.data.length; i++) {
+    const c = field.data[i]!;
+    if (c < lo && lo > lo0) continue; // the cold body below the room is on the cold band
+    hist[Math.min(CDF_BINS - 1, Math.floor(rangePos(c, lo, hi) * CDF_BINS))]!++;
+    n++;
   }
+  n = Math.max(1, n);
   cdf = new Float32Array(CDF_BINS + 1);
   let acc = 0;
   for (let b = 0; b < CDF_BINS; b++) {
@@ -58,7 +89,8 @@ function cdfOf(field: ThermalField): Float32Array {
 
 /** Share of the field's pixels colder than `c`, 0..1, interpolated in a 1024-bin histogram. */
 export function rankOf(field: ThermalField, c: number): number {
-  const { lo, hi } = displayRange(field);
+  const { lo: lo0, hi, room } = displayRange(field);
+  const lo = hasBand(lo0, room) ? room : lo0;
   const cdf = cdfOf(field);
   const p = rangePos(c, lo, hi) * CDF_BINS;
   const b = Math.min(CDF_BINS - 1, Math.floor(p));
@@ -67,8 +99,10 @@ export function rankOf(field: ThermalField, c: number): number {
 
 /** Display-scale position of a temperature, 0..1, monotonic in `c`. */
 export function displayPos(field: ThermalField, c: number): number {
-  const { lo, hi } = displayRange(field);
-  return (1 - EQUALISE) * rangePos(c, lo, hi) + EQUALISE * rankOf(field, c);
+  const { lo, hi, room } = displayRange(field);
+  if (!hasBand(lo, room)) return (1 - EQUALISE) * rangePos(c, lo, hi) + EQUALISE * rankOf(field, c);
+  if (c <= room) return COLD_BAND * rangePos(c, lo, room);
+  return COLD_BAND + (1 - COLD_BAND) * ((1 - EQUALISE) * rangePos(c, room, hi) + EQUALISE * rankOf(field, c));
 }
 
 /**

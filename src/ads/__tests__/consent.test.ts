@@ -161,3 +161,28 @@ describe('consent gate', () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('consent info timeout', () => {
+  it('an info update that never answers counts as no consent and opens no request', async () => {
+    const store = createConsentStore(null);
+    const calls: string[] = [];
+    const never = new Promise<ConsentInfo>(() => {});
+    const ads = createAds(
+      {
+        consentTimeoutMs: 20,
+        requestInfoUpdate: () => never,
+        loadAndShowConsentFormIfRequired: () => never,
+        purpose1Granted: async () => true,
+        showPrivacyOptionsForm: () => never,
+        initialize: async () => void calls.push('initialize'),
+        unitId: (k) => `test-${k}`,
+        fullscreen: () => ({ load: async () => true, show: async () => ({ shown: true, earned: false }) }),
+      },
+      store,
+    );
+    const s = await ads.ensureConsent();
+    expect(s).toMatchObject({ status: 'error', canRequestAds: false, resolved: true });
+    expect(ads.analyticsAllowed()).toBe(false);
+    expect(calls).toEqual([]);
+  });
+});

@@ -12,6 +12,9 @@ import {
   type NotificationKind,
   type SoundConfig,
 } from './config';
+import { calmStyle } from './hapticStyle';
+
+export { calmStyle };
 
 /** The subset of expo-haptics used here, injectable for tests. */
 export interface HapticDriver {
@@ -51,12 +54,6 @@ function expoDriver(): HapticDriver | null {
   } catch {
     return null;
   }
-}
-
-/** Calm drops Heavy to Medium and Rigid to Light. */
-export function calmStyle(s: HapticStep['style'], intensity: Intensity): HapticStep['style'] {
-  if (intensity !== 'calm') return s;
-  return s === 'heavy' ? 'medium' : s === 'rigid' ? 'light' : s;
 }
 
 export function createHaptics(config: SoundConfig = DEFAULT_CONFIG, opts: HapticsOptions = {}): Haptics {

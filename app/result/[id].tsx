@@ -2,12 +2,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Group as SkGroup, Rect as SkRect, Text as SkText, useImage, type SkFont } from '@shopify/react-native-skia';
 import { Component, type ReactNode } from 'react';
-import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Image, StyleSheet, Text, View } from 'react-native';
 import { track } from '../../src/analytics';
 import { onBackToViewfinder, onFreshResult } from '../../src/ui/interstitial';
 import type { CardFormat } from '../../src/fx/share/constants';
 import type { Tier } from '../../src/engine';
-import { Composite, regionFromImage, type RegionStats } from '../../src/fx/compositor';
+import { Composite, autoGain, regionFromImage, type RegionStats } from '../../src/fx/compositor';
 import { PhosphorText, SnapshotCanvas, useVT323 } from '../../src/fx/glass';
 import { GhostV0, placeGhost, type Placement } from '../../src/fx/ghostV0';
 import { buildThermalField, lumaFromImage, ThermalView, type LumaGrid, type ThermalField } from '../../src/fx/thermal';
@@ -25,7 +25,10 @@ import { DEMO_CASES, SCARE_CASE, demoRecord, isDemoName } from '../../src/ui/res
 import { bestSoFar, noPrior } from '../../src/ui/result/best';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../../src/ui/result/panel';
 import { readingsFor } from '../../src/ui/result/readings';
-import { PINNED_TIERS, screenStampText, thermalDelta } from '../../src/ui/result/stamp';
+import { formatWindowShort } from '../../src/ui/boot/activity';
+import { PINNED_TIERS, gainLabel, screenStampLines, thermalDelta } from '../../src/ui/result/stamp';
+import { stripScrimAlpha } from '../../src/ui/result/stripScrim';
+import { deepPress, deepTier } from '../../src/ui/result/deepKey';
 import { Readout } from '../../src/ui/Readout';
 import { tierWord } from '../../src/state/tierWord';
 import { copyOf, eraValue, fmtFixed, t, useLocale } from '../../src/i18n';
@@ -47,6 +50,7 @@ const copy = copyOf({
   missingLine: 'result.missingLine',
   flux: 'result.flux',
   thermal: 'result.thermal',
+  dtAvg: 'result.dtAvg',
   acoustic: 'result.acoustic',
   profile: 'result.profile',
   none: 'result.none',
@@ -59,6 +63,8 @@ const copy = copyOf({
   back: 'result.back',
   backLabel: 'result.backLabel',
   photoLabel: 'result.photoLabel',
+  log: 'viewfinder.hud.log',
+  logLabel: 'viewfinder.hud.logLabel',
 });
 
 const LINE_KEY: Record<Tier, string> = {
@@ -69,7 +75,7 @@ const LINE_KEY: Record<Tier, string> = {
   critical: 'result.line.critical',
 };
 const resultLineFor = (tier: Tier, hz: number) => t(LINE_KEY[tier], { hz });
-const coldSpot = (dt: string, khz: string) => t('result.coldSpot', { dt, khz });
+const coldSpot = (dt: string, khz: string) => t('result.coldSpotMin', { dt, khz });
 const hiddenLabels = () => [t('result.hidden.designation'), t('result.hidden.behaviour'), deepCopy.evpHead];
 
 // The barrel warp snapshots the glass content. The photo (Composite), the thermal view, the SPI digit and
@@ -105,12 +111,12 @@ const clientSnapshot = () => true;
 // renders an empty housing colour and the body mounts after hydration.
 export default function ResultRoute() {
   const mounted = useSyncExternalStore(subscribeNever, clientSnapshot, serverSnapshot);
-  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string; share?: string }>();
+  const params = useLocalSearchParams<{ id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string; share?: string; deeparm?: string }>();
   if (!mounted) return <View testID="screen-result" style={s.empty} />;
   return <Result params={params} />;
 }
 
-function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string; share?: string } }) {
+function Result({ params }: { params: { id?: string; static?: string; fixture?: string; demo?: string; case?: string; scare?: string; therm?: string; warp?: string; seed?: string; deepscan?: string; share?: string; deeparm?: string } }) {
   useLocale();
   const router = useRouter();
   const [harness] = useState<Harness>(() => readHarness(params));
@@ -184,7 +190,30 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     };
   }, []);
   const shareOpen = shareMode === 'format' || shareMode === 'printing';
+  // DEEP SCAN is hardware key 4 with a two-step arm (D-045 ruling 1). The first press lights the key and
+  // prints the sponsored-video line above it; the second runs the ad. Any other key cancels the arm.
+  const [shownAt] = useState(() => Date.now());
+  const shareMoment = offer.line !== null || shareMode !== 'idle';
+  const [armedRaw, setArmed] = useState(harness.isStatic && params.deeparm === '1');
+  // The arm drops when the key's state changes (an ad starts, the key goes dark) or a share moment opens.
+  const armSignal = `${deep.state}|${shareMoment}`;
+  const [lastSignal, setLastSignal] = useState(armSignal);
+  if (lastSignal !== armSignal) {
+    setLastSignal(armSignal);
+    // A key that was still warming had nothing armed (the harness may start it armed).
+    if (!lastSignal.startsWith('warming')) setArmed(false);
+  }
+  const armed = armedRaw && deep.state === 'ready' && !shareMoment;
+  const pressDeep = () => {
+    const what = deepPress({ state: deep.state, armed, sinceShownMs: Date.now() - shownAt });
+    if (what === 'arm') setArmed(true);
+    else if (what === 'run') {
+      setArmed(false);
+      void deep.press();
+    }
+  };
   const openFormat = () => {
+    setArmed(false);
     if (!digitLanded || shareOpen) return;
     if (faultTimer.current) clearTimeout(faultTimer.current);
     offer.dismiss();
@@ -226,18 +255,44 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
     );
   }
 
-  // Fixed four-slot row: BACK, SHARE, THERM (PHOTO while it shows), then a dummy cap. DEEP SCAN is
-  // the key on the glass under the decoded signature (it leads into it), not a hardware slot.
-  const keySlots: (KeySlot | null)[] = [
+  // Fixed four-slot row. Resting: BACK, SHARE, THERM (PHOTO while it shows), then slot 4: DEEP SCAN on
+  // ACTIVE and above, LOG on QUIET, dark on TRACE. Choosing a format: CANCEL, 9:16 STORY, 1:1 SQUARE and a
+  // dark cap (THERM is off, D-045 5). Printing: every key inert, the render cannot be skipped. Slot 4 is
+  // dark in every share moment, so the DEEP SCAN line goes with it (D-034 c).
+  const tier = record.outcome.tier;
+  const cancelArm = () => setArmed(false);
+  const deepSentence = `${deepCopy.label}. ${deepCopy.arm}`;
+  const deepLegend = deep.state === 'warming' ? deepCopy.keyWarming : deep.state === 'offline' ? deepCopy.keyOffline : deepCopy.legend;
+  let slot4: KeySlot | null = null;
+  if (!shareMoment && deepTier(tier) && deep.state !== 'unlocked') {
+    slot4 = {
+      testID: 'deepscan-key',
+      label: deep.state === 'ready' ? deepSentence : `${deepCopy.label}. ${deepLegend}`,
+      legend: deepLegend,
+      onPress: pressDeep,
+      inert: deep.state !== 'ready',
+      backlit: armed,
+    };
+  } else if (!shareMoment && tier === 'quiet') {
+    // Plain navigation to the log. It never goes through onBackToViewfinder, so it is never an ad break.
+    slot4 = { testID: 'key-log', label: copy.logLabel, legend: copy.log, onPress: () => router.push('/history') };
+  }
+  const keySlots: (KeySlot | null)[] =
     shareMode === 'format'
-      ? { testID: 'key-back', label: shareCopy.cancelLabel, legend: shareCopy.cancel, onPress: () => setShareMode('idle') }
-      : { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: toViewfinder, inert: shareMode === 'printing' },
-    { testID: 'key-share', label: shareCopy.keyLabel, legend: shareCopy.key, onPress: openFormat, inert: !digitLanded || shareOpen, backlit: offer.line !== null && !shareOpen },
-    therm
-      ? { testID: 'key-therm', label: copy.photoKeyLabel, legend: copy.photoKey, onPress: () => setTherm(false), backlit: true }
-      : { testID: 'key-therm', label: copy.thermKeyLabel, legend: copy.thermal, onPress: () => setTherm(true) },
-    null,
-  ];
+      ? [
+          { testID: 'key-back', label: shareCopy.cancelLabel, legend: shareCopy.cancel, onPress: () => setShareMode('idle') },
+          { testID: 'share-916', label: shareCopy.storyLabel, legend: shareCopy.storyKey, onPress: () => pickFormat('story'), backlit: true },
+          { testID: 'share-11', label: shareCopy.squareLabel, legend: shareCopy.squareKey, onPress: () => pickFormat('square'), backlit: true },
+          null,
+        ]
+      : [
+          { testID: 'key-back', label: copy.backLabel, legend: copy.back, onPress: () => { cancelArm(); toViewfinder(); }, inert: shareMode === 'printing' },
+          { testID: 'key-share', label: shareCopy.keyLabel, legend: shareCopy.key, onPress: openFormat, inert: !digitLanded || shareOpen, backlit: offer.line !== null && !shareOpen },
+          therm
+            ? { testID: 'key-therm', label: copy.photoKeyLabel, legend: copy.photoKey, onPress: () => { cancelArm(); setTherm(false); }, backlit: true, inert: shareOpen }
+            : { testID: 'key-therm', label: copy.thermKeyLabel, legend: copy.thermal, onPress: () => { cancelArm(); setTherm(true); }, inert: shareOpen },
+          slot4,
+        ];
 
   return (
     <Housing
@@ -246,7 +301,7 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
       fixedIdentity={harness.isStatic}
       glassLabel={copy.glass}
       keys={keySlots}
-      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}-${deep.state}-${shareMode}-${offer.line}` }}
+      glass={{ warp, refreshKey: `${record.id}-${record.outcome.tier}-${photoLoaded}-${therm}-${stable}-${deep.state}-${shareMode}-${offer.line}-${armed}` }}
     >
       {(size) => (
         <ResultGlass
@@ -254,11 +309,12 @@ function Result({ params }: { params: { id?: string; static?: string; fixture?: 
           record={record}
           isStatic={harness.isStatic}
           speed={harness.speed}
-          share={{ mode: shareMode, line: offer.line, onPick: pickFormat }}
+          share={{ mode: shareMode, line: offer.line }}
           onLanded={setDigitLanded}
           scare={scareMode}
           therm={therm}
           deep={deep}
+          armed={armed}
           onPhotoLoaded={setPhotoLoaded}
           onStable={setStable}
         />
@@ -290,16 +346,18 @@ type GlassProps = {
   record: ScanRecord;
   isStatic: boolean;
   speed: number;
-  share: { mode: ShareMode; line: OfferKind | null; onPick: (f: CardFormat) => void };
+  share: { mode: ShareMode; line: OfferKind | null };
   onLanded: (landed: boolean) => void;
   scare: ScareMode;
   therm: boolean;
   deep: { state: DeepState; press: () => void; closedAt: number | null };
+  /** The first press of key 4 has armed the DEEP SCAN (the sponsored-video line is up). */
+  armed: boolean;
   onPhotoLoaded: (loaded: boolean) => void;
   onStable: (stable: boolean) => void;
 };
 
-function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, therm, deep, onPhotoLoaded, onStable }: GlassProps) {
+function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, therm, deep, armed, onPhotoLoaded, onStable }: GlassProps) {
   const locale = useLocale();
   const { outcome, profile } = record;
   const tier = outcome.tier;
@@ -310,7 +368,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
   const reading = readingsFor(record.seed, tier);
   // One thermal number per result: the cold spot on STRONG and CRITICAL, the THERM reading below.
   const deltaC = thermalDelta(tier, reading);
-  const stamp = screenStampText({ id: record.id, spi: outcome.spi, deltaC, createdAt: record.createdAt });
+  const stamp = screenStampLines({ id: record.id, spi: outcome.spi, deltaC, createdAt: record.createdAt }, tier);
 
   // Reveal (psych brief 2.6): 1.2 s of silence with the number blank, the needle at
   // rest and the photo up; then the needle springs and the number lands in one frame at
@@ -387,7 +445,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
 
   const mainLine =
     tier === 'critical' ? resultLineFor(tier, reading.evpHz) : resultLineFor(tier, 0);
-  const resultLine = share.mode === 'fault' ? shareCopy.fault : share.line === 'ready' ? shareCopy.ready(record.id) : share.line === 'updated' ? shareCopy.updated : mainLine;
+  const resultLine = share.mode === 'fault' ? shareCopy.fault : share.line === 'ready' ? shareCopy.ready() : share.line === 'updated' ? shareCopy.updated : mainLine;
   const lineCount = PINNED_TIERS.includes(tier) ? 2 : 1;
   const sharePanel = share.mode === 'format' || share.mode === 'printing';
   // No ad-starting key shares the glass with the share moment: the offer line, format, printing, fault.
@@ -396,6 +454,11 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
   const pct = unlocked ? 100 : profile.signatureDecodedPct;
   const innerW = size.w - 24;
   const best = useMemo(() => (quiet ? bestSoFar(listScans(), record.id) : null), [quiet, record.id]);
+  // QUIET fills the lower glass with the unit's own state: tonight's window, and the auto-gain the probe
+  // front end applied (only over a photo dark enough to need it).
+  const [gainDb, setGainDb] = useState(0);
+  const [openedAt] = useState(() => Date.now());
+  const windowLine = formatWindowShort(new Date(isStatic ? record.createdAt : openedAt));
 
   // Hidden strings for the redaction bars: the real name, the first trait line
   // and an EVP line of seeded length. Bars match their width, never a block glyph.
@@ -419,6 +482,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
         stamp={stamp}
         hires={unlocked}
         onPhotoLoaded={onPhotoLoaded}
+        onGain={setGainDb}
       />
       <View style={s.body}>
         <View style={s.revealRow}>
@@ -446,19 +510,21 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           </View>
           <SpiDial value={value} redZone={tier === 'critical'} />
         </View>
-        {sharePanel ? (
-          <SharePanel mode={share.mode} height={BODY.gap + BODY.line * lineCount + BODY.gap + BODY.readings} still={isStatic} onPick={share.onPick} />
-        ) : (
-          <>
         <View style={s.lines}>
-          <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
-            {resultLine}
-          </Text>
-          {PINNED_TIERS.includes(tier) ? (
-            <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
-              {coldSpot(fmtFixed(deltaC, 1, locale), fmtFixed(reading.driftKhz, 1, locale))}
-            </Text>
-          ) : null}
+          {sharePanel ? (
+            <SharePanel mode={share.mode} height={BODY.line * lineCount} still={isStatic} />
+          ) : (
+            <>
+              <Text style={s.resultLine} testID="result-line" numberOfLines={1}>
+                {resultLine}
+              </Text>
+              {PINNED_TIERS.includes(tier) ? (
+                <Text style={s.resultLine} testID="result-coldspot" numberOfLines={1}>
+                  {coldSpot(fmtFixed(deltaC, 1, locale), fmtFixed(reading.driftKhz, 1, locale))}
+                </Text>
+              ) : null}
+            </>
+          )}
         </View>
         <View style={s.readings}>
           <Readout
@@ -466,21 +532,19 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
             label={copy.flux}
             value={String(reading.fluxMg)}
             unit="mG"
-            labelCh={6}
+            labelCh={8}
             valueColor={reading.fluxMg > FLUX_HOT ? color.p5 : color.p4}
           />
           <Readout
             size="rdXS"
-            label={copy.thermal}
+            label={copy.dtAvg}
             value={fmtFixed(reading.thermalC, 1, locale)}
             unit="°C"
-            labelCh={6}
+            labelCh={8}
             valueColor={reading.thermalC < THERMAL_COLD ? color.p5 : color.p4}
           />
-          <Readout size="rdXS" label={copy.acoustic} value={String(reading.levelDb)} unit="dBFS" labelCh={6} />
+          <Readout size="rdXS" label={copy.acoustic} value={String(reading.levelDb)} unit="dBFS" labelCh={8} />
         </View>
-          </>
-        )}
         <View style={s.profile} testID="result-profile">
           <Text style={s.profileHead}>{copy.profile}</Text>
           {quiet ? (
@@ -491,7 +555,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
               <ProfileRow label={copy.eraLabel} value={eraValue(profile.era)} valueTestID="profile-era" />
               {hiddenLabels().map((l, i) =>
                 unlocked ? (
-                  <ProfileRow key={l} label={l} value={unlockedValues[i]} valueTestID={`profile-${PROFILE_IDS[i]}`} />
+                  <ProfileRow key={l} label={l} value={unlockedValues[i]} valueTestID={`profile-${PROFILE_IDS[i]}`} peak={PROFILE_IDS[i] === 'evp'} />
                 ) : (
                   <ProfileRow key={l} label={l} maskW={Math.min(maskMax, Math.round(hiddenLen[i]! * CHAR_XS))} />
                 ),
@@ -506,7 +570,7 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
           </View>
         )}
         {quiet ? null : <View style={s.spacer} />}
-        {wide && !shareMoment ? <DeepKey state={deep.state} onPress={deep.press} /> : null}
+        {wide ? <View style={[s.deepZone, unlocked && s.deepZoneDone]}>{shareMoment ? null : <DeepLine state={deep.state} armed={armed} />}</View> : null}
         {quiet ? (
           <View style={s.best} testID="result-best">
             {best ? (
@@ -517,6 +581,12 @@ function ResultGlass({ size, record, isStatic, speed, share, onLanded, scare, th
             ) : (
               <Text style={[s.bestText, { color: color.p3 }]}>{noPrior()}</Text>
             )}
+          </View>
+        ) : null}
+        {quiet ? (
+          <View style={s.quietState}>
+            <Text style={s.quietWindow} testID="result-window">{windowLine}</Text>
+            {gainDb > 0 ? <Text style={s.quietGain} testID="result-gain">{gainLabel(gainDb)}</Text> : null}
           </View>
         ) : null}
       </View>
@@ -530,26 +600,29 @@ const PROFILE_IDS = ['name', 'behaviour', 'evp'] as const;
 const SPI_PAD = 12; // canvas margin around the digit so the bloom is not clipped
 const SPI_BASE = SPI_PAD + 52; // VT323 72 px baseline inside the 64 px line
 
-function ProfileRow({ label, value, maskW, valueTestID }: { label: string; value?: string; maskW?: number; valueTestID?: string }) {
+function ProfileRow({ label, value, maskW, valueTestID, peak = false }: { label: string; value?: string; maskW?: number; valueTestID?: string; peak?: boolean }) {
   // A value longer than its box (a narrow phone) tightens its tracking to fit instead of cutting the end.
   // The room is measured on the row (minus the label column), never on the text itself: a text's own
   // width is its content width, which sits a sub-pixel under len * CHAR_XS and would tighten every row.
   const [rowW, setRowW] = useState(0);
-  const boxW = rowW - LABEL_W;
-  const need = (value?.length ?? 0) * CHAR_XS;
-  const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(-0.8, Math.floor((boxW / (value?.length ?? 1) - (CHAR_XS - 0.5)) * 10) / 10) } : null;
+  // 8 px of air to the glass edge on the right (A-52): a long value tightens before it reaches the window.
+  const boxW = rowW - LABEL_W - 8;
+  // The unlocked EVP fragment is the one peak on the profile: rdM in p5 (28 px VT323, 0.4 em advance).
+  const charW = peak ? 11.2 : CHAR_XS;
+  const need = (value?.length ?? 0) * charW;
+  const tight = rowW > 0 && need > boxW + 1 ? { letterSpacing: Math.max(peak ? -2 : -0.8, Math.floor((boxW / (value?.length ?? 1) - (charW - (peak ? 0 : 0.5))) * 10) / 10) } : null;
   return (
-    <View style={s.profRow} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
-      <Text style={s.profLabel}>{label}</Text>
-      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, tight]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
+    <View style={[s.profRow, peak && s.profRowPeak]} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
+      <Text style={s.profLabel} maxFontSizeMultiplier={1}>{label}</Text>
+      {maskW !== undefined ? <View style={[s.mask, { width: maskW }]} testID="profile-mask" /> : <Text style={[s.profileValue, s.profileFit, peak && s.profilePeak, tight]} numberOfLines={1} testID={valueTestID}>{value}</Text>}
     </View>
   );
 }
 
-// The format choice, in place of the result lines and readings: one line and two keys. While the card
-// renders the same box holds the printing line with a blinking block. The box keeps the height of what
-// it replaces, so nothing above or below moves.
-function SharePanel({ mode, height, still, onPick }: { mode: ShareMode; height: number; still: boolean; onPick: (f: CardFormat) => void }) {
+// The format choice, in place of the result lines only: one line; the formats are hardware keys
+// (D-045 5) and the reading rows stay. While the card renders the same box holds the printing line with
+// a blinking block. The box keeps the height of what it replaces, so nothing above or below moves.
+function SharePanel({ mode, height, still }: { mode: ShareMode; height: number; still: boolean }) {
   const blink = useBlink(still);
   const printing = mode === 'printing';
   return (
@@ -560,28 +633,14 @@ function SharePanel({ mode, height, still, onPick }: { mode: ShareMode; height: 
         </Text>
         {printing ? <View style={[s.shareBlock, { opacity: blink ? 1 : 0 }]} testID="share-block" /> : null}
       </View>
-      {printing ? null : (
-        <View style={s.shareKeys}>
-          <Pressable testID="share-916" accessibilityRole="button" accessibilityLabel={shareCopy.storyLabel} onPress={() => onPick('story')} style={s.shareKey}>
-            <Text style={s.shareKeyText}>{shareCopy.story}</Text>
-            <Text style={s.shareKeySub}>{shareCopy.storySub}</Text>
-          </Pressable>
-          <Pressable testID="share-11" accessibilityRole="button" accessibilityLabel={shareCopy.squareLabel} onPress={() => onPick('square')} style={s.shareKey}>
-            <Text style={s.shareKeyText}>{shareCopy.square}</Text>
-            <Text style={s.shareKeySub}>{shareCopy.squareSub}</Text>
-          </Pressable>
-        </View>
-      )}
     </View>
   );
 }
 
-// The DEEP SCAN key on the glass, directly under the decoded signature it leads into. The sublabel
-// is always drawn while the key is offered. Disabled states print their reason in the key itself.
-const deepLegend = (state: Exclude<DeepState, 'unlocked'>): string =>
-  ({ ready: deepCopy.legend, warming: deepCopy.warming, offline: deepCopy.offline, running: deepCopy.running })[state];
-
-function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) {
+// What prints directly above hardware key 4 (the key is in the housing row; this is the glass line over
+// it). Armed: the sponsored-video sentence. Warming, offline and running print their state. Unlocked: the
+// completion line. Nothing prints before the first press, so the zone keeps its height and stays blank.
+function DeepLine({ state, armed }: { state: DeepState; armed: boolean }) {
   useLocale();
   if (state === 'unlocked') {
     return (
@@ -590,27 +649,12 @@ function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) 
       </Text>
     );
   }
-  const live = state === 'ready';
+  const text = state === 'warming' ? deepCopy.warming : state === 'offline' ? deepCopy.offline : state === 'running' ? deepCopy.running : armed ? deepCopy.arm : null;
+  if (text === null) return null;
   return (
-    <View style={s.deepWrap}>
-      <Pressable
-        testID="deepscan-key"
-        accessibilityRole="button"
-        accessibilityLabel={live ? deepCopy.label : deepLegend(state)}
-        accessibilityState={{ disabled: !live }}
-        disabled={!live}
-        hitSlop={{ top: 6, bottom: 6 }}
-        onPress={onPress}
-        style={[s.deepKey, live ? s.deepKeyLive : s.deepKeyOff]}
-      >
-        <Text style={[s.deepLegend, live ? { color: color.p5 } : { color: color.p2 }]} numberOfLines={1}>
-          {deepLegend(state)}
-        </Text>
-      </Pressable>
-      <Text style={s.deepSub} testID="deepscan-sub">
-        {deepCopy.sub}
-      </Text>
-    </View>
+    <Text style={s.deepLine} testID="deepscan-line">
+      {text}
+    </Text>
   );
 }
 
@@ -618,13 +662,16 @@ function DeepKey({ state, onPress }: { state: DeepState; onPress: () => void }) 
 function DecodeBar({ pct }: { pct: number }) {
   const lit = Math.round((pct / 100) * 20);
   return (
-    <View style={s.decodeBar} testID="decode-bar" accessibilityLabel={t('result.decodedLabel', { pct })}>
+    <View style={s.decodeBar} testID="decode-bar" role="progressbar" accessibilityLabel={t('result.decodedLabel', { pct })}>
       {Array.from({ length: 20 }, (_, i) => (
         <View key={i} style={[s.block, { backgroundColor: i < lit ? color.p4 : color.p1 }]} />
       ))}
     </View>
   );
 }
+
+// QUIET draws no figure; the composite still wants a placement, so it gets an empty one (disabled hides it).
+const QUIET_PLACEMENT: Placement = { x: 0, y: 0, w: 1, h: 1, matte: 1, opacity: 0.08, flipX: false, offsetCopies: [] };
 
 type Layout = { placement: Placement; region: ReturnType<typeof panelRegion>; meanLuma: number; top: number } | null;
 
@@ -675,6 +722,7 @@ function PhotoPanel({
   stamp,
   hires,
   onPhotoLoaded,
+  onGain,
 }: {
   size: GlassSize;
   height: number;
@@ -684,17 +732,18 @@ function PhotoPanel({
   pop: number | null;
   therm: boolean;
   thermalC: number;
-  stamp: string;
+  stamp: [string, string];
   hires: boolean;
   onPhotoLoaded: (loaded: boolean) => void;
+  onGain: (db: number) => void;
 }) {
   const { outcome, photoUri, seed, id } = record;
   const wantsFigure = outcome.figureShown || outcome.smudge;
   const reduceMotion = useReduceMotion();
   const skia = useSkiaReady();
   const [v1Failed, setV1Failed] = useState(false);
-  const v1 = skia && !v1Failed && wantsFigure;
-  const [read, setRead] = useState<{ done: boolean; result: RegionStats | null }>({ done: !wantsFigure, result: null });
+  const v1 = skia && !v1Failed;
+  const [read, setRead] = useState<{ done: boolean; result: RegionStats | null }>({ done: false, result: null });
   const [loaded, setLoaded] = useState(false);
   const image = useImage(v1 ? photoUri : null);
   const photoReady = v1 ? image !== null : loaded;
@@ -707,7 +756,7 @@ function PhotoPanel({
   }, [photoReady, stampReady, onPhotoLoaded]);
 
   useEffect(() => {
-    if (!wantsFigure) return;
+    // Read for every tier: the QUIET photo has no figure but its luma grid drives the auto-gain (A-45).
     let alive = true;
     regionFromImage(photoUri)
       .catch(() => null)
@@ -715,7 +764,7 @@ function PhotoPanel({
     return () => {
       alive = false;
     };
-  }, [photoUri, wantsFigure]);
+  }, [photoUri]);
 
   const W = size.w;
   const imgH = Math.round(W * PHOTO_ASPECT);
@@ -773,11 +822,19 @@ function PhotoPanel({
   const top = layout ? layout.top : panelTop(height, imgH, null);
   const showGhost = layout !== null && ready && settled;
   const legacyFigure = layout !== null && ready && !v1;
+  // QUIET has no figure: the composite runs disabled so the auto-gain and tint still show (A-45), and the
+  // strip names the gain the probe front end applied.
+  const quietPanel = !wantsFigure && read.done;
+  const gainDb = v1 && quietPanel ? autoGain(read.result?.grid).db : 0;
+  useEffect(() => {
+    onGain(gainDb);
+  }, [gainDb, onGain]);
+  const lines = useMemo<[string, string]>(() => (gainDb > 0 ? [`${stamp[0]}  ${gainLabel(gainDb)}`, stamp[1]] : stamp), [stamp, gainDb]);
 
   return (
     <View style={[s.photo, { height }]} testID={read.done ? 'result-photo' : undefined}>
       {v1 ? (
-        layout && image && ready ? (
+        (layout || quietPanel) && image && ready ? (
           <V1Boundary onFail={() => setV1Failed(true)}>
             {/* Before the needle settles the photo shows alone (disabled draws photo and grain); the
                 figure's fade starts when the composite is mounted again at settle. */}
@@ -789,12 +846,12 @@ function PhotoPanel({
                   width={W * k}
                   height={height * k}
                   photoRect={{ x: 0, y: top * k, width: W * k, height: imgH * k }}
-                  region={layout.region}
-                  meanLuma={layout.meanLuma}
+                  region={layout?.region}
+                  meanLuma={layout ? layout.meanLuma : (read.result?.meanLuma ?? DEFAULT_MEAN_LUMA)}
                   p80Luma={read.result?.p80Luma}
                   p90Luma={read.result?.p90Luma}
                   grid={read.result?.grid}
-                  placement={k === 1 ? layout.placement : scalePlacement(layout.placement, k)}
+                  placement={!layout ? QUIET_PLACEMENT : k === 1 ? layout.placement : scalePlacement(layout.placement, k)}
                   tier={outcome.tier}
                   seed={placementSeed}
                   static={isStatic}
@@ -828,43 +885,44 @@ function PhotoPanel({
           <ThermalView field={field} width={W} height={height} top={top} static={isStatic || reduceMotion} />
         </View>
       ) : null}
-      {therm || !ready ? null : <DataStrip text={stamp} width={W} height={height} font={stampFont} />}
-      {therm ? null : (
-        // The thermal view has its own readout box in the same corner.
-        <View style={s.caseBand} pointerEvents="none">
-          <Text style={s.caseText}>{`${copy.caseLabel} ${record.id}`}</Text>
-        </View>
-      )}
+      {!ready ? null : <DataStrip lines={lines} width={W} height={height} font={stampFont} />}
     </View>
   );
 }
 
-// The data strip: case, SPI, ΔT and time in VT323 p3, bottom-left of the photo. Compositor v1 has no
-// `stamp` prop, so it is a Skia text canvas over the panel. The photo's own 4% grain sits under it
-// and the glass grain and scanlines (the overlay over the whole window) sit over it, so it reads as
-// burned into the picture. A 40% n0 scrim band behind the line and a 1 px n0 copy under the text
-// keep it legible on a bright frame (D-022).
-const STRIP_H = 24;
+// The data strip burned into the photo's lower left corner, two VT323 lines in p3: case, SPI and time,
+// then the labelled ΔT and SIMULATED last (A-40, D-045 7). Compositor v1 has no `stamp` prop, so it is a
+// Skia text canvas over the panel. The photo's own 4% grain sits under it and the glass grain and
+// scanlines over it, so it reads as burned into the picture. The n0 scrim is the least alpha that holds
+// the card's 5:1 contrast target over a white photo (A-41), with a 1 px n0 copy under the text.
+const STRIP_LINE = 16;
+const STRIP_H = 2 * STRIP_LINE + 8;
 const STRIP_X = 8;
-const STRIP_SCRIM = 0.4;
-function DataStrip({ text, width, height, font }: { text: string; width: number; height: number; font: SkFont | null }) {
-  const base = STRIP_H - 8;
-  const textW = font ? font.measureText(text).width : 0;
-  // A longer line (a long locale, a narrow phone) is scaled down so the mark at its end is never cut off.
+const STRIP_SCRIM = stripScrimAlpha();
+function DataStrip({ lines, width, height, font }: { lines: [string, string]; width: number; height: number; font: SkFont | null }) {
+  const widths = font ? lines.map((l) => font.measureText(l).width) : [0, 0];
+  // A line wider than the strip (a narrow phone, a long locale) is scaled down so nothing is cut off.
   const avail = width - 2 * STRIP_X;
-  const k = textW > avail + 2 ? avail / textW : 1; // a line within 2 px of fitting is left alone, so a fitting line keeps its size
-  const scrimW = font ? Math.min(width, textW * k + 2 * STRIP_X) : 0;
-  // Web only (`data-*`): the drawn text width after scaling, so the layout goldens can assert the mark fits the strip.
-  const web = { dataSet: { textW: String(Math.ceil(textW * k)) } } as object;
+  const k = Math.min(1, ...widths.map((w) => (w > avail + 2 ? avail / w : 1)));
+  const scrimW = font ? Math.min(width, Math.max(...widths) * k + 2 * STRIP_X) : 0;
+  // Web only (`data-*`): the widest drawn line after scaling, so the layout goldens can assert the strip fits.
+  const web = { dataSet: { textW: String(Math.ceil(Math.max(...widths) * k)) } } as object;
   return (
-    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" aria-label={text} aria-busy={font === null} {...web}>
+    <View style={[s.strip, { top: height - STRIP_H, width }]} pointerEvents="none" testID="result-stamp" role="img" aria-label={lines.join(' ')} aria-busy={font === null} {...web}>
       <SnapshotCanvas style={{ width, height: STRIP_H }} pointerEvents="none">
         {font ? (
           <>
-            <SkRect x={0} y={4} width={scrimW} height={STRIP_H - 6} color={color.n0} opacity={STRIP_SCRIM} />
+            <SkRect x={0} y={2} width={scrimW} height={STRIP_H - 2} color={color.n0} opacity={STRIP_SCRIM} />
             <SkGroup transform={[{ translateX: STRIP_X }, { scale: k }]}>
-              <SkText font={font} text={text} x={1 / k} y={(base + 1) / k} color={color.n0} />
-              <SkText font={font} text={text} x={0} y={base / k} color={color.p3} />
+              {lines.map((l, i) => {
+                const y = (STRIP_LINE * (i + 1) - 1) / k;
+                return (
+                  <SkGroup key={i}>
+                    <SkText font={font} text={l} x={1 / k} y={y + 1 / k} color={color.n0} />
+                    <SkText font={font} text={l} x={0} y={y} color={color.p3} />
+                  </SkGroup>
+                );
+              })}
             </SkGroup>
           </>
         ) : null}
@@ -879,9 +937,6 @@ const s = StyleSheet.create({
   flash: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: color.p5 },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
   photo: { width: '100%', overflow: 'hidden', backgroundColor: color.n0, borderBottomWidth: 1, borderBottomColor: color.p1 },
-  // Hard-edged n0 band over the top of the photo carries the case number.
-  caseBand: { position: 'absolute', left: 0, right: 0, top: 0, height: 20, backgroundColor: 'rgba(10, 15, 11, 0.64)', justifyContent: 'center', paddingHorizontal: 12 },
-  caseText: { ...type.rdXS, color: color.p3 },
   strip: { position: 'absolute', left: 0, height: STRIP_H },
   body: { flex: 1, paddingHorizontal: 12, paddingTop: BODY.pad, paddingBottom: BODY.bottom },
   revealRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: BODY.reveal },
@@ -892,34 +947,38 @@ const s = StyleSheet.create({
   spiCanvas: { position: 'absolute', left: -SPI_PAD, top: -SPI_PAD, width: 124, height: 64 + 2 * SPI_PAD },
   lines: { marginTop: BODY.gap },
   resultLine: { ...type.rdXS, height: BODY.line, color: color.p4 },
-  readings: { marginTop: BODY.gap, width: 17 * CHAR_XS + 2 },
-  profile: { borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 4, marginTop: BODY.gap },
+  readings: { marginTop: BODY.gap, width: 19 * CHAR_XS + 2 },
+  // 6 px under the rule: the umlaut of ENTITÄTSPROFIL clears it (A-52). 1 + 6 + 12 + 5 x 16 stays inside BODY.profile.
+  profile: { borderTopWidth: 1, borderTopColor: color.p1, paddingTop: 6, marginTop: BODY.gap },
   profileHead: { ...type.lbXS, color: color.p3, height: 12 },
   profRow: { flexDirection: 'row', alignItems: 'center', height: 16 },
   profLabel: { ...type.lbXS, width: LABEL_W, color: color.p3 },
   profileValue: { ...type.rdXS, color: color.p4 },
+  profRowPeak: { height: 28 },
+  profilePeak: { ...type.rdM, color: color.p5 },
   profileFit: { flexShrink: 1 },
   mask: { height: 8, backgroundColor: color.p2 },
   decodedBlock: { marginTop: BODY.gap, gap: 2 },
   spacer: { flex: 1, minHeight: BODY.gap },
-  deepWrap: { marginBottom: BODY.gap },
-  deepKey: { height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  deepKeyLive: { borderColor: color.p3 },
-  deepKeyOff: { borderColor: color.p1 },
-  deepLegend: { ...type.rdXS },
-  deepSub: { ...type.lbXS, color: color.p3, height: 12, textAlign: 'center' },
-  deepDone: { ...type.rdXS, color: color.p4, height: BODY.offer - 4, marginBottom: BODY.gap },
-  sharePanel: { marginTop: BODY.gap },
+  // The line over key 4: two lines of rdXS at legend size, tracking 0 so the longest locale line wraps to two at 360,
+  // right-aligned so its right edge sits over key 4, p4. The zone keeps its height whether or not a line prints.
+  deepZone: { height: BODY.offer, marginHorizontal: -4, justifyContent: 'flex-end', marginBottom: -8 },
+  // Unlocked prints one line, and the EVP row has grown by 12 (rdM): the zone gives that height back.
+  deepZoneDone: { height: BODY.offer - 12 },
+  deepLine: { ...type.rdXS, letterSpacing: 0, color: color.p4, textAlign: 'right' },
+  deepDone: { ...type.rdXS, color: color.p4, textAlign: 'right' },
+  sharePanel: {},
   shareLineRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   shareBlock: { width: 8, height: 12, backgroundColor: color.p4 },
-  shareKeys: { flexDirection: 'row', gap: 12, marginTop: BODY.gap },
-  shareKey: { width: 96, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: color.p3 },
-  shareKeyText: { ...type.rdS, color: color.p5 },
-  shareKeySub: { ...type.lbXS, color: color.p3 },
   decoded: { ...type.rdXS, color: color.p4 },
   decodeBar: { flexDirection: 'row', gap: 2, height: 8 },
   block: { flex: 1, height: 8 },
   // Glass text under a p1 rule, left aligned: no box, no card.
-  best: { flex: 1, borderTopWidth: 1, borderTopColor: color.p1, marginTop: BODY.gap, paddingTop: 6 },
+  best: { borderTopWidth: 1, borderTopColor: color.p1, marginTop: BODY.gap, paddingTop: 6 },
   bestText: { ...type.rdXS, color: color.p4 },
+  quietState: { flex: 1, justifyContent: 'flex-end' },
+  quietWindow: { ...type.rdM, color: color.p3 },
+  quietGain: { ...type.rdM, color: color.p4 },
 });
+
+export { RouteFault as ErrorBoundary } from '../../src/ui/screens/FaultScreen';

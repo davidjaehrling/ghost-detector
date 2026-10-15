@@ -25,6 +25,79 @@ test('Settings states that readings are simulated', async ({ page }) => {
   await expect(page).toHaveScreenshot('settings.png', { maxDiffPixels: 150 });
 });
 
+// Legal rows are in the Settings row style (B612 label, VT323 state, 48 dp), the UNIT block sits under the
+// ABOUT line, and the simulated line is whole inside the glass without scrolling.
+for (const lang of ['en', 'de']) {
+  test(`legal: Settings row style, UNIT block below the list, ABOUT in view (${lang})`, async ({ page }) => {
+    await page.goto(`/legal?static=1&lang=${lang}`);
+    await expect(page.getByTestId('legal-impressum')).toBeVisible();
+    const fam = (id: string, sel: string) => page.getByTestId(id).locator(sel).first().evaluate((e) => getComputedStyle(e).fontFamily);
+    expect(await fam('legal-impressum', 'div')).toContain('B612');
+    await page.goto('/settings?static=1');
+    expect(await fam('setting-sound', 'div')).toContain('B612');
+    await page.goto(`/legal?static=1&lang=${lang}`);
+    const row = (await page.getByTestId('legal-impressum').boundingBox())!;
+    expect(row.height).toBeGreaterThanOrEqual(48);
+    const about = (await page.getByTestId('legal-about').boundingBox())!;
+    const unit = (await page.getByTestId('legal-unit').boundingBox())!;
+    const glass = (await page.getByTestId('legal-list').locator('xpath=..').boundingBox())!;
+    expect(unit.y).toBeGreaterThanOrEqual(about.y + about.height);
+    expect(about.y + about.height).toBeLessThanOrEqual(glass.y + glass.height);
+    expect(unit.y + unit.height).toBeLessThanOrEqual(glass.y + glass.height);
+    const text = (await page.getByTestId('legal-unit').innerText()).replace(/\s+/g, ' ');
+    expect(text).toContain('VELDEN FS-4/87-P');
+    expect(text).toContain('FS4-8711-00417-9');
+    expect(text).toContain('FW 3.1.7');
+  });
+}
+
+// A-70: the unit's plate data fills the lower glass: model, serial, firmware, CAL, DUE, PRÜF. The same
+// serial as the nameplate, and the ABOUT line stays above it.
+test('the UNIT block prints the plate data under the ABOUT line', async ({ page }) => {
+  await page.goto('/settings?static=1');
+  const unit = page.getByTestId('settings-unit');
+  await expect(unit).toBeVisible();
+  const text = (await unit.innerText()).replace(/\s+/g, ' ');
+  expect(text).toContain('VELDEN FS-4/87-P');
+  expect(text).toContain('FS4-8711-00417-9');
+  expect(text).toContain('FW 3.1.7 · ROM C2-8811');
+  expect(text).toContain('CAL 2026-10-13');
+  expect(text).toContain('DUE 2027-10');
+  expect(text).toMatch(/PRÜF 07/);
+  const about = (await page.getByTestId('settings-about').boundingBox())!;
+  const box = (await unit.boundingBox())!;
+  expect(box.y).toBeGreaterThanOrEqual(about.y + about.height);
+});
+
+// A-70 / D-045: the ABOUT simulated line is visible without scrolling at 360 and at font scale 1.3. Web has no
+// system font scale, so every text node is scaled by 1.3 after load (size and line height), the same
+// growth Android applies. A line is "visible" when its whole box is inside the list viewport.
+for (const lang of ['en', 'de']) {
+  test(`ABOUT is visible without scrolling at font scale 1.3 (${lang})`, async ({ page }) => {
+    await page.goto(`/settings?static=1&lang=${lang}`);
+    await expect(page.getByTestId('settings-about')).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => {
+      for (const e of Array.from(document.querySelectorAll('[data-testid="screen-settings"] *')) as HTMLElement[]) {
+        if (!Array.from(e.childNodes).some((n) => n.nodeType === 3 && n.textContent?.trim())) continue;
+        const c = getComputedStyle(e);
+        e.style.fontSize = `${parseFloat(c.fontSize) * 1.3}px`;
+        if (c.lineHeight !== 'normal') e.style.lineHeight = `${parseFloat(c.lineHeight) * 1.3}px`;
+        e.style.height = 'auto';
+      }
+    });
+    await page.waitForTimeout(150);
+    const m = await page.evaluate(() => {
+      const list = document.querySelector('[data-testid="settings-list"]')!.getBoundingClientRect();
+      const about = document.querySelector('[data-testid="settings-about"]')!.getBoundingClientRect();
+      return { listTop: list.top, listBottom: list.bottom, top: about.top, bottom: about.bottom, vw: window.innerWidth };
+    });
+    console.log(`ABOUT at scale 1.3, width ${m.vw}: box ${m.top.toFixed(1)}-${m.bottom.toFixed(1)}, list ${m.listTop.toFixed(1)}-${m.listBottom.toFixed(1)}`);
+    expect(m.top).toBeGreaterThanOrEqual(m.listTop);
+    expect(m.bottom).toBeLessThanOrEqual(m.listBottom);
+  });
+}
+
 test('LEGAL opens the list in one tap, both pages open in the system browser', async ({ page }) => {
   await page.goto('/settings?static=1');
   await page.getByTestId('setting-legal').click();
@@ -99,7 +172,7 @@ test('INTENSITY cycles CALM, STANDARD, BRAVE, persists, and Calm turns the scare
 test('the relay row reads FIELD LOG RELAY with one help line', async ({ page }) => {
   await page.goto('/settings?static=1');
   await expect(page.getByTestId('setting-relay')).toContainText('FIELD LOG RELAY');
-  await expect(page.getByTestId('setting-relay-help')).toHaveText('Max 1 line a night. 18:00 to 22:00.');
+  await expect(page.getByTestId('setting-relay-help')).toHaveText('Max 1 line a night. 18:00 to 22:00. CALM sends fewer.');
 });
 
 const locale = (lang: string) => JSON.parse(readFileSync(join(__dirname, '..', '..', 'locales', `${lang}.json`), 'utf8')) as Record<string, string>;

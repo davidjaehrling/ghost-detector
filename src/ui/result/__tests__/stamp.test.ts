@@ -3,7 +3,7 @@ import { drawOutcome, freshHistory } from '../../../engine';
 import { DEMO_CASES, DEMO_SEEDS, SCARE_CASE } from '../demo';
 import { caseSeed, cropOnFigure, panelRegion, panelTop, tierOpacity } from '../panel';
 import { readingsFor } from '../readings';
-import { clock, screenStampText, stampText, thermalDelta } from '../stamp';
+import { clock, screenStampLines, stampText, thermalDelta } from '../stamp';
 import { placeGhost } from '../../../fx/ghostV0/placement';
 
 describe('data strip', () => {
@@ -11,7 +11,14 @@ describe('data strip', () => {
     const at = new Date(2026, 9, 13, 22, 48).getTime();
     expect(clock(at)).toBe('22:48');
     expect(stampText({ id: '0007', spi: 80, deltaC: -6.25, createdAt: at })).toBe('CASE 0007 · SPI 80 · ΔT -6.3 °C · 22:48');
-    expect(screenStampText({ id: '0007', spi: 80, deltaC: -6.25, createdAt: at })).toBe('CASE 0007 · SPI 80 · ΔT -6.3 °C · 22:48 · SIMULATED');
+  });
+
+  it('prints two lines on the screen, ΔT named by tier and SIMULATED last', () => {
+    const at = new Date(2026, 9, 13, 22, 48).getTime();
+    const d = { id: '0007', spi: 80, deltaC: -6.25, createdAt: at };
+    expect(screenStampLines(d, 'strong')).toEqual(['CASE 0007  SPI 80  22:48', 'ΔT MIN -6.3 °C  SIMULATED']);
+    expect(screenStampLines(d, 'critical')[1]).toBe('ΔT MIN -6.3 °C  SIMULATED');
+    expect(screenStampLines(d, 'active')[1]).toBe('ΔT AVG -6.3 °C  SIMULATED');
   });
 
   it('pins ΔT to the cold spot on STRONG and CRITICAL, to THERM below', () => {

@@ -156,10 +156,14 @@ export function ignoredInARow(sent: SentItem[], nowMs: number): number {
   return n;
 }
 
-/** True when every 7 day window over the times holds at most `cap` of them. */
-export function withinWeeklyCap(times: number[], cap: number): boolean {
+/**
+ * True when every 7 day window over the times holds at most `cap` of them. With `at`, only windows
+ * that contain `at` count, so lines older than 7 days before `at` can never block it.
+ */
+export function withinWeeklyCap(times: number[], cap: number, at?: number): boolean {
   const t = [...times].sort((a, b) => a - b);
   for (let i = 0; i < t.length; i++) {
+    if (at !== undefined && (t[i]! > at || t[i]! + WEEK_MS <= at)) continue;
     let n = 0;
     for (let j = i; j < t.length && t[j]! < t[i]! + WEEK_MS; j++) n++;
     if (n > cap) return false;
@@ -249,10 +253,14 @@ function build(id: TemplateId, c: Ctx): Notification | null {
           && r.atMs <= t && t - r.atMs <= RECENT_CASE_MS)
         .sort((a, b) => b.atMs - a.atMs || b.caseId - a.caseId)[0];
       if (!c4) return null;
+      // The case's own logged clock time and first usable location tag (A-84); not a countdown.
+      const m = localMinuteOfDay(c4.atMs, s.utcOffsetMin);
+      const time = `${fmt(Math.floor(m / 60)).padStart(2, '0')}:${fmt(m % 60).padStart(2, '0')}`;
+      const tag = c4.tags.map(cleanTag).find((x): x is string => x !== null);
       return {
         templateId: 4, fireAtMs: t, caseId: c4.caseId,
         title: T('t4.title', { prefix: base.prefix, caseId: pad4(c4.caseId) }),
-        body: T('t4.body', { pct: fmt(Math.round(c4.decodedPct)) }),
+        body: T(tag ? 't4.body' : 't4.body.untagged', { pct: fmt(Math.round(c4.decodedPct)), time, tag: tag ?? '', Tag: cap1(tag ?? '') }),
       };
     }
     case 5: {
@@ -305,10 +313,11 @@ export function nextNotificationWith(s: NotifyState, _seed: number, strings: Eng
     const dayStart = todayStart + d * DAY_MS;
     const day = localDayNumber(dayStart + 12 * HOUR_MS, s.utcOffsetMin);
     if (nightsUsed.has(day)) continue;
+    if (nightsUsed.has(day - 1)) continue; // one night of silence after each sent line (D-035, A-83)
     const t = dayStart + minute * 60_000; // same local minute every night for this install
     if (t < earliest) continue;
     if (t - s.lastAppOpenMs >= STALE_AFTER_MS) break;
-    if (!withinWeeklyCap([...sentTimes, t], cap)) continue;
+    if (!withinWeeklyCap([...sentTimes, t], cap, t)) continue;
     const at = (hour: number, plusDays: number) => dayStart + plusDays * DAY_MS + hour * HOUR_MS;
     const ctx: Ctx = {
       s, t, moonPct: forecastIndex(t, s.utcOffsetMin).moonPct,
@@ -344,7 +353,7 @@ export function applyIntensityChange(
   const kept = next.sent.filter((x) => x.sentAtMs <= next.nowMs).map((x) => x.sentAtMs);
   const cancelIds: string[] = [];
   for (const p of [...pending].sort((a, b) => a.fireAtMs - b.fireAtMs)) {
-    if (allowed.includes(p.templateId) && withinWeeklyCap([...kept, p.fireAtMs], cap)) kept.push(p.fireAtMs);
+    if (allowed.includes(p.templateId) && withinWeeklyCap([...kept, p.fireAtMs], cap, p.fireAtMs)) kept.push(p.fireAtMs);
     else cancelIds.push(p.id);
   }
   return { cancelIds, reschedule: cancelIds.length > 0 };

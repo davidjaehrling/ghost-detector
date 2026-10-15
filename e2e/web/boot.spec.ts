@@ -34,6 +34,23 @@ test('boot screen renders', async ({ page }, testInfo) => {
   expect(pageErrors).toEqual([]);
 });
 
+// D-049: the harness spike moment. ?spike=1 (with static) freezes the priming transient at its peak and the
+// launch seed, so the boot golden shows the spike on the trace and one reading line, the same at every run.
+test('boot priming transient at its peak', async ({ page }, testInfo) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(String(err)));
+  await page.goto('/?static=1&date=2026-10-13&time=22:48&spike=1');
+  await page.locator('[data-testid="boot-screen"]').waitFor();
+  await expect(page.getByTestId('boot-transient')).toBeVisible();
+  await expect(page.getByTestId('boot-transient')).toHaveAttribute('aria-valuetext', /100/);
+  await expect(page.getByTestId('transient')).toHaveText(/^TRANSIENT [01] · LOGGED$|^TRANSIENT 0/);
+  await page.evaluate(() => document.fonts.ready);
+  await waitWarped(page);
+  await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/boot-spike.png` });
+  if (testInfo.project.name === 'android-390x844') await expect(page).toHaveScreenshot('boot-spike.png', { maxDiffPixels: 150 });
+  expect(pageErrors).toEqual([]);
+});
+
 // ?calib=1 opens on the belief-calibration card. Keys are YES / NOT SURE / NO / SKIP.
 test('boot calibration card renders', async ({ page }, testInfo) => {
   const consoleErrors: string[] = [];
@@ -85,6 +102,12 @@ test('boot calibration card renders', async ({ page }, testInfo) => {
   const card = (await page.getByTestId('calibration').boundingBox())!;
   expect(card.y - (countdown.y + countdown.height)).toBeLessThan(60);
   await expect(page.getByTestId('countdown')).toHaveText('03:00 WINDOW IN 4 H 12 MIN');
+  // D-049: the question block is anchored just above the answer keys (its foot is within 16 px of the glass
+  // bottom, which is where the keys' band starts), and the graticule takes the room above the readout.
+  expect(glassBox.y + glassBox.height - (card.y + card.height)).toBeLessThanOrEqual(16);
+  expect(glassBox.y + glassBox.height - (card.y + card.height)).toBeGreaterThanOrEqual(0);
+  const readoutBox = (await page.getByTestId('readout').boundingBox())!;
+  expect(readoutBox.y - glassBox.y).toBeGreaterThan(24 + 34 * 5);
   await page.evaluate(() => document.fonts.ready);
   await waitWarped(page);
   await page.screenshot({ path: `e2e/screenshots/current/${testInfo.project.name}/boot-calib.png` });
@@ -94,14 +117,16 @@ test('boot calibration card renders', async ({ page }, testInfo) => {
   expect(pageErrors).toEqual([]);
 });
 
-test('the nameplate serial shortens under 380 px and the activity digit lights at 3', async ({ page }) => {
+test('the nameplate prints the full serial at every width and the activity digit lights at 3', async ({ page }) => {
   await page.goto('/?static=1&date=2026-10-13&time=22:48');
   await page.locator('[data-testid="boot-screen"]').waitFor();
-  const vw = page.viewportSize()!.width;
-  await expect(page.getByText(vw < 380 ? /^00417-9$/ : /^FS4-8711-00417-9$/).first()).toBeVisible();
-  // One serial rule: the full number is printed exactly once, on the plate (wide) or the sticker (narrow).
+  // A-07: the full serial fits the plate at 360 too (11 px, 0.4 tracking), and is printed once, on the plate.
+  const serial = page.getByText(/^FS4-8711-00417-9$/);
+  await expect(serial).toBeVisible();
   await expect(page.getByText(/FS4-8711-00417-9/)).toHaveCount(1);
+  expect(await serial.evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   await expect(page.getByTestId('activity')).toContainText('ACT IDX 3/5');
+  expect((await page.getByTestId('activity').innerText()).includes('·')).toBe(false);
   // The ACT IDX glyphs are drawn on the glass canvas (p5 with bloom); the node beside it keeps the reading.
   await expect(page.getByTestId('activity').locator('xpath=..').locator('canvas')).toHaveCount(1);
   await expect(page.getByTestId('countdown')).toHaveText('03:00 WINDOW IN 4 H 12 MIN');
@@ -178,5 +203,7 @@ test('one priming transient lands on the trace after the warm-up and is logged',
   // Logged once: it stays at 1 and nothing else repeats it.
   await page.waitForTimeout(1500);
   await expect(line).toHaveCSS('opacity', '1');
-  await expect(page.getByText('TRANSIENT 1 · LOGGED')).toHaveCount(1);
+  // A live boot varies per launch (A-11): the record says 1 or 0 events, and a harness boot (static) always 1.
+  await expect(line).toHaveText(/^TRANSIENT [01] · LOGGED$/);
+  await expect(page.getByText(/^TRANSIENT [01] · LOGGED$/)).toHaveCount(1);
 });

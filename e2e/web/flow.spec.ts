@@ -28,7 +28,7 @@ test('boot to viewfinder, scan, result and history', async ({ page }, testInfo) 
   await shot('scan');
 
   await expect(page.getByTestId('screen-result')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('CASE 0001')).toBeVisible();
+  await expect(page.getByTestId('result-stamp')).toHaveAttribute('aria-label', /^CASE 0001 /);
   await shot('result');
   await expect(page).toHaveScreenshot('result.png', { maxDiffPixels: 150 });
 
