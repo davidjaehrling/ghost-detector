@@ -27,15 +27,33 @@ export async function overflows(page: Page): Promise<string[]> {
         first = false;
       }
       const r = ink.getBoundingClientRect();
+      // Sideways extent of the visible words only: a space that hangs past a wrapped line's end is not ink.
+      let left = Infinity;
+      let right = -Infinity;
+      for (const n of Array.from(e.childNodes)) {
+        if (n.nodeType !== 3) continue;
+        for (const m of (n.textContent ?? '').matchAll(/\S+/g)) {
+          const w = document.createRange();
+          w.setStart(n, m.index ?? 0);
+          w.setEnd(n, (m.index ?? 0) + m[0].length);
+          const q = w.getBoundingClientRect();
+          left = Math.min(left, q.left);
+          right = Math.max(right, q.right);
+        }
+      }
+      if (!Number.isFinite(left)) {
+        left = r.left;
+        right = r.right;
+      }
       // A glyph box is taller than its line box in VT323; a quarter of the font size is not a cut.
       const slack = Math.max(1, parseFloat(cs.fontSize) * 0.25);
-      if (r.right > vw + 0.5 || r.left < -0.5) out.push(`${label(e)} (off screen ${Math.round(r.left)}..${Math.round(r.right)} of ${vw})`);
+      if (right > vw + 0.5 || left < -0.5) out.push(`${label(e)} (off screen ${Math.round(left)}..${Math.round(right)} of ${vw})`);
       if (cs.textOverflow === 'ellipsis' && e.scrollWidth > e.clientWidth + 1) out.push(`${label(e)} (ellipsis ${e.scrollWidth} > ${e.clientWidth})`);
       for (let a: Element | null = e; a && a !== document.body; a = a.parentElement) {
         const ac = getComputedStyle(a);
         const ab = a.getBoundingClientRect();
         if (ac.overflowX === 'hidden' || ac.overflowX === 'clip') {
-          if (r.right > ab.right + 1 || r.left < ab.left - 1) out.push(`${label(e)} (clipped sideways by ${a.getAttribute('data-testid') ?? a.tagName})`);
+          if (right > ab.right + 1 || left < ab.left - 1) out.push(`${label(e)} (clipped sideways by ${a.getAttribute('data-testid') ?? a.tagName})`);
         }
         if (ac.overflowY === 'hidden' || ac.overflowY === 'clip') {
           if (ab.height <= 120 && (r.bottom > ab.bottom + slack || r.top < ab.top - slack)) out.push(`${label(e)} (clipped vertically by ${a.getAttribute('data-testid') ?? a.tagName})`);

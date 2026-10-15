@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { type LayoutChangeEvent, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdBanner } from '../src/ads/Banner';
 import { formatWindowShort } from '../src/ui/boot/activity';
@@ -43,7 +43,8 @@ const copy = copyOf({
 
 const tierWord = (r: ScanRecord) => tierWordOf(r.outcome.tier);
 // CRITICAL is red wherever a tier word shows, as on the result card.
-const tierStyle = (r: ScanRecord) => (r.outcome.tier === 'critical' ? s.crit : null);
+const crit = { color: color.red };
+const tierStyle = (r: ScanRecord) => (r.outcome.tier === 'critical' ? crit : null);
 // The harness pins the clock so the moon table is the same on every run.
 const HARNESS_NOW = new Date(2026, 9, 13, 12, 0).getTime();
 const tagWord = tagLabel;
@@ -58,6 +59,10 @@ export default function History() {
   useLocale();
   const router = useRouter();
   const fs = Math.max(1, PixelRatio.getFontScale());
+  // One vertical pitch at this font scale: every height below is a whole number of it, so the scroll
+  // viewport ends on a row edge at 1.0 and 1.3 alike.
+  const P = Math.ceil(PITCH * fs);
+  const s = useMemo(() => makeStyles(P), [P]);
   // Harness: ?static=1&log=demo3 seeds three tags before the first read.
   const [records] = useState(() => {
     if (readHarness().isStatic && isDemoLog(window.location?.search ?? '')) seedDemoLog();
@@ -78,7 +83,7 @@ export default function History() {
   // The scroll viewport is a whole number of 22 dp rows tall, so no row is cut at the foot of the glass.
   const [boxH, setBoxH] = useState(0);
   const headRows = (best ? 1 : 0) + (best ? 1 : 0) + (nights > 0 ? 1 : 0);
-  const scrollH = boxH > 0 ? Math.max(PITCH * 2, Math.floor((boxH - headRows * PITCH) / PITCH) * PITCH) : undefined;
+  const scrollH = boxH > 0 ? Math.max(P * 2, Math.floor((boxH - headRows * P) / P) * P) : undefined;
   // The one banner in the app sits in a fixed slot between the window and the key row, 32 dp or more
   // clear of every row and key. The window gives up the height.
   return (
@@ -102,9 +107,9 @@ export default function History() {
           },
         ]}
       >
-        <View style={s.list} testID="history-list-box" onLayout={(e: LayoutChangeEvent) => setBoxH(Math.round(e.nativeEvent.layout.height))}>
+        <View style={[s.list, { bottom: CODE_BOTTOM + P + 10 }]} testID="history-list-box" onLayout={(e: LayoutChangeEvent) => setBoxH(Math.round(e.nativeEvent.layout.height))}>
           {headRows > 0 ? (
-            <View style={[s.head, { height: headRows * PITCH }]} testID="history-head">
+            <View style={[s.head, { height: headRows * P }]} testID="history-head">
               {best ? (
                 <Text style={s.best} testID="history-best">
                   {t('history.bestLine', { spi: best.outcome.spi })}
@@ -123,15 +128,15 @@ export default function History() {
             ) : null}
             {groups.map((g, gi) => (
               <View key={g.tag} testID={`history-group-${g.tag}`} style={gi > 0 ? s.group : null}>
-                <View style={[s.tagRow, { height: Math.ceil(PITCH * fs) * (fs > 1 ? 3 : 2) }]} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
-                  <Text style={[s.tagName, { height: Math.ceil(PITCH * fs) }]}>{gap(`${tagWord(g.tag)}  ${casesWord(g.count)}`)}</Text>
-                  <Text style={[s.tagPeak, { height: Math.ceil(PITCH * fs) }]}>
+                <View style={[s.tagRow, { height: P * (fs > 1 ? 3 : 2) }]} testID={`history-tag-${g.tag}`} accessible accessibilityLabel={recordLine(g.tag, g.count, g.peak)}>
+                  <Text style={[s.tagName, { height: P }]}>{gap(`${tagWord(g.tag)}  ${casesWord(g.count)}`)}</Text>
+                  <Text style={[s.tagPeak, { height: P }]}>
                     {t('history.peak', { spi: g.peak.outcome.spi })}
                     <Text style={tierStyle(g.peak)}>{tierWord(g.peak)}</Text>
                     {fs > 1 ? null : gap(`  ${stamp(g.peak.createdAt)}`)}
                   </Text>
                   {/* At a larger font scale the stamp drops to its own line instead of wrapping into the first row. */}
-                  {fs > 1 ? <Text style={[s.tagPeak, { height: Math.ceil(PITCH * fs) }]}>{stamp(g.peak.createdAt)}</Text> : null}
+                  {fs > 1 ? <Text style={[s.tagPeak, { height: P }]}>{stamp(g.peak.createdAt)}</Text> : null}
                 </View>
                 {g.cases.map((r) => {
                   const status = caseStatus(r);
@@ -147,7 +152,7 @@ export default function History() {
                           params: { id: r.id },
                         })
                       }
-                      style={[s.row, { height: Math.max(PITCH * 2, Math.ceil((status !== null && fs > 1 ? 58 : 40) * fs) + 4) }]}
+                      style={[s.row, { height: P * (status !== null && fs > 1 ? 3 : 2) }]}
                     >
                       <View style={s.rowText}>
                         <Text style={[s.rowMain, { height: Math.ceil(22 * fs) }]} numberOfLines={1}>
@@ -218,29 +223,34 @@ export default function History() {
 // One vertical pitch for the whole list: every row is a multiple of 22 dp, so the scroll viewport can
 // end on a row edge.
 const PITCH = 22;
+// The text line height before font scaling (the Text itself scales it).
+const BASE = 22;
+// The screen code sits CODE_BOTTOM dp above the glass foot (Placeholder readoutBlock) and is one line of
+// 22 dp times the font scale tall; the list ends 10 dp above it at every scale.
+const CODE_BOTTOM = 20;
 
-const s = StyleSheet.create({
+const makeStyles = (P: number) => StyleSheet.create({
   // Leaves the screen code line free along the bottom of the glass.
   list: {
     position: 'absolute',
     left: 12,
     right: 12,
     top: 10,
-    bottom: 52,
+    bottom: 52, // 1.0 value; the view overrides it per font scale
     backgroundColor: color.n0,
   },
   empty: { ...type.rdM, color: color.p4, paddingTop: 4 },
   head: { borderBottomWidth: 1, borderBottomColor: color.p1 },
-  best: { ...type.rdS, height: PITCH, color: color.p4 },
-  nights: { ...type.rdXS, lineHeight: PITCH, height: PITCH, color: color.p3 },
+  best: { ...type.rdS, height: P, color: color.p4 },
+  nights: { ...type.rdXS, lineHeight: BASE, height: P, color: color.p3 },
   scroll: { flex: 1 },
   content: { paddingBottom: 0 },
-  group: { marginTop: PITCH },
-  tagRow: { height: PITCH * 2 },
-  tagName: { ...type.rdS, height: PITCH, color: color.p4 },
-  tagPeak: { ...type.rdXS, lineHeight: PITCH, height: PITCH, color: color.p3 },
+  group: { marginTop: P },
+  tagRow: { height: P * 2 },
+  tagName: { ...type.rdS, height: P, color: color.p4 },
+  tagPeak: { ...type.rdXS, lineHeight: BASE, height: P, color: color.p3 },
   row: {
-    height: PITCH * 2,
+    height: P * 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -253,24 +263,23 @@ const s = StyleSheet.create({
   // A fixed right column, so the status never wraps under the case at 360 dp.
   rowOpen: { ...type.rdXS, color: color.p4, width: 98, flexShrink: 0, textAlign: 'right' },
   archived: { color: color.p3 },
-  crit: { color: color.red },
   section: {
     ...type.rdS,
-    height: PITCH,
+    height: P,
     color: color.p4,
     borderBottomWidth: 1,
     borderBottomColor: color.p1,
   },
   catRow: {
-    height: PITCH,
+    height: P,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   catOn: { ...type.rdXS, color: color.p4 },
   catOff: { ...type.rdXS, color: color.p3 },
-  moons: { ...type.rdXS, lineHeight: PITCH, height: PITCH, color: color.p4 },
-  relayRow: { marginTop: PITCH },
+  moons: { ...type.rdXS, lineHeight: BASE, height: P, color: color.p4 },
+  relayRow: { marginTop: P },
 });
 
 export { RouteFault as ErrorBoundary } from '../src/ui/screens/FaultScreen';

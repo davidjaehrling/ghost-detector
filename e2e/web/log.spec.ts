@@ -2,6 +2,13 @@ import { expect, test } from '@playwright/test';
 
 // P6-03. The investigation log: empty state, three tags, case rows, a reopened case.
 
+// The screen code and the list viewport never share pixels: the list box ends above the code's band.
+async function expectListClearOfCode(page: import('@playwright/test').Page) {
+  const list = (await page.getByTestId('history-list-box').boundingBox())!;
+  const code = (await page.getByTestId('screen-history').getByText(/^(HISTORY|VERLAUF|HISTORIAL|HISTÓRICO)$/).boundingBox())!;
+  expect(list.y + list.height, 'list ends above the screen code').toBeLessThanOrEqual(code.y);
+}
+
 const DEMO = '/history?static=1&log=demo3';
 
 test('empty log', async ({ page }) => {
@@ -48,6 +55,7 @@ test('three tags: record rows, case rows, nights, no DEEP SCAN key in the list',
   const body = (await page.getByTestId('screen-history').innerText()).toUpperCase();
   for (const w of ['DEEP SCAN', 'STREAK', 'BADGE', 'EXPIRE', 'COME BACK', 'MISSED']) expect(body).not.toContain(w);
   await page.evaluate(() => document.fonts.ready);
+  await expectListClearOfCode(page);
   await expect(page).toHaveScreenshot('history-3tags.png', { maxDiffPixels: 150 });
 });
 
