@@ -274,3 +274,13 @@ Errors only. DE `engine.profile.behaviour.14`, `deep.evp.10` (`mach es aus`) and
 ### Review round 2 addendum
 
 PT `result.hidden.behaviour` is `COMPORT.` (8 against `BEHAVIOUR` 9). The round 1 value `COMPORTAMENTO` (13) broke mid-word in the entity-card label column at 390 px. `CONDUTA` was not used: it means moral conduct or a duct, which the reviewer flagged. `COMPORT.` keeps the reviewer's term. The siblings pass the same budget: `result.hidden.designation` DE 11, ES 11, PT 10 against EN 11; `result.hidden.behaviour` DE `VERHALTEN` 9, ES `CONDUCTA` 8.
+
+## Copy review, P8 polish
+
+- `a11y.needle`, `a11y.sweep`, `a11y.transient` are screen-reader names, instrument register, no sentence case fuss.
+  EN `EMF needle`, `Sweep`, `Priming transient`; DE `EMF-Nadel`, `Suchstrahl`, `Anlaufimpuls`; ES `Aguja EMF`,
+  `Barrido`, `Impulso de arranque`. PT-PT: `Ponteiro EMF` (gauge pointer; `agulha` reads as a sewing or
+  injection needle) and `Varrimento` (matches `varrimento` in the engine bank; `varredura` is the Brazilian form).
+- `relay.body` merge (`18:00 to 22:00, no sound.`): de, es, pt read correctly. The simulated sentence is last and
+  unchanged in all four. PT keeps third person (`O utilizador recebe`) as a D-038 consequence surface.
+- `git diff 2b260ab -- locales/` shows no other builder edit besides the three keys above.
