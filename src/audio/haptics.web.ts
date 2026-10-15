@@ -3,7 +3,7 @@ import { DEFAULT_CONFIG, type HapticEvent, type SoundConfig } from './config';
 import type { Haptics, HapticsOptions } from './haptics';
 
 export type { Haptics, HapticDriver, HapticsOptions } from './haptics';
-export { calmStyle } from './haptics';
+export { calmStyle } from './hapticStyle';
 
 const log: { t: number; event: HapticEvent | string; args: unknown[] }[] = [];
 export const __hapticLog = (): readonly { t: number; event: string; args: unknown[] }[] => log;
