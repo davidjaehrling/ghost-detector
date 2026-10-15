@@ -50,7 +50,8 @@ export function Sweep({
     period.set(sweepPeriodMs(mg));
   }, [mg, period]);
 
-  const live = !isStatic && running;
+  // Reduced motion: the line stops (a steady wedge at the static angle) and the sector narrows.
+  const live = !isStatic && !reduceMotion && running;
   const clock = useFrameCallback((info) => {
     'worklet';
     // A long stall (a backgrounded tab) advances by at most 100 ms so the line never jumps.
@@ -59,8 +60,8 @@ export function Sweep({
   }, false);
   useEffect(() => {
     clock.setActive(live);
-    if (isStatic) rot.set(SWEEP_STATIC_DEG);
-  }, [clock, live, isStatic, rot]);
+    if (isStatic || reduceMotion) rot.set(SWEEP_STATIC_DEG);
+  }, [clock, live, isStatic, reduceMotion, rot]);
 
   // The angle for screen readers and tests, sampled a few times a second (never per frame).
   const [label, setLabel] = useState(SWEEP_STATIC_DEG);

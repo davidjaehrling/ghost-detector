@@ -155,7 +155,7 @@ function Viewfinder({
   const reduceMotion = useReduceMotion();
   const active = useActive();
   const [fluxSeed] = useState(() => (isStatic ? STATIC_SEED : Date.now() % 2 ** 31));
-  const { sample } = useFlux({ seed: fluxSeed, isStatic, active });
+  const { sample } = useFlux({ seed: fluxSeed, isStatic, active, calm: reduceMotion });
   const [tag, setTag] = useState<LocationTag>(() => (harness.fixture ? FIXTURE_TAG[harness.fixture] : LOCATION_TAGS[0]));
   const busy = useRef(false);
   // One index per session (boot fixes it first). Under ?static=1 the clock is the boot screen's:
@@ -192,7 +192,7 @@ function Viewfinder({
 
   const angle = jitteredAngle(sample.mg, sample.jitter, reduceMotion);
   const flux = formatFlux(sample.mg);
-  const dT = useLiveThermal({ mg: sample.mg, seed: fluxSeed, isStatic, active });
+  const dT = useLiveThermal({ mg: sample.mg, seed: fluxSeed, isStatic, active, calm: reduceMotion });
 
   const capture = async () => {
     if (busy.current) return;

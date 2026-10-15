@@ -72,7 +72,8 @@ export const Housing = memo(function Housing({
             testID={`${testID}-glass`}
             style={s.glass}
             seed={seed}
-            static={isStatic}
+            // Reduced motion settles the glass layers (grain frozen at the seed, no timers), as the harness freeze does.
+            static={isStatic || reduceMotion}
             reduceMotion={reduceMotion}
             {...glass}
           >
